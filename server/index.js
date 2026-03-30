@@ -67,7 +67,9 @@ app.use(session({
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    // 'lax' works for same-site requests (nginx proxies /auth to backend on same domain).
+    // 'none' is only needed for cross-site (different domains) and breaks same-site cookies.
+    sameSite: 'lax'
   }
 }));
 
