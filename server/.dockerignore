@@ -1,0 +1,13 @@
+node_modules
+.env
+.env.*
+*.log
+
+# Dev/debug scripts — not needed in the container
+check_*.js
+get_def.js
+run_migrations.js
+test_db.js
+apply_*.js
+migration.sql
+*.txt

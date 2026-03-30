@@ -42,6 +42,10 @@ const __dirname = path.dirname(__filename);
 const pgStore = pgSession(session);
 const app = express();
 
+// Required when running behind Dokploy's Traefik reverse proxy.
+// Without this Express won't see the HTTPS connection and secure cookies won't be set.
+app.set('trust proxy', 1);
+
 // Create a separate pool for session store without SSL (for Dokploy)
 const sessionPool = new pool.constructor({
   connectionString: process.env.DATABASE_URL,
