@@ -13,8 +13,10 @@ services:
         VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
         VITE_SUPABASE_PROJECT_ID: ${VITE_SUPABASE_PROJECT_ID}
         VITE_API_URL: ""   # keep empty — nginx proxies /api & /auth to backend
-    ports:
-      - "80:80"
+    # Do NOT bind host ports — Dokploy's Traefik reads the domain config
+    # and routes traffic to this container on port 80 internally.
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
