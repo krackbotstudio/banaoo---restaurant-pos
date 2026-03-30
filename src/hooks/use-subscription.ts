@@ -64,7 +64,7 @@ export function useSubscription() {
     
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const res = await fetch(`${API_URL}/api/subscription`, {
         credentials: "include",
         headers: {
@@ -128,7 +128,7 @@ export function useSubscription() {
       if (!user) { toast.error("Please log in first"); return resolve(false); }
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+        const API_URL = import.meta.env.VITE_API_URL ?? "";
         const res = await fetch(`${API_URL}/api/payments/create-order`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -163,7 +163,7 @@ export function useSubscription() {
             razorpay_signature: string;
           }) => {
             try {
-              const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+              const API_URL = import.meta.env.VITE_API_URL ?? "";
               const verifyRes = await fetch(`${API_URL}/api/payments/verify-payment`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -214,7 +214,7 @@ export function useSubscription() {
   const cancelSubscription = async () => {
     if (!subscription) { toast.error("No active subscription"); return false; }
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const res = await fetch(`${API_URL}/api/payments/cancel-subscription`, {
         method: "POST",
         credentials: "include",

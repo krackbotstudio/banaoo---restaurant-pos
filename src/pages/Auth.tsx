@@ -27,7 +27,7 @@ export default function Auth() {
   useEffect(() => {
     const clearOrphanedSession = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+        const API_URL = import.meta.env.VITE_API_URL ?? "";
         const res = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
         
         if (res.status === 401) {
@@ -61,7 +61,7 @@ export default function Auth() {
     setIsSubmitting(true);
     try {
       console.log('Initiating Google sign-in...');
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const googleUrl = `${API_URL}/auth/google`;
       console.log('Redirecting to:', googleUrl);
       

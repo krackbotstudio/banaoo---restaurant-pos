@@ -60,7 +60,8 @@ export default function AdminAccounts() {
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/accounts?status=${filter}`, {
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const response = await fetch(`${API_URL}/api/admin/accounts?status=${filter}`, {
         headers: {
           'Accept': 'application/json',
         },
@@ -83,7 +84,7 @@ export default function AdminAccounts() {
   const handleAction = async (userId: string, action: "approve" | "reject") => {
     setActioning(userId);
     try {
-      const response = await fetch('http://localhost:5000/api/admin/accounts/action', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL ?? ""}/api/admin/accounts/action`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 /** After Passport auth, minted JWT aligns auth.uid() with public.users.id for Supabase RLS. */
 async function syncSupabaseSession(): Promise<void> {

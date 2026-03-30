@@ -161,7 +161,7 @@ export default function Settings() {
       const formData = new FormData();
       formData.append("file", file);
       
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const res = await fetch(`${API_URL}/api/upload`, {
         method: "POST",
         body: formData,
