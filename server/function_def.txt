@@ -1,0 +1,60 @@
+CREATE OR REPLACE FUNCTION public.seed_sample_data_for_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  new_outlet_id uuid;
+  cat_starters_id uuid;
+  cat_main_id uuid;
+  cat_breads_id uuid;
+  cat_beverages_id uuid;
+  cat_desserts_id uuid;
+BEGIN
+  -- Only seed for owner role
+  IF NEW.role != 'owner' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Create sample outlet
+  INSERT INTO public.outlets (name, address, phone, owner_id)
+  VALUES ('My Restaurant', '123 Main Street, City Center', '+91 98765 43210', NEW.user_id)
+  RETURNING id INTO new_outlet_id;
+
+  -- Create categories
+  INSERT INTO public.menu_categories (name, outlet_id, sort_order) 
+  VALUES ('Starters', new_outlet_id, 1) RETURNING id INTO cat_starters_id;
+  
+  INSERT INTO public.menu_categories (name, outlet_id, sort_order) 
+  VALUES ('Main Course', new_outlet_id, 2) RETURNING id INTO cat_main_id;
+  
+  INSERT INTO public.menu_categories (name, outlet_id, sort_order) 
+  VALUES ('Breads', new_outlet_id, 3) RETURNING id INTO cat_breads_id;
+  
+  INSERT INTO public.menu_categories (name, outlet_id, sort_order) 
+  VALUES ('Beverages', new_outlet_id, 4) RETURNING id INTO cat_beverages_id;
+  
+  INSERT INTO public.menu_categories (name, outlet_id, sort_order) 
+  VALUES ('Desserts', new_outlet_id, 5) RETURNING id INTO cat_desserts_id;
+
+  -- Create sample menu items with Unsplash food images
+  INSERT INTO public.menu_items (name, description, base_price, is_veg, category_id, outlet_id, image_url) VALUES
+  ('Paneer Tikka', 'Marinated cottage cheese grilled to perfection with spices', 280, true, cat_starters_id, new_outlet_id, 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400'),
+  ('Chicken 65', 'Crispy fried chicken with South Indian spices', 320, false, cat_starters_id, new_outlet_id, 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=400'),
+  ('Veg Spring Rolls', 'Crispy rolls filled with mixed vegetables', 180, true, cat_starters_id, new_outlet_id, 'https://images.unsplash.com/photo-1548507200-82c3f tried-b8d8-9eb5e62b9f65?w=400'),
+  ('Dal Makhani', 'Creamy black lentils slow-cooked overnight', 240, true, cat_main_id, new_outlet_id, 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400'),
+  ('Butter Chicken', 'Tender chicken in rich tomato-butter gravy', 340, false, cat_main_id, new_outlet_id, 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400'),
+  ('Palak Paneer', 'Cottage cheese cubes in creamy spinach gravy', 260, true, cat_main_id, new_outlet_id, 'https://images.unsplash.com/photo-1618449840665-9ed506d73a34?w=400'),
+  ('Butter Naan', 'Soft leavened bread brushed with butter', 45, true, cat_breads_id, new_outlet_id, 'https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=400'),
+  ('Garlic Naan', 'Naan topped with fresh garlic and herbs', 55, true, cat_breads_id, new_outlet_id, 'https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=400'),
+  ('Tandoori Roti', 'Whole wheat bread baked in tandoor', 30, true, cat_breads_id, new_outlet_id, 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400'),
+  ('Mango Lassi', 'Sweet yogurt drink blended with mango', 90, true, cat_beverages_id, new_outlet_id, 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400'),
+  ('Masala Chai', 'Traditional spiced Indian tea', 40, true, cat_beverages_id, new_outlet_id, 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=400'),
+  ('Fresh Lime Soda', 'Refreshing lime drink with soda', 60, true, cat_beverages_id, new_outlet_id, 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=400'),
+  ('Gulab Jamun', 'Deep-fried milk dumplings in sugar syrup', 100, true, cat_desserts_id, new_outlet_id, 'https://images.unsplash.com/photo-1666190050245-e8c4b5b0e5b5?w=400'),
+  ('Rasmalai', 'Soft cottage cheese patties in sweet milk', 120, true, cat_desserts_id, new_outlet_id, 'https://images.unsplash.com/photo-1601303516534-2e5c2e94eb8d?w=400');
+
+  RETURN NEW;
+END;
+$function$

@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CookUp - Warm Restaurant Theme */
+
+@layer base {
+  :root {
+    --background: 30 20% 98%;
+    --foreground: 20 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 15% 15%;
+
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 15% 94%;
+    --secondary-foreground: 20 15% 30%;
+
+    --muted: 30 10% 96%;
+    --muted-foreground: 20 10% 45%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 38 92% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 10%;
+
+    --border: 30 15% 90%;
+    --input: 30 15% 90%;
+    --ring: 24 95% 53%;
+
+    --radius: 0;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 20 15% 15%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 20% 96%;
+    --sidebar-accent-foreground: 20 15% 15%;
+    --sidebar-border: 30 15% 92%;
+    --sidebar-ring: 24 95% 53%;
+  }
+
+  .dark {
+    --background: 20 20% 7%;
+    --foreground: 30 10% 95%;
+
+    --card: 20 20% 10%;
+    --card-foreground: 30 10% 95%;
+
+    --popover: 20 20% 10%;
+    --popover-foreground: 30 10% 95%;
+
+    --primary: 24 95% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 20 15% 16%;
+    --secondary-foreground: 30 10% 90%;
+
+    --muted: 20 15% 14%;
+    --muted-foreground: 30 10% 55%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 50%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 38 92% 10%;
+
+    --border: 20 15% 16%;
+    --input: 20 15% 16%;
+    --ring: 24 95% 55%;
+
+    --sidebar-background: 20 20% 8%;
+    --sidebar-foreground: 30 10% 95%;
+    --sidebar-primary: 24 95% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 20 15% 12%;
+    --sidebar-accent-foreground: 30 10% 95%;
+    --sidebar-border: 20 15% 14%;
+    --sidebar-ring: 24 95% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply dark scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .touch-target {
+    @apply min-h-[48px] min-w-[48px];
+  }
+
+  /* Warm gradients */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(24, 95%, 53%) 0%, hsl(32, 95%, 50%) 100%);
+  }
+
+  .gradient-warm {
+    background: linear-gradient(135deg, hsl(24, 95%, 55%) 0%, hsl(38, 92%, 50%) 100%);
+  }
+
+  .gradient-sunset {
+    background: linear-gradient(135deg, hsl(24, 95%, 50%) 0%, hsl(350, 80%, 55%) 100%);
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 4px 20px -4px hsl(24 95% 53% / 0.4);
+  }
+
+  .glow-accent {
+    box-shadow: 0 4px 20px -4px hsl(38 92% 50% / 0.4);
+  }
+
+  /* Glassmorphism */
+  .glass {
+    @apply backdrop-blur-sm bg-card/80;
+  }
+
+  .glass-strong {
+    @apply backdrop-blur-md bg-card/90;
+  }
+
+  /* Shadows */
+  .shadow-subtle {
+    box-shadow: 0 1px 3px 0 hsl(var(--foreground) / 0.04), 
+                0 1px 2px -1px hsl(var(--foreground) / 0.04);
+  }
+
+  .shadow-elevated {
+    box-shadow: 0 4px 12px -2px hsl(var(--foreground) / 0.08), 
+                0 2px 4px -2px hsl(var(--foreground) / 0.04);
+  }
+
+  .shadow-warm {
+    box-shadow: 0 4px 20px -4px hsl(24 95% 53% / 0.15);
+  }
+
+  /* Hover states */
+  .hover-lift {
+    @apply transition-all duration-200;
+  }
+
+  .hover-lift:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 6px 20px -4px hsl(var(--foreground) / 0.1);
+  }
+
+  /* Animations */
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out forwards;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out forwards;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); }
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+}

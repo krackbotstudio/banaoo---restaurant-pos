@@ -1,0 +1,3 @@
+// Update config to include the extract-menu edge function
+[functions.extract-menu]
+verify_jwt = false

@@ -1,0 +1,22 @@
+project_id = "yaparrowgqgfqmbahgan"
+
+[functions.extract-menu]
+verify_jwt = false
+
+[functions.support-chat]
+verify_jwt = false
+
+[functions.create-razorpay-subscription]
+verify_jwt = false
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.cancel-subscription]
+verify_jwt = false
+
+[functions.zomato-webhook]
+verify_jwt = false
+
+[functions.swiggy-webhook]
+verify_jwt = false
