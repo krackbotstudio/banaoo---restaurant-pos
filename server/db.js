@@ -14,7 +14,7 @@ function getSslConfig() {
 
   // Auto-detect: disable SSL for localhost and self-hosted Dokploy (traefik.me)
   const dbUrl = process.env.DATABASE_URL || '';
-  if (dbUrl.includes('localhost') || dbUrl.includes('traefik.me')) {
+  if (dbUrl.includes('localhost') || dbUrl.includes('traefik.me') || dbUrl.includes('api.banaoo.in')) {
     return false;
   }
 
