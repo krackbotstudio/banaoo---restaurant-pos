@@ -46,11 +46,7 @@ const app = express();
 // Without this Express won't see the HTTPS connection and secure cookies won't be set.
 app.set('trust proxy', 1);
 
-// Create a separate pool for session store without SSL (for Dokploy)
-const sessionPool = new pool.constructor({
-  connectionString: process.env.DATABASE_URL,
-  ssl: false, // Disable SSL for Dokploy PostgreSQL
-});
+// Reuse the main pool for sessions — it already has the correct SSL config for production.
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:8080',
@@ -64,7 +60,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use(session({
-  store: new pgStore({ pool: sessionPool, tableName: 'session' }),
+  store: new pgStore({ pool: pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
