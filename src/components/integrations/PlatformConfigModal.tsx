@@ -46,8 +46,9 @@ export function PlatformConfigModal({
     restaurantId: "",
   });
 
-  // Generate webhook URL
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${platform.id}-webhook?outlet_id=${outletId}`;
+  // Generate webhook URL - using Express API endpoints
+  const API_URL = import.meta.env.VITE_API_URL ?? "";
+  const webhookUrl = `${API_URL || window.location.origin}/api/webhooks/${platform.id}?outlet_id=${outletId}`;
 
   const handleCopyWebhook = async () => {
     await navigator.clipboard.writeText(webhookUrl);

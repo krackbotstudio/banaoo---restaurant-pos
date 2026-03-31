@@ -252,11 +252,16 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
       const menuForAI = menuItems.map((i) => ({ id: i.id, name: i.name, price: i.base_price }));
 
       try {
-        const { data, error } = await supabase.functions.invoke("voice-order", {
-          body: { transcript: text, menu_items: menuForAI },
+        const API_URL = import.meta.env.VITE_API_URL ?? "";
+        const response = await fetch(`${API_URL}/api/voice-order`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript: text, menu_items: menuForAI })
         });
+        const data = await response.json();
 
-        if (error || !data?.items) {
+        if (!response.ok || !data?.items) {
           setErrorMsg("Couldn't understand the order. Please try again.");
           setVoiceState("error");
           return;

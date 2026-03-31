@@ -892,6 +892,508 @@ If you cannot extract any items, return an empty array: []`;
   }
 });
 
+// --- Generate Menu Image (moved from Supabase Edge Function) ---
+app.post('/api/generate-menu-image', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { item_name } = req.body;
+  if (!item_name?.trim()) {
+    return res.status(400).json({ error: 'item_name required' });
+  }
+
+  const searchTerm = item_name.toLowerCase().trim().replace(/\s+/g, ' ');
+  const MIN_LIBRARY_SIZE = 5;
+  const RETURN_COUNT = 8;
+
+  // Helper functions for external APIs
+  const fromTheMealDB = async (query) => {
+    try {
+      const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!data.meals) return [];
+      return data.meals.slice(0, 6).map((m) => ({
+        image_url: m.strMealThumb,
+        thumb_url: m.strMealThumb,
+        source: 'TheMealDB',
+      }));
+    } catch { return []; }
+  };
+
+  const fromWikipedia = async (query) => {
+    try {
+      const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`, {
+        headers: { 'User-Agent': 'banaoo-restaurant-app/1.0' }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!data.thumbnail?.source) return [];
+      return [{
+        image_url: data.originalimage?.source || data.thumbnail.source,
+        thumb_url: data.thumbnail.source,
+        source: 'Wikipedia',
+      }];
+    } catch { return []; }
+  };
+
+  const fromUnsplash = async (query, key) => {
+    try {
+      const url = new URL('https://api.unsplash.com/search/photos');
+      url.searchParams.set('query', `${query} food dish`);
+      url.searchParams.set('per_page', '8');
+      url.searchParams.set('orientation', 'landscape');
+      url.searchParams.set('client_id', key);
+      const res = await fetch(url.toString());
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.results || []).map((p) => ({
+        image_url: p.urls.regular,
+        thumb_url: p.urls.small,
+        source: 'Unsplash',
+      }));
+    } catch { return []; }
+  };
+
+  try {
+    // Check cache in database
+    const { rows: cached } = await pool.query(
+      'SELECT image_url, thumb_url, source FROM menu_item_images WHERE search_term = $1',
+      [searchTerm]
+    );
+
+    const cachedPhotos = cached || [];
+    console.log(`Cache hit for "${searchTerm}": ${cachedPhotos.length} images`);
+
+    if (cachedPhotos.length >= MIN_LIBRARY_SIZE) {
+      const shuffled = cachedPhotos.sort(() => Math.random() - 0.5).slice(0, RETURN_COUNT);
+      return res.json({ photos: shuffled.map(p => ({ url: p.image_url, thumb: p.thumb_url, source: p.source })) });
+    }
+
+    // Fetch from external sources
+    const existingUrls = new Set(cachedPhotos.map((p) => p.image_url));
+    const newPhotos = [];
+
+    const addUnique = (photos) => {
+      for (const p of photos) {
+        if (!existingUrls.has(p.image_url)) {
+          newPhotos.push(p);
+          existingUrls.add(p.image_url);
+        }
+      }
+    };
+
+    console.log(`Fetching from TheMealDB for "${item_name}"…`);
+    addUnique(await fromTheMealDB(item_name));
+
+    if (cachedPhotos.length + newPhotos.length < MIN_LIBRARY_SIZE) {
+      console.log(`Fetching from Wikipedia for "${item_name}"…`);
+      addUnique(await fromWikipedia(item_name));
+    }
+
+    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
+    if (cachedPhotos.length + newPhotos.length < MIN_LIBRARY_SIZE && unsplashKey) {
+      console.log(`Fetching from Unsplash for "${item_name}"…`);
+      addUnique(await fromUnsplash(item_name, unsplashKey));
+    }
+
+    // Store new images
+    if (newPhotos.length > 0) {
+      for (const p of newPhotos) {
+        try {
+          await pool.query(
+            'INSERT INTO menu_item_images (search_term, image_url, thumb_url, source) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+            [searchTerm, p.image_url, p.thumb_url, p.source]
+          );
+        } catch (e) { /* ignore duplicates */ }
+      }
+      console.log(`Stored ${newPhotos.length} new images for "${searchTerm}"`);
+    }
+
+    const allPhotos = [...cachedPhotos, ...newPhotos];
+    if (allPhotos.length === 0) {
+      return res.json({ photos: [], message: 'No images found for this dish' });
+    }
+
+    const result = allPhotos
+      .sort(() => Math.random() - 0.5)
+      .slice(0, RETURN_COUNT)
+      .map((p) => ({ url: p.image_url, thumb: p.thumb_url, source: p.source }));
+
+    res.json({ photos: result });
+  } catch (err) {
+    console.error('generate-menu-image error:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// --- Voice Order (moved from Supabase Edge Function) ---
+// No auth required - used by customers and POS staff
+app.post('/api/voice-order', async (req, res) => {
+  const { transcript, menu_items, mode } = req.body;
+
+  if (!transcript?.trim() || !menu_items?.length) {
+    return res.status(400).json({ error: 'transcript and menu_items required' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  }
+
+  const menuText = menu_items
+    .map((item) => `ID: ${item.id} | Name: "${item.name}" | Price: ₹${item.price}`)
+    .join('\n');
+
+  const isPOS = mode === 'pos';
+
+  const systemPrompt = isPOS
+    ? `You are a restaurant billing counter assistant. Extract order details from spoken customer orders.
+Return ONLY a raw JSON object — no markdown, no explanation:
+{"items":[{"menu_item_id":"exact-id","name":"Exact Menu Name","quantity":1}],"order_type":"dine_in","table_number":null}
+Rules:
+- Match to closest available menu items only
+- order_type: "dine_in" (mentions table/inside/baith ke) or "takeaway" (parcel/pack/bahar/ghar)
+- table_number: extract number as string if mentioned, else null
+- Default order_type to "dine_in"
+- Understand ANY language: Hindi, Telugu, Tamil, Kannada, English, or mixed`
+    : `You are a restaurant ordering assistant. Extract items from a spoken customer order.
+Return ONLY a raw JSON array — no markdown, no explanation:
+[{"menu_item_id":"exact-id-from-menu","name":"Exact Menu Name","quantity":1}]
+Rules:
+- Match to closest available menu items only
+- If quantity not mentioned, assume 1
+- If nothing matches, return []
+- Understand ANY language: Hindi, Telugu, Tamil, Kannada, English, or mixed`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Customer said: "${transcript}"\n\nAvailable menu:\n${menuText}` },
+        ],
+        temperature: 0.1,
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('OpenAI error:', response.status, err);
+      return res.status(500).json({ error: 'AI service error' });
+    }
+
+    const aiData = await response.json();
+    let raw = aiData.choices?.[0]?.message?.content ?? '';
+    raw = raw.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+
+    const menuIds = new Set(menu_items.map((m) => m.id));
+
+    const validateItems = (arr) =>
+      arr
+        .filter((item) => item.menu_item_id && menuIds.has(item.menu_item_id) && Number(item.quantity) > 0)
+        .map((item) => ({
+          menu_item_id: String(item.menu_item_id),
+          name: String(item.name),
+          quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+        }));
+
+    let result = { items: [], order_type: 'dine_in', table_number: null, transcript };
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (isPOS) {
+        result.items = validateItems(Array.isArray(parsed.items) ? parsed.items : []);
+        result.order_type = parsed.order_type === 'takeaway' ? 'takeaway' : 'dine_in';
+        result.table_number = parsed.table_number ? String(parsed.table_number) : null;
+      } else {
+        result.items = validateItems(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch { result.items = []; }
+
+    res.json(result);
+  } catch (err) {
+    console.error('voice-order error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- Support Chat with Streaming (moved from Supabase Edge Function) ---
+app.post('/api/support-chat', async (req, res) => {
+  const { messages } = req.body;
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  }
+
+  const systemPrompt = `You are the banaoo.in support assistant. banaoo.in is a restaurant management platform that helps restaurant owners manage their business efficiently.
+
+**Platform Features:**
+- Multi-outlet management - Manage multiple restaurant locations from one dashboard
+- Order management - Take and track orders with ease
+- Kitchen Display System (KDS) - Real-time order display for kitchen staff
+- Menu management - Create and update menus with AI-powered menu import from images
+- Staff management - Manage roles, schedules, and permissions
+- Table management - Floor plans and table status tracking
+- QR Menu Builder - Free tool to create digital menus with QR codes
+- Analytics & Reports - Track sales, orders, and performance
+
+**Pricing Plans:**
+- Starter: ₹999/month (1 outlet, 5 staff members, basic analytics, email support)
+- Professional: ₹2,499/month (3 outlets, unlimited staff, advanced analytics, priority support) - Most Popular
+- Enterprise: Custom pricing (unlimited outlets, dedicated account manager, 24/7 phone support, custom integrations)
+
+All plans include a 14-day free trial with no credit card required.
+
+**Contact Information:**
+- Email: connect@banaoo.in
+
+**Guidelines:**
+- Be helpful, friendly, and concise
+- Answer questions about features, pricing, and how to use the platform
+- For billing issues, account problems, or complex technical requests, offer to connect them with the team at connect@banaoo.in
+- If you don't know something specific, acknowledge it and suggest contacting support
+- Keep responses brief but informative
+- Use bullet points for lists when helpful
+- When users want to talk to a human, provide the email connect@banaoo.in`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: systemPrompt }, ...messages],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        return res.status(429).json({ error: "We're experiencing high demand. Please try again in a moment." });
+      }
+      const errorText = await response.text();
+      console.error('OpenAI error:', response.status, errorText);
+      return res.status(500).json({ error: 'Something went wrong. Please try again or contact connect@banaoo.in' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    response.body.pipe(res);
+  } catch (err) {
+    console.error('Support chat error:', err);
+    res.status(500).json({ error: err.message || 'Unknown error occurred' });
+  }
+});
+
+// --- Swiggy Webhook (moved from Supabase Edge Function) ---
+app.post('/api/webhooks/swiggy', async (req, res) => {
+  try {
+    const outletId = req.query.outlet_id;
+
+    if (!outletId) {
+      return res.status(400).json({ error: 'Missing outlet_id parameter' });
+    }
+
+    // Verify integration exists
+    const { rows: integrations } = await pool.query(
+      `SELECT * FROM platform_integrations WHERE outlet_id = $1 AND platform = 'swiggy' AND is_active = true LIMIT 1`,
+      [outletId]
+    );
+    const integration = integrations[0];
+
+    if (!integration) {
+      console.error('Integration not found or inactive');
+      return res.status(404).json({ error: 'Integration not configured' });
+    }
+
+    const body = req.body;
+    console.log('Received Swiggy webhook:', JSON.stringify(body));
+
+    // Log incoming webhook
+    await pool.query(
+      `INSERT INTO platform_sync_logs (integration_id, action, status, request_data) VALUES ($1, $2, $3, $4)`,
+      [integration.id, 'order_received', 'pending', JSON.stringify(body)]
+    );
+
+    const swiggyOrder = body.order || body;
+
+    // Generate order number
+    const { rows: orderNumResult } = await pool.query(`SELECT generate_order_number($1) as order_number`, [outletId]);
+    const orderNumber = orderNumResult[0]?.order_number || `S-${Date.now()}`;
+
+    // Create order
+    const { rows: newOrders } = await pool.query(
+      `INSERT INTO orders (outlet_id, order_number, status, order_type, source, external_order_id, platform_data, customer_name, customer_phone, delivery_address, delivery_status, subtotal, total, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING *`,
+      [
+        outletId, orderNumber, 'pending', 'delivery', 'swiggy',
+        swiggyOrder.order_id || swiggyOrder.id,
+        JSON.stringify(swiggyOrder),
+        swiggyOrder.customer?.name || swiggyOrder.customer_name || 'Swiggy Customer',
+        swiggyOrder.customer?.phone || swiggyOrder.customer_phone,
+        swiggyOrder.delivery_address || swiggyOrder.address?.full_address,
+        'assigned',
+        swiggyOrder.bill?.subtotal || swiggyOrder.subtotal || 0,
+        swiggyOrder.bill?.total || swiggyOrder.total || 0,
+        swiggyOrder.cooking_instructions || swiggyOrder.special_instructions,
+        integration.id
+      ]
+    );
+    const newOrder = newOrders[0];
+
+    // Create order items
+    const items = swiggyOrder.items || swiggyOrder.cart_items || [];
+    for (const item of items) {
+      const { rows: menuItems } = await pool.query(
+        `SELECT id, base_price FROM menu_items WHERE outlet_id = $1 AND name ILIKE $2 LIMIT 1`,
+        [outletId, `%${item.name || item.item_name}%`]
+      );
+      const menuItem = menuItems[0];
+
+      await pool.query(
+        `INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, total_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          newOrder.id,
+          menuItem?.id || '00000000-0000-0000-0000-000000000000',
+          item.name || item.item_name,
+          item.quantity || 1,
+          item.price || item.unit_price || menuItem?.base_price || 0,
+          (item.price || item.unit_price || 0) * (item.quantity || 1),
+          item.item_instructions || item.notes
+        ]
+      );
+    }
+
+    // Update integration
+    await pool.query(`UPDATE platform_integrations SET last_synced_at = NOW() WHERE id = $1`, [integration.id]);
+
+    // Log success
+    await pool.query(
+      `INSERT INTO platform_sync_logs (integration_id, action, status, request_data, response_data) VALUES ($1, $2, $3, $4, $5)`,
+      [integration.id, 'order_created', 'success', JSON.stringify(swiggyOrder), JSON.stringify({ order_id: newOrder.id, order_number: newOrder.order_number })]
+    );
+
+    console.log('Order created successfully:', newOrder.id);
+    res.json({ success: true, order_id: newOrder.id, order_number: newOrder.order_number });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+// --- Zomato Webhook (moved from Supabase Edge Function) ---
+app.post('/api/webhooks/zomato', async (req, res) => {
+  try {
+    const outletId = req.query.outlet_id;
+
+    if (!outletId) {
+      return res.status(400).json({ error: 'Missing outlet_id parameter' });
+    }
+
+    // Verify integration exists
+    const { rows: integrations } = await pool.query(
+      `SELECT * FROM platform_integrations WHERE outlet_id = $1 AND platform = 'zomato' AND is_active = true LIMIT 1`,
+      [outletId]
+    );
+    const integration = integrations[0];
+
+    if (!integration) {
+      console.error('Integration not found or inactive');
+      return res.status(404).json({ error: 'Integration not configured' });
+    }
+
+    const body = req.body;
+    console.log('Received Zomato webhook:', JSON.stringify(body));
+
+    // Log incoming webhook
+    await pool.query(
+      `INSERT INTO platform_sync_logs (integration_id, action, status, request_data) VALUES ($1, $2, $3, $4)`,
+      [integration.id, 'order_received', 'pending', JSON.stringify(body)]
+    );
+
+    const zomatoOrder = body.order || body;
+
+    // Generate order number
+    const { rows: orderNumResult } = await pool.query(`SELECT generate_order_number($1) as order_number`, [outletId]);
+    const orderNumber = orderNumResult[0]?.order_number || `Z-${Date.now()}`;
+
+    // Create order
+    const { rows: newOrders } = await pool.query(
+      `INSERT INTO orders (outlet_id, order_number, status, order_type, source, external_order_id, platform_data, customer_name, customer_phone, delivery_address, delivery_status, subtotal, total, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING *`,
+      [
+        outletId, orderNumber, 'pending', 'delivery', 'zomato',
+        zomatoOrder.id || zomatoOrder.order_id,
+        JSON.stringify(zomatoOrder),
+        zomatoOrder.customer?.name || zomatoOrder.customer_name || 'Zomato Customer',
+        zomatoOrder.customer?.phone || zomatoOrder.customer_phone,
+        zomatoOrder.delivery_address || zomatoOrder.address,
+        'assigned',
+        zomatoOrder.subtotal || zomatoOrder.total || 0,
+        zomatoOrder.total || 0,
+        zomatoOrder.instructions || zomatoOrder.special_instructions,
+        integration.id
+      ]
+    );
+    const newOrder = newOrders[0];
+
+    // Create order items
+    const items = zomatoOrder.items || zomatoOrder.order_items || [];
+    for (const item of items) {
+      const { rows: menuItems } = await pool.query(
+        `SELECT id, base_price FROM menu_items WHERE outlet_id = $1 AND name ILIKE $2 LIMIT 1`,
+        [outletId, `%${item.name || item.item_name}%`]
+      );
+      const menuItem = menuItems[0];
+
+      await pool.query(
+        `INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, total_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          newOrder.id,
+          menuItem?.id || '00000000-0000-0000-0000-000000000000',
+          item.name || item.item_name,
+          item.quantity || 1,
+          item.price || item.unit_price || menuItem?.base_price || 0,
+          (item.price || item.unit_price || 0) * (item.quantity || 1),
+          item.instructions || item.notes
+        ]
+      );
+    }
+
+    // Update integration
+    await pool.query(`UPDATE platform_integrations SET last_synced_at = NOW() WHERE id = $1`, [integration.id]);
+
+    // Log success
+    await pool.query(
+      `INSERT INTO platform_sync_logs (integration_id, action, status, request_data, response_data) VALUES ($1, $2, $3, $4, $5)`,
+      [integration.id, 'order_created', 'success', JSON.stringify(zomatoOrder), JSON.stringify({ order_id: newOrder.id, order_number: newOrder.order_number })]
+    );
+
+    console.log('Order created successfully:', newOrder.id);
+    res.json({ success: true, order_id: newOrder.id, order_number: newOrder.order_number });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
 app.listen(PORT, () => {
 console.log(`Server running on port ${PORT}`);
 });

@@ -223,10 +223,15 @@ export default function Menu() {
     setShowImagePicker(true);
     setStockImages([]);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-menu-image", {
-        body: { item_name: itemName },
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const response = await fetch(`${API_URL}/api/generate-menu-image`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_name: itemName })
       });
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to fetch images');
       setStockImages(data.photos || []);
       if (!data.photos?.length) {
         toast({ variant: "destructive", title: "No photos found", description: "Try a different name or upload manually" });
@@ -255,9 +260,14 @@ export default function Menu() {
   // Silently fetch and assign an image for an item that has none
   const autoAssignImage = async (itemName: string, outletId: string, onDone?: () => void) => {
     try {
-      const { data } = await supabase.functions.invoke("generate-menu-image", {
-        body: { item_name: itemName },
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const response = await fetch(`${API_URL}/api/generate-menu-image`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_name: itemName })
       });
+      const data = await response.json();
       const firstPhoto = data?.photos?.[0];
       if (firstPhoto) {
         await supabase

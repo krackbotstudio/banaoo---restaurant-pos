@@ -184,13 +184,18 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
       onImportComplete();
 
       // Auto-assign images in background for all imported items
-      // Sequential with a small gap to be gentle on the edge function
+      // Sequential with a small gap to be gentle on the API
       const assignImages = async () => {
+        const API_URL = import.meta.env.VITE_API_URL ?? "";
         for (const item of selectedItems) {
           try {
-            const { data: imgData } = await supabase.functions.invoke('generate-menu-image', {
-              body: { item_name: item.name },
+            const imgResponse = await fetch(`${API_URL}/api/generate-menu-image`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_name: item.name })
             });
+            const imgData = await imgResponse.json();
             const photo = imgData?.photos?.[0];
             if (photo) {
               await supabase

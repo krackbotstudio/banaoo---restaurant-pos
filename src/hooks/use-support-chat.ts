@@ -7,7 +7,7 @@ export type ChatMessage = {
   timestamp: Date;
 };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-chat`;
+const CHAT_URL = `${import.meta.env.VITE_API_URL ?? ""}/api/support-chat`;
 
 export function useSupportChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -68,8 +68,8 @@ export function useSupportChat() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
+        credentials: "include",
         body: JSON.stringify({ messages: apiMessages }),
       });
 
