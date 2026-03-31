@@ -1191,7 +1191,27 @@ All plans include a 14-day free trial with no credit card required.
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    response.body.pipe(res);
+    // Stream the response using Web Streams API
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            res.end();
+            break;
+          }
+          res.write(decoder.decode(value, { stream: true }));
+        }
+      } catch (e) {
+        console.error('Stream error:', e);
+        res.end();
+      }
+    };
+
+    pump();
   } catch (err) {
     console.error('Support chat error:', err);
     res.status(500).json({ error: err.message || 'Unknown error occurred' });
