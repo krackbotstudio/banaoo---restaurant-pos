@@ -59,21 +59,21 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
       // Compress & convert to base64 (max 1024px, 80% JPEG — keeps payload under 1 MB)
       const { base64, mimeType: compressedMime } = await compressAndEncode(file);
 
-      // Call edge function
-      const { data, error } = await supabase.functions.invoke('extract-menu', {
-        body: { imageBase64: base64, mimeType: compressedMime }
+      // Call Express API endpoint
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const response = await fetch(`${API_URL}/api/extract-menu`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: compressedMime })
       });
 
-      if (error) {
-        // Extract the real error message from the function response body
-        let detail = error.message;
-        try {
-          const body = await (error as any).context?.json?.();
-          if (body?.error) detail = body.error;
-          if (body?.details) detail += ` — ${body.details}`;
-        } catch {}
-        console.error('extract-menu error:', detail, error);
-        throw new Error(detail);
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail = data.details ? `${data.error} — ${data.details}` : data.error;
+        console.error('extract-menu error:', detail);
+        throw new Error(detail || 'Failed to extract menu');
       }
 
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {

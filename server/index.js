@@ -801,6 +801,97 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
+// --- Menu Extraction (moved from Supabase Edge Function) ---
+app.post('/api/extract-menu', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { imageBase64, mimeType } = req.body;
+
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'Image data is required' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('OPENAI_API_KEY not configured');
+    return res.status(500).json({ error: 'AI API key not configured' });
+  }
+
+  const prompt = `You are a menu extraction specialist. Extract all menu items from the provided restaurant menu image.
+
+For each item, extract:
+- name: The item name (required)
+- description: Brief description if available (optional, null if not present)
+- price: The price as a number only (required, extract just the numeric value, no currency symbol)
+- is_veg: true if marked as vegetarian/veg, false if non-veg, null if unclear (look for green/red symbols)
+- category: The category/section name if visible (e.g., "Starters", "Main Course", "Beverages")
+
+Return ONLY a valid JSON array of items. No explanation, no markdown, no code blocks. Example:
+[{"name":"Paneer Tikka","description":"Marinated cottage cheese grilled in tandoor","price":280,"is_veg":true,"category":"Starters"}]
+
+If you cannot extract any items, return an empty array: []`;
+
+  try {
+    console.log('Processing menu image with OpenAI vision...');
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${mimeType || 'image/jpeg'};base64,${imageBase64}`,
+                  detail: 'high',
+                },
+              },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 4096,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', response.status, errorText);
+      return res.status(500).json({ error: 'Failed to process image', details: errorText });
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '[]';
+
+    console.log('Raw OpenAI response:', content);
+
+    let items = [];
+    try {
+      let clean = content.trim();
+      clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+      items = JSON.parse(clean);
+      if (!Array.isArray(items)) items = [];
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError, 'raw:', content);
+      return res.status(500).json({ error: 'Failed to parse menu items', raw: content });
+    }
+
+    console.log(`Extracted ${items.length} menu items`);
+    res.json({ items });
+  } catch (err) {
+    console.error('Error extracting menu:', err);
+    res.status(500).json({ error: err.message || 'Failed to extract menu' });
+  }
+});
+
 app.listen(PORT, () => {
 console.log(`Server running on port ${PORT}`);
 });

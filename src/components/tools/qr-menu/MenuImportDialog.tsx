@@ -10,7 +10,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Upload, Camera, Loader2, ImagePlus, Check, X, RefreshCw } from "lucide-react";
 import { MenuCategory, MenuItem, generateId } from "@/lib/menu-encoder";
 
@@ -61,15 +60,20 @@ export function MenuImportDialog({ onImport }: MenuImportDialogProps) {
       // Convert file to base64
       const base64 = await fileToBase64(file);
       
-      // Call the edge function
-      const { data, error } = await supabase.functions.invoke('extract-menu', {
-        body: {
-          imageBase64: base64,
-          mimeType: file.type,
-        },
+      // Call Express API endpoint
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const response = await fetch(`${API_URL}/api/extract-menu`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
       });
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to extract menu');
+      }
 
       if (data.items && data.items.length > 0) {
         const items = data.items.map((item: ExtractedItem) => ({
