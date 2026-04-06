@@ -14,6 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
+import { sendSubscriptionConfirmation } from './email.js';
 
 dotenv.config();
 
@@ -297,12 +298,17 @@ const isAdmin = (req, res, next) => {
 // --- Auth Routes ---
 
 app.post('/auth/register', async (req, res) => {
-  const { email, password, fullName } = req.body;
-  if (!email || !password || !fullName) {
+  const { email, password, fullName, phone } = req.body;
+  if (!email || !password || !fullName || !phone) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  console.log('Registration attempt for:', email, 'Name:', fullName);
+  const phoneRegex = /^[+]?[\d\s-]{10,}$/;
+  if (!phoneRegex.test(phone)) {
+    return res.status(400).json({ error: 'Please enter a valid phone number (at least 10 digits)' });
+  }
+
+  console.log('Registration attempt for:', email, 'Name:', fullName, 'Phone:', phone);
   try {
     console.log('Hashing password...');
     const salt = await bcrypt.genSalt(10);
@@ -318,8 +324,8 @@ app.post('/auth/register', async (req, res) => {
 
     console.log('Inserting into public.profiles...');
     await pool.query(
-      'INSERT INTO public.profiles (user_id, full_name, role, account_status) VALUES ($1, $2, $3, $4)',
-      [user.id, fullName, 'owner', 'pending']
+      'INSERT INTO public.profiles (user_id, full_name, phone, role, account_status) VALUES ($1, $2, $3, $4, $5)',
+      [user.id, fullName, phone, 'owner', 'pending']
     );
     console.log('Profile created.');
 
@@ -734,6 +740,8 @@ app.post('/api/payments/verify-payment', async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + Number(period_months));
 
+    const startDate = new Date();
+    
     await pool.query(
       `INSERT INTO public.subscriptions
        (user_id, plan_type, status, period_months, expires_at, razorpay_order_id, razorpay_payment_id, current_period_start, current_period_end, trial_ends_at)
@@ -742,8 +750,20 @@ app.post('/api/payments/verify-payment', async (req, res) => {
        status = EXCLUDED.status,
        expires_at = EXCLUDED.expires_at,
        razorpay_payment_id = EXCLUDED.razorpay_payment_id`,
-      [req.user.id, plan_type, 'active', period_months, expiresAt, razorpay_order_id, razorpay_payment_id, new Date(), expiresAt, null]
+      [req.user.id, plan_type, 'active', period_months, expiresAt, razorpay_order_id, razorpay_payment_id, startDate, expiresAt, null]
     );
+
+    // Send subscription confirmation email (non-blocking)
+    const amount = calcAmount(plan_type, Number(period_months));
+    sendSubscriptionConfirmation({
+      email: req.user.email,
+      customerName: req.user.full_name || req.user.email,
+      planType: plan_type,
+      periodMonths: Number(period_months),
+      amount,
+      startDate,
+      expiresAt,
+    }).catch(err => console.error('Email send error:', err));
 
     res.json({ success: true, expires_at: expiresAt });
   } catch (err) {
@@ -936,20 +956,21 @@ app.post('/api/generate-menu-image', async (req, res) => {
     } catch { return []; }
   };
 
-  const fromUnsplash = async (query, key) => {
+  const fromPexels = async (query, key) => {
     try {
-      const url = new URL('https://api.unsplash.com/search/photos');
+      const url = new URL('https://api.pexels.com/v1/search');
       url.searchParams.set('query', `${query} food dish`);
       url.searchParams.set('per_page', '8');
       url.searchParams.set('orientation', 'landscape');
-      url.searchParams.set('client_id', key);
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), {
+        headers: { 'Authorization': key }
+      });
       if (!res.ok) return [];
       const data = await res.json();
-      return (data.results || []).map((p) => ({
-        image_url: p.urls.regular,
-        thumb_url: p.urls.small,
-        source: 'Unsplash',
+      return (data.photos || []).map((p) => ({
+        image_url: p.src.large,
+        thumb_url: p.src.medium,
+        source: 'Pexels',
       }));
     } catch { return []; }
   };
@@ -990,10 +1011,10 @@ app.post('/api/generate-menu-image', async (req, res) => {
       addUnique(await fromWikipedia(item_name));
     }
 
-    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-    if (cachedPhotos.length + newPhotos.length < MIN_LIBRARY_SIZE && unsplashKey) {
-      console.log(`Fetching from Unsplash for "${item_name}"…`);
-      addUnique(await fromUnsplash(item_name, unsplashKey));
+    const pexelsKey = process.env.PEXELS_API_KEY;
+    if (cachedPhotos.length + newPhotos.length < MIN_LIBRARY_SIZE && pexelsKey) {
+      console.log(`Fetching from Pexels for "${item_name}"…`);
+      addUnique(await fromPexels(item_name, pexelsKey));
     }
 
     // Store new images

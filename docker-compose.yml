@@ -40,7 +40,8 @@ services:
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
     volumes:
       # Persist uploaded files across container restarts / re-deploys
       - uploads_data:/app/uploads

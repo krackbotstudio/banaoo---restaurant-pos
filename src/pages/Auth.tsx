@@ -12,6 +12,9 @@ import { ChefHat, Loader2, Sparkles, ArrowLeft } from "lucide-react";
 
 const emailSchema = z.string().email("Please enter a valid email");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+const phoneSchema = z.string()
+  .min(10, "Phone number must be at least 10 digits")
+  .regex(/^[+]?[0-9\s\-]{10,}$/, "Please enter a valid phone number");
 
 type AuthView = "main" | "forgot-password";
 
@@ -51,6 +54,7 @@ export default function Auth() {
   
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
+  const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
 
   const [resetEmail, setResetEmail] = useState("");
@@ -146,6 +150,7 @@ export default function Auth() {
 
     try {
       emailSchema.parse(signupEmail);
+     phoneSchema.parse(signupPhone);
       passwordSchema.parse(signupPassword);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -159,7 +164,7 @@ export default function Auth() {
     }
 
     setIsSubmitting(true);
-    const { error } = await signUp(signupEmail, signupPassword, signupName);
+    const { error } = await signUp(signupEmail, signupPassword, signupName, signupPhone);
     setIsSubmitting(false);
 
     if (error) {
@@ -381,7 +386,7 @@ export default function Auth() {
 
                     <form onSubmit={handleSignup} className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="signup-name" className="text-sm font-medium">Full Name</Label>
+                        <Label htmlFor="signup-name" className="text-sm font-medium">Full Name <span className="text-destructive">*</span></Label>
                         <Input
                           id="signup-name"
                           type="text"
@@ -390,10 +395,11 @@ export default function Auth() {
                           onChange={(e) => setSignupName(e.target.value)}
                           className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                           autoComplete="name"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-email" className="text-sm font-medium">Email</Label>
+                        <Label htmlFor="signup-email" className="text-sm font-medium">Email <span className="text-destructive">*</span></Label>
                         <Input
                           id="signup-email"
                           type="email"
@@ -402,10 +408,24 @@ export default function Auth() {
                           onChange={(e) => setSignupEmail(e.target.value)}
                           className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                           autoComplete="email"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-password" className="text-sm font-medium">Password</Label>
+                        <Label htmlFor="signup-phone" className="text-sm font-medium">Phone Number <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="signup-phone"
+                          type="tel"
+                          placeholder="+91 98765 43210"
+                          value={signupPhone}
+                          onChange={(e) => setSignupPhone(e.target.value)}
+                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          autoComplete="tel"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="signup-password" className="text-sm font-medium">Password <span className="text-destructive">*</span></Label>
                         <Input
                           id="signup-password"
                           type="password"
@@ -414,6 +434,7 @@ export default function Auth() {
                           onChange={(e) => setSignupPassword(e.target.value)}
                           className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                           autoComplete="new-password"
+                          required
                         />
                       </div>
                       <Button 
