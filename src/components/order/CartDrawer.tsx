@@ -39,6 +39,7 @@ interface CartDrawerProps {
   onRemoveItem: (itemId: string) => void;
   onPlaceOrder: () => void;
   cartTotal: number;
+  isAddMode?: boolean;
 }
 
 export function CartDrawer({
@@ -53,6 +54,7 @@ export function CartDrawer({
   onRemoveItem,
   onPlaceOrder,
   cartTotal,
+  isAddMode = false,
 }: CartDrawerProps) {
   const [floorPlanOpen, setFloorPlanOpen] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string>();
@@ -66,7 +68,7 @@ export function CartDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[85vh]">
+      <DrawerContent className="max-h-[90vh]">
         <DrawerHeader className="border-b border-border/50">
           <div className="flex items-center justify-between">
             <DrawerTitle className="font-display text-xl">
@@ -184,7 +186,7 @@ export function CartDrawer({
           </div>
         </div>
 
-        <DrawerFooter className="border-t border-border/50 bg-card">
+        <DrawerFooter className="border-t border-border/50 bg-card pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between py-2">
             <div>
               <p className="text-sm text-muted-foreground">Total</p>
@@ -203,7 +205,7 @@ export function CartDrawer({
             onClick={onPlaceOrder}
           >
             <ShoppingCart className="h-5 w-5 mr-2" />
-            Place Order · ₹{cartTotal}
+            {isAddMode ? `Add to Order · ₹${cartTotal}` : `Place Order · ₹${cartTotal}`}
           </Button>
         </DrawerFooter>
       </DrawerContent>

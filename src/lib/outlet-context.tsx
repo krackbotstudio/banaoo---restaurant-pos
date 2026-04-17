@@ -5,6 +5,8 @@ import { useAuth } from "@/lib/auth";
 interface Outlet {
   id: string;
   name: string;
+  gst_number?: string | null;
+  gst_categories?: Record<string, number> | null;
 }
 
 interface OutletContextType {
@@ -48,7 +50,7 @@ export function OutletProvider({ children }: { children: ReactNode }) {
         // Owners can see all their outlets
         const { data: ownerOutlets } = await supabase
           .from("outlets")
-          .select("id, name")
+          .select("id, name, gst_number, gst_categories")
           .eq("owner_id", user!.id)
           .order("created_at", { ascending: false });
         data = ownerOutlets || [];
@@ -56,7 +58,7 @@ export function OutletProvider({ children }: { children: ReactNode }) {
         // Staff members see outlets they're assigned to
         const { data: assignments } = await supabase
           .from("staff_outlet_assignments")
-          .select("outlet_id, outlets(id, name)")
+          .select("outlet_id, outlets(id, name, gst_number, gst_categories)")
           .eq("user_id", user!.id);
         
         if (assignments) {

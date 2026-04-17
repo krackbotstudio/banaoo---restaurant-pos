@@ -364,6 +364,8 @@ export type Database = {
           quantity: number
           total_price: number
           unit_price: number
+          status: string
+          batch_id: string
         }
         Insert: {
           created_at?: string
@@ -375,6 +377,8 @@ export type Database = {
           quantity?: number
           total_price: number
           unit_price: number
+          status?: string
+          batch_id?: string
         }
         Update: {
           created_at?: string

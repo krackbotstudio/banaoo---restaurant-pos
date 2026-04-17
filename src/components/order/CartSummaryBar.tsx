@@ -20,10 +20,11 @@ export function CartSummaryBar({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 p-4 animate-slide-up",
+        // On mobile/tablet sit above the bottom nav bar (~68px); on desktop flush to bottom
+        "fixed bottom-[68px] lg:bottom-0 left-0 right-0 z-[60] p-4 animate-slide-up",
         "bg-gradient-to-t from-background via-background to-background/95",
         "border-t border-border/50 backdrop-blur-sm",
-        "md:left-[var(--sidebar-width)]",
+        "lg:left-[var(--sidebar-width)]",
         className
       )}
     >

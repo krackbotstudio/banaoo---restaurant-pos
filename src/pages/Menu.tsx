@@ -26,6 +26,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw } from "lucide-react";
+import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { MenuImportDialog } from "@/components/MenuImportDialog";
 
 interface Outlet {
@@ -52,6 +53,7 @@ interface MenuItem {
   special_label: string;
   offer_label: string | null;
   offer_price: number | null;
+  gst_category: string | null;
 }
 
 const SPECIAL_LABELS = ["Today's Special", "Chef's Pick", "Must Try", "New"];
@@ -85,6 +87,10 @@ export default function Menu() {
   const [fetchingImages, setFetchingImages] = useState(false);
   const [stockImages, setStockImages] = useState<{ url: string; thumb: string; source: string }[]>([]);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const GST_NONE = "__none__";
+  const [itemGstCategory, setItemGstCategory] = useState(GST_NONE);
+  const [outletGstRates, setOutletGstRates] = useState<Record<string, number> | null>(null);
+
   // Special & Offer form state
   const [itemIsSpecial, setItemIsSpecial] = useState(false);
   const [itemSpecialLabel, setItemSpecialLabel] = useState("Today's Special");
@@ -105,6 +111,7 @@ export default function Menu() {
     if (selectedOutlet) {
       fetchCategories();
       fetchMenuItems();
+      fetchOutletGstRates(selectedOutlet);
     }
   }, [selectedOutlet]);
 
@@ -131,6 +138,15 @@ export default function Menu() {
       }
     }
     setLoading(false);
+  };
+
+  const fetchOutletGstRates = async (outletId: string) => {
+    const { data } = await supabase
+      .from("outlets")
+      .select("gst_categories")
+      .eq("id", outletId)
+      .single();
+    setOutletGstRates((data?.gst_categories as Record<string, number> | null) ?? null);
   };
 
   const fetchCategories = async () => {
@@ -171,6 +187,7 @@ export default function Menu() {
     setItemIsVeg(true);
     setItemIsAvailable(true);
     setItemCategory("");
+    setItemGstCategory(GST_NONE);
     setItemImageUrl("");
     setItemImagePreview("");
     setStockImages([]);
@@ -310,6 +327,7 @@ export default function Menu() {
     base_price: parseFloat(itemPrice),
     is_veg: itemIsVeg,
     category_id: itemCategory || null,
+    gst_category: itemGstCategory && itemGstCategory !== GST_NONE ? itemGstCategory : null,
     image_url: itemImageUrl || null,
     is_special: itemIsSpecial,
     special_label: itemSpecialLabel,
@@ -360,6 +378,7 @@ export default function Menu() {
     setItemIsVeg(item.is_veg);
     setItemIsAvailable(item.is_available);
     setItemCategory(item.category_id || "");
+    setItemGstCategory(item.gst_category || GST_NONE);
     setItemImageUrl(item.image_url || "");
     setItemImagePreview(item.image_url || "");
     setItemIsSpecial(item.is_special ?? false);
@@ -748,6 +767,28 @@ export default function Menu() {
                       </Select>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <Percent className="h-3.5 w-3.5 text-muted-foreground" /> GST Category
+                      <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Select value={itemGstCategory} onValueChange={setItemGstCategory}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="No GST / Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={GST_NONE}>No GST</SelectItem>
+                        {GST_CATEGORIES.map(cat => {
+                          const rate = outletGstRates?.[cat.key] ?? cat.defaultRate;
+                          return (
+                            <SelectItem key={cat.key} value={cat.key}>
+                              {cat.label} — {rate}%
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                     <div className="flex items-center gap-2">
                       {itemIsVeg ? <Leaf className="h-4 w-4 text-green-500" /> : <Flame className="h-4 w-4 text-red-500" />}
@@ -933,6 +974,28 @@ export default function Menu() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Percent className="h-3.5 w-3.5 text-muted-foreground" /> GST Category
+                  <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Select value={itemGstCategory} onValueChange={setItemGstCategory}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="No GST / Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GST_NONE}>No GST</SelectItem>
+                    {GST_CATEGORIES.map(cat => {
+                      const rate = outletGstRates?.[cat.key] ?? cat.defaultRate;
+                      return (
+                        <SelectItem key={cat.key} value={cat.key}>
+                          {cat.label} — {rate}%
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">

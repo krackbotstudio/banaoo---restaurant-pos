@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
+import { resolveGstRate } from "@/lib/gst-categories";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   Loader2, Search, ShoppingCart, UtensilsCrossed,
   Mic, MicOff, Sparkles, CheckCircle2, AlertCircle, X, Utensils, Package,
-  Minus, Plus, Trash2,
+  Minus, Plus, Trash2, PlusCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -36,6 +37,7 @@ interface MenuItem {
   is_veg: boolean;
   is_available: boolean;
   category_id: string | null;
+  gst_category: string | null;
 }
 
 interface CartItem {
@@ -415,12 +417,19 @@ export default function NewOrder() {
   const { currentOutlet, outlets, setCurrentOutlet, loading: outletLoading } = useOutlet();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // "Add items to existing order" mode — populated from query params
+  const addToOrderId = searchParams.get("addTo") || null;
+  const addToTable   = searchParams.get("table") || "";
+  const addToType    = (searchParams.get("type") || "dine_in") as "dine_in" | "takeaway";
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("dine_in");
-  const [tableNumber, setTableNumber] = useState("");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(addToOrderId ? addToType : "dine_in");
+  const [tableNumber, setTableNumber] = useState(addToOrderId ? addToTable : "");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
@@ -518,6 +527,88 @@ export default function NewOrder() {
       return;
     }
 
+    // ── "Add to existing order" mode ────────────────────────────────────────
+    if (addToOrderId) {
+      try {
+        const addBatchId = crypto.randomUUID();
+        const newItems = cart.map((item) => ({
+          order_id: addToOrderId,
+          menu_item_id: item.menuItem.id,
+          item_name: item.menuItem.name,
+          quantity: item.quantity,
+          unit_price: item.menuItem.base_price,
+          total_price: item.menuItem.base_price * item.quantity,
+          batch_id: addBatchId,
+          status: "pending",
+          gst_rate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
+        }));
+
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .insert(newItems);
+        if (itemsError) throw itemsError;
+
+        // Fetch ALL items to re-derive order status
+        const { data: allItems } = await supabase
+          .from("order_items")
+          .select("status")
+          .eq("order_id", addToOrderId);
+
+        const activeItems = (allItems || []).filter((i: any) => i.status !== "cancelled");
+        let derivedStatus = "pending";
+        if (activeItems.length > 0) {
+          if (activeItems.some((i: any) => i.status === "pending"))        derivedStatus = "pending";
+          else if (activeItems.some((i: any) => i.status === "preparing")) derivedStatus = "preparing";
+          else if (activeItems.some((i: any) => i.status === "ready"))     derivedStatus = "ready";
+          else derivedStatus = "completed";
+        }
+
+        // Fetch current total and update order (total + re-derived status)
+        const { data: existingOrder } = await supabase
+          .from("orders")
+          .select("total, subtotal")
+          .eq("id", addToOrderId)
+          .single();
+
+        // Fetch order_number for the kitchen slip
+        const { data: orderMeta } = await supabase
+          .from("orders")
+          .select("order_number, total, subtotal")
+          .eq("id", addToOrderId)
+          .single();
+
+        const newTotal = (orderMeta?.total ?? 0) + cartTotal;
+        await supabase
+          .from("orders")
+          .update({ total: newTotal, subtotal: newTotal, status: derivedStatus })
+          .eq("id", addToOrderId);
+
+        // Show kitchen slip popup for the newly added items
+        setLastOrderData({
+          orderNumber: orderMeta?.order_number ?? addToOrderId,
+          outletName: currentOutlet?.name ?? "",
+          orderType: addToType,
+          tableNumber: addToTable || undefined,
+          items: cart.map((item) => ({
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            unitPrice: item.menuItem.base_price,
+            totalPrice: item.menuItem.base_price * item.quantity,
+          })),
+          subtotal: cartTotal,
+          total: cartTotal,
+          createdAt: new Date(),
+        });
+        setCart([]);
+        setCartDrawerOpen(false);
+        setSuccessDialogOpen(true);
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+      return;
+    }
+
+    // ── New order ────────────────────────────────────────────────────────────
     try {
       const { data: orderNumData } = await supabase.rpc("generate_order_number", {
         outlet_id: currentOutlet.id,
@@ -540,6 +631,7 @@ export default function NewOrder() {
 
       if (orderError) throw orderError;
 
+      const batchId = crypto.randomUUID();
       const orderItems = cart.map((item) => ({
         order_id: order.id,
         menu_item_id: item.menuItem.id,
@@ -547,6 +639,9 @@ export default function NewOrder() {
         quantity: item.quantity,
         unit_price: item.menuItem.base_price,
         total_price: item.menuItem.base_price * item.quantity,
+        batch_id: batchId,
+        status: "pending",
+        gst_rate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
       }));
 
       const { error: itemsError } = await supabase
@@ -584,6 +679,10 @@ export default function NewOrder() {
   const handleNewOrder = () => {
     setSuccessDialogOpen(false);
     setLastOrderData(null);
+    // If we were in add-to-existing mode, go back to orders after dialog closes
+    if (addToOrderId) {
+      navigate("/orders");
+    }
   };
 
   const handleVoiceResult = (result: VoiceResult) => {
@@ -645,7 +744,21 @@ export default function NewOrder() {
       <div className="lg:flex lg:h-[calc(100vh-0px)]">
 
         {/* ── Left: scrollable menu area ── */}
-        <div className="flex-1 min-w-0 overflow-y-auto pb-24 lg:pb-6">
+        <div className="flex-1 min-w-0 overflow-y-auto pb-32 lg:pb-6">
+          {/* Add-items mode banner */}
+          {addToOrderId && (
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border-b border-primary/20 text-sm font-medium text-primary">
+              <PlusCircle className="h-4 w-4 shrink-0" />
+              Adding items to{" "}
+              {addToType === "dine_in" ? `Table ${addToTable}` : "Takeaway"} order
+              <button
+                className="ml-auto text-xs underline text-muted-foreground hover:text-foreground"
+                onClick={() => navigate("/orders")}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           <OrderTopBar
             outlets={outletOptions}
             selectedOutlet={currentOutlet?.id || ""}
@@ -667,9 +780,9 @@ export default function NewOrder() {
             onSelectCategory={setSelectedCategory}
           />
 
-          <div className="p-4 space-y-4">
+          <div className="p-3 md:p-4 space-y-4">
             {/* Search + Voice Order */}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 md:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -681,10 +794,10 @@ export default function NewOrder() {
               </div>
               <button
                 onClick={() => setVoiceOpen(true)}
-                className="flex items-center gap-2 bg-primary text-white font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 active:scale-95 transition-all whitespace-nowrap text-sm shadow-sm"
+                className="flex items-center justify-center gap-2 bg-primary text-white font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 active:scale-95 transition-all whitespace-nowrap text-sm shadow-sm md:justify-start"
               >
                 <Mic className="h-4 w-4" />
-                <span className="hidden sm:inline">Voice Order</span>
+                <span>Voice Order</span>
                 <Sparkles className="h-3 w-3 opacity-80" />
               </button>
             </div>
@@ -702,7 +815,7 @@ export default function NewOrder() {
                 onAction={() => navigate("/menu")}
               />
             ) : (
-              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
                 {filteredItems.map((item) => (
                   <MenuItemCard
                     key={item.id}
@@ -834,20 +947,23 @@ export default function NewOrder() {
               onClick={handlePlaceOrder}
             >
               <ShoppingCart className="h-4 w-4 mr-2" />
-              Place Order · ₹{cartTotal}
+              {addToOrderId ? `Add to Order · ₹${cartTotal}` : `Place Order · ₹${cartTotal}`}
             </Button>
           </div>
         </div>
       </div>
 
-      {/* ── Mobile: floating cart bar + drawer ── */}
-      <div className="lg:hidden">
-        <CartSummaryBar
-          itemCount={cartItemsCount}
-          total={cartTotal}
-          onViewCart={() => setCartDrawerOpen(true)}
-        />
-      </div>
+      {/* ── Mobile: floating cart bar (hidden when drawer is open) ── */}
+      {!cartDrawerOpen && (
+        <div className="lg:hidden">
+          <CartSummaryBar
+            itemCount={cartItemsCount}
+            total={cartTotal}
+            onViewCart={() => setCartDrawerOpen(true)}
+            className="bottom-[68px]"
+          />
+        </div>
+      )}
 
       <CartDrawer
         open={cartDrawerOpen}
@@ -861,6 +977,7 @@ export default function NewOrder() {
         onRemoveItem={removeFromCart}
         onPlaceOrder={handlePlaceOrder}
         cartTotal={cartTotal}
+        isAddMode={!!addToOrderId}
       />
 
       <OrderSuccessDialog

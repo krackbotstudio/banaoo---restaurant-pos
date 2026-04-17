@@ -8,14 +8,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { PrintableReceipt } from "./PrintableReceipt";
-import { Printer, Check, X } from "lucide-react";
+import { Printer, Check, X, ChefHat } from "lucide-react";
 
-interface ReceiptItem {
+interface KitchenItem {
   name: string;
   quantity: number;
-  unitPrice: number;
-  totalPrice: number;
 }
 
 interface OrderData {
@@ -23,7 +20,7 @@ interface OrderData {
   outletName: string;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
-  items: ReceiptItem[];
+  items: KitchenItem[];
   subtotal: number;
   total: number;
   createdAt: Date;
@@ -42,78 +39,34 @@ export function OrderSuccessDialog({
   orderData,
   onNewOrder,
 }: OrderSuccessDialogProps) {
-  const receiptRef = useRef<HTMLDivElement>(null);
+  const slipRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
-    if (!receiptRef.current) return;
-
-    const printContent = receiptRef.current.innerHTML;
-    const printWindow = window.open("", "_blank", "width=350,height=600");
-    
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Receipt - ${orderData?.orderNumber}</title>
-            <style>
-              * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-              }
-              body {
-                font-family: 'Courier New', monospace;
-                font-size: 12px;
-                padding: 10px;
-                max-width: 300px;
-                margin: 0 auto;
-              }
-              .text-center { text-align: center; }
-              .text-right { text-align: right; }
-              .font-bold { font-weight: bold; }
-              .text-lg { font-size: 16px; }
-              .text-base { font-size: 14px; }
-              .text-xs { font-size: 11px; }
-              .uppercase { text-transform: uppercase; }
-              .border-b { border-bottom: 1px dashed #999; }
-              .pb-3 { padding-bottom: 12px; }
-              .mb-3 { margin-bottom: 12px; }
-              .mt-1 { margin-top: 4px; }
-              .mb-1 { margin-bottom: 4px; }
-              .mb-2 { margin-bottom: 8px; }
-              .py-0\\.5 { padding-top: 2px; padding-bottom: 2px; }
-              .pr-2 { padding-right: 8px; }
-              .flex { display: flex; }
-              .justify-between { justify-content: space-between; }
-              .flex-1 { flex: 1; }
-              .w-8 { width: 32px; }
-              .w-16 { width: 64px; }
-              .truncate { 
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-              }
-              .text-gray-600 { color: #666; }
-              @media print {
-                body { margin: 0; padding: 5px; }
-              }
-            </style>
-          </head>
-          <body>
-            ${printContent}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      
-      // Wait for content to load then print
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 250);
+    const el = slipRef.current;
+    if (!el) return;
+    const printWindow = window.open("", "_blank", "width=220,height=500");
+    if (!printWindow) return;
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Kitchen #${orderData?.orderNumber ?? ""}</title>
+  <style>
+    @page { size: 58mm auto; margin: 0; }
+    html, body {
+      margin: 0; padding: 0; width: 58mm;
+      background: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10pt; color: #000;
     }
+    table { border-collapse: collapse; width: 100%; }
+  </style>
+</head>
+<body>${el.innerHTML}</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
   };
 
   const handleClose = () => {
@@ -123,41 +76,126 @@ export function OrderSuccessDialog({
 
   if (!orderData) return null;
 
+  const typeLabel = orderData.orderType === "dine_in"
+    ? (orderData.tableNumber ? `Table T${orderData.tableNumber}` : "Dine In")
+    : "Takeaway";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <div className="mx-auto w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
-            <Check className="h-8 w-8 text-green-500" />
+          <div className="mx-auto w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
+            <Check className="h-7 w-7 text-green-500" />
           </div>
           <DialogTitle className="text-center text-xl">Order Placed!</DialogTitle>
-          <DialogDescription className="text-center">
-            Order #{orderData.orderNumber} has been sent to the kitchen
+          <DialogDescription className="text-center text-sm">
+            #{orderData.orderNumber} · {typeLabel} · sent to kitchen
           </DialogDescription>
         </DialogHeader>
 
-        {/* Receipt Preview */}
-        <div className="max-h-[300px] overflow-auto bg-muted/30 rounded-lg p-4 flex justify-center">
-          <div className="scale-90 origin-top">
-            <PrintableReceipt ref={receiptRef} data={orderData} />
+        {/* Kitchen slip preview */}
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 flex flex-col gap-1.5">
+          {/* Header row */}
+          <div className="flex items-center gap-2 mb-1">
+            <ChefHat className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Kitchen Copy
+            </span>
+          </div>
+
+          {/* Item list */}
+          <div className="space-y-1">
+            {orderData.items.map((item, i) => (
+              <div key={i} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
+                <span className="text-sm font-medium">{item.name}</span>
+                <span className="text-sm font-bold text-primary bg-primary/10 rounded-full px-2.5 py-0.5">
+                  ×{item.quantity}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            className="flex-1 gap-2"
-            onClick={handleClose}
+        {/* Hidden printable kitchen slip — ref lives here so innerHTML is always accessible */}
+        <div className="hidden">
+          <div
+            ref={slipRef}
+            style={{
+              fontFamily: "'Courier New', Courier, monospace",
+              fontSize: "10pt",
+              lineHeight: "1.5",
+              color: "#000",
+              background: "#fff",
+              width: "48mm",
+              padding: "3mm 2mm",
+              boxSizing: "border-box",
+            }}
           >
+            <div style={{ textAlign: "center", fontWeight: "bold", marginBottom: "2mm" }}>
+              ** KITCHEN ORDER **
+            </div>
+            <div style={{ borderTop: "1px dashed #000", margin: "3px 0" }} />
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                <tr>
+                  <td style={{ fontWeight: "bold" }}>Order #</td>
+                  <td style={{ textAlign: "right", fontWeight: "bold" }}>{orderData.orderNumber}</td>
+                </tr>
+                <tr>
+                  <td>Time</td>
+                  <td style={{ textAlign: "right" }}>
+                    {orderData.createdAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ fontWeight: "bold" }}>
+                    {orderData.orderType === "dine_in" ? "Table" : "Type"}
+                  </td>
+                  <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                    {orderData.orderType === "dine_in"
+                      ? (orderData.tableNumber ? `T${orderData.tableNumber}` : "—")
+                      : "TAKEAWAY"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: "1px dashed #000", margin: "3px 0" }} />
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ fontWeight: "bold" }}>
+                  <td>ITEM</td>
+                  <td style={{ textAlign: "right" }}>QTY</td>
+                </tr>
+              </thead>
+              <tbody>
+                {orderData.items.map((item, i) => (
+                  <tr key={i}>
+                    <td style={{ paddingTop: "2mm", paddingRight: "2mm" }}>{item.name}</td>
+                    <td style={{ textAlign: "right", paddingTop: "2mm", fontWeight: "bold", fontSize: "12pt" }}>
+                      x{item.quantity}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: "1px dashed #000", margin: "3px 0" }} />
+            <div style={{ textAlign: "center", fontSize: "8pt", marginTop: "1mm" }}>— Kitchen Copy —</div>
+            <div style={{ height: "8mm" }} />
+          </div>
+        </div>
+
+        <DialogFooter className="flex-col sm:flex-row gap-2 mt-1">
+          <Button variant="outline" className="flex-1 gap-2" onClick={handleClose}>
             <X className="h-4 w-4" />
             Close
           </Button>
-          <Button
-            className="flex-1 gap-2 gradient-primary glow-primary"
-            onClick={handlePrint}
-          >
+          <Button className="flex-1 gap-2 gradient-primary" onClick={handlePrint}>
             <Printer className="h-4 w-4" />
-            Print Receipt
+            Print Kitchen Slip
           </Button>
         </DialogFooter>
       </DialogContent>

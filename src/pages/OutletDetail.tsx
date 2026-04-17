@@ -18,7 +18,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Link2, Copy, ExternalLink, Navigation } from "lucide-react";
+import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Link2, Copy, ExternalLink, Navigation, Receipt, Percent } from "lucide-react";
+import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { OrderingQRCode } from "@/components/customer/OrderingQRCode";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -90,6 +91,8 @@ interface Outlet {
   closing_time: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  gst_number?: string | null;
+  gst_categories?: Record<string, number> | null;
 }
 
 export default function OutletDetail() {
@@ -113,6 +116,8 @@ export default function OutletDetail() {
   const [editLng, setEditLng] = useState<number | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [geoLocating, setGeoLocating] = useState(false);
+  const [editGstNumber, setEditGstNumber] = useState("");
+  const [gstRates, setGstRates] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (user && id) {
@@ -142,6 +147,14 @@ export default function OutletDetail() {
     setEditIsActive(data.is_active);
     setEditLat(data.latitude ?? null);
     setEditLng(data.longitude ?? null);
+    setEditGstNumber(data.gst_number || "");
+    // Populate gstRates from saved JSONB (values as strings for inputs)
+    const saved = (data.gst_categories as Record<string, number>) || {};
+    const rateStrings: Record<string, string> = {};
+    GST_CATEGORIES.forEach(c => {
+      rateStrings[c.key] = saved[c.key] !== undefined ? String(saved[c.key]) : String(c.defaultRate);
+    });
+    setGstRates(rateStrings);
     setLoading(false);
   };
 
@@ -164,6 +177,10 @@ export default function OutletDetail() {
         is_active: editIsActive,
         latitude: editLat,
         longitude: editLng,
+        gst_number: editGstNumber.trim().toUpperCase() || null,
+        gst_categories: Object.fromEntries(
+          GST_CATEGORIES.map(c => [c.key, parseFloat(gstRates[c.key] ?? "0") || 0])
+        ),
       })
       .eq("id", id);
 
@@ -275,6 +292,46 @@ export default function OutletDetail() {
                     className="h-11"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    GST Number
+                    <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Input
+                    value={editGstNumber}
+                    onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())}
+                    placeholder="e.g. 29ABCDE1234F1Z5"
+                    maxLength={15}
+                    className="h-11 font-mono tracking-wider uppercase"
+                  />
+                </div>
+                {/* GST Tax Categories */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Percent className="h-4 w-4 text-muted-foreground" />
+                    <Label className="font-semibold">GST Tax Categories</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">Set GST % for each food type. These apply to menu items tagged with a category.</p>
+                  <div className="rounded-lg border border-border divide-y divide-border">
+                    {GST_CATEGORIES.map((cat) => (
+                      <div key={cat.key} className="flex items-center justify-between px-3 py-2 gap-3">
+                        <span className="text-sm flex-1">{cat.label}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={gstRates[cat.key] ?? cat.defaultRate}
+                            onChange={e => setGstRates(r => ({ ...r, [cat.key]: e.target.value }))}
+                            className="w-14 text-center text-sm border border-border rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Opening Time</Label>
@@ -406,7 +463,7 @@ export default function OutletDetail() {
                   <p className="text-muted-foreground">{outlet.phone || "Not set"}</p>
                 </CardContent>
               </Card>
-              <Card className="md:col-span-2">
+              <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -421,6 +478,47 @@ export default function OutletDetail() {
                   </p>
                 </CardContent>
               </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                    GST Number
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {outlet.gst_number ? (
+                    <p className="font-mono tracking-wider text-muted-foreground">
+                      {outlet.gst_number}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">Not set</p>
+                  )}
+                </CardContent>
+              </Card>
+            {/* GST Categories overview */}
+            {outlet.gst_categories && Object.keys(outlet.gst_categories).length > 0 && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Percent className="h-4 w-4 text-muted-foreground" />
+                    GST Tax Categories
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {GST_CATEGORIES.map(cat => {
+                      const rate = outlet.gst_categories?.[cat.key];
+                      return (
+                        <div key={cat.key} className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-sm">
+                          <span className="text-muted-foreground truncate mr-2">{cat.label}</span>
+                          <span className="font-semibold shrink-0">{rate ?? cat.defaultRate}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             </div>
 
             {/* Online Ordering Link */}

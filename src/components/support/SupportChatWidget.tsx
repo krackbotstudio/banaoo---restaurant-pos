@@ -28,6 +28,13 @@ export function SupportChatWidget() {
     }
   }, [isOpen]);
 
+  // Allow external UI triggers (like mobile header button) to toggle chat.
+  useEffect(() => {
+    const handleToggle = () => setIsOpen((prev) => !prev);
+    window.addEventListener("support-chat-toggle", handleToggle as EventListener);
+    return () => window.removeEventListener("support-chat-toggle", handleToggle as EventListener);
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim() && !isLoading) {
@@ -140,9 +147,9 @@ export function SupportChatWidget() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full shadow-lg transition-all duration-300",
+          "fixed bottom-4 right-4 z-50 hidden h-14 w-14 rounded-full shadow-lg transition-all duration-300 lg:inline-flex",
           "bg-primary text-primary-foreground hover:scale-105 active:scale-95",
-          "flex items-center justify-center glow-primary",
+          "items-center justify-center glow-primary",
           isOpen && "rotate-90"
         )}
         aria-label={isOpen ? "Close support chat" : "Open support chat"}

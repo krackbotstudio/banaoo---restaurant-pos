@@ -18,7 +18,7 @@ export function CategoryTabs({
   onSelectCategory,
 }: CategoryTabsProps) {
   return (
-    <div className="sticky top-[145px] z-30 bg-background/95 backdrop-blur-sm border-b border-border/50 max-w-full overflow-hidden">
+    <div className="border-b border-border/50 max-w-full overflow-hidden">
       <ScrollArea className="w-full">
         <div className="flex gap-2 p-4">
           <button

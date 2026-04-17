@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, Fragment } from "react";
 import { format } from "date-fns";
 
 interface ReceiptItem {
@@ -6,15 +6,22 @@ interface ReceiptItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  gstRate?: number; // GST % for this item
 }
 
 interface ReceiptData {
   orderNumber: string;
   outletName: string;
+  gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
   items: ReceiptItem[];
   subtotal: number;
+  discount?: number;        // flat amount
+  discountPercent?: number; // % for display
+  gstSlabs?: Record<number, number>; // rate% → amount
+  tax?: number;             // additional cess flat amount
+  taxPercent?: number;      // additional cess %
   total: number;
   createdAt: Date;
 }
@@ -23,77 +30,164 @@ interface PrintableReceiptProps {
   data: ReceiptData;
 }
 
+// Thermal receipt divider
+const Divider = () => (
+  <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+);
+
+const fmt = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
+
 export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps>(
   ({ data }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className="bg-white text-black p-4 w-[300px] font-mono text-sm print:block"
-        style={{ fontFamily: "monospace" }}
-      >
-        {/* Header */}
-        <div className="text-center border-b border-dashed border-gray-400 pb-3 mb-3">
-          <h1 className="font-bold text-lg">{data.outletName}</h1>
-          <p className="text-xs text-gray-600">Powered by banaoo.in</p>
-        </div>
+    const s: React.CSSProperties = {
+      fontFamily: "'Courier New', Courier, monospace",
+      fontSize: "9pt",
+      lineHeight: "1.35",
+      color: "#000",
+      background: "#fff",
+      width: "48mm",
+      padding: "3mm 2mm",
+      boxSizing: "border-box",
+    };
 
-        {/* Order Info */}
-        <div className="border-b border-dashed border-gray-400 pb-3 mb-3 text-xs">
-          <div className="flex justify-between">
-            <span>Order #:</span>
-            <span className="font-bold">{data.orderNumber}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Date:</span>
-            <span>{format(data.createdAt, "dd/MM/yyyy HH:mm")}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Type:</span>
-            <span className="uppercase">
-              {data.orderType === "dine_in" ? "DINE IN" : "TAKEAWAY"}
-            </span>
-          </div>
-          {data.orderType === "dine_in" && data.tableNumber && (
-            <div className="flex justify-between">
-              <span>Table:</span>
-              <span className="font-bold">{data.tableNumber}</span>
-            </div>
-          )}
+    // Pre-calculate per-item GST amounts (after discount ratio)
+    const discountAmt = data.discount ?? 0;
+    const discountRatio = data.subtotal > 0
+      ? Math.max(0, data.subtotal - discountAmt) / data.subtotal
+      : 1;
+
+    return (
+      <div ref={ref} style={s}>
+        {/* Restaurant name */}
+        <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "11pt", marginBottom: "1mm" }}>
+          {data.outletName}
         </div>
+        {data.gstNumber && (
+          <div style={{ textAlign: "center", fontSize: "8pt", marginBottom: "2mm" }}>
+            GSTIN: {data.gstNumber}
+          </div>
+        )}
+
+        <Divider />
+
+        {/* Order meta */}
+        <table style={{ width: "100%", fontSize: "9pt", borderCollapse: "collapse" }}>
+          <tbody>
+            <tr>
+              <td style={{ paddingRight: "2mm" }}>Order #</td>
+              <td style={{ textAlign: "right", fontWeight: "bold" }}>{data.orderNumber}</td>
+            </tr>
+            <tr>
+              <td>Date</td>
+              <td style={{ textAlign: "right" }}>{format(data.createdAt, "dd/MM/yy HH:mm")}</td>
+            </tr>
+            <tr>
+              <td>Type</td>
+              <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                {data.orderType === "dine_in" ? "DINE IN" : "TAKEAWAY"}
+              </td>
+            </tr>
+            {data.orderType === "dine_in" && data.tableNumber && (
+              <tr>
+                <td>Table</td>
+                <td style={{ textAlign: "right", fontWeight: "bold" }}>{data.tableNumber}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <Divider />
 
         {/* Items */}
-        <div className="border-b border-dashed border-gray-400 pb-3 mb-3">
-          <div className="flex justify-between text-xs font-bold mb-2">
-            <span className="flex-1">ITEM</span>
-            <span className="w-8 text-center">QTY</span>
-            <span className="w-16 text-right">AMOUNT</span>
-          </div>
-          {data.items.map((item, index) => (
-            <div key={index} className="flex justify-between text-xs py-0.5">
-              <span className="flex-1 truncate pr-2">{item.name}</span>
-              <span className="w-8 text-center">{item.quantity}</span>
-              <span className="w-16 text-right">₹{item.totalPrice}</span>
-            </div>
-          ))}
-        </div>
+        <table style={{ width: "100%", fontSize: "9pt", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ fontWeight: "bold" }}>
+              <td style={{ width: "50%" }}>ITEM</td>
+              <td style={{ width: "10%", textAlign: "center" }}>QTY</td>
+              <td style={{ width: "40%", textAlign: "right" }}>AMT</td>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map((item, i) => {
+              const gstAmt = item.gstRate
+                ? Math.round(item.totalPrice * discountRatio * item.gstRate / 100 * 100) / 100
+                : 0;
+              return (
+                <Fragment key={i}>
+                  <tr>
+                    <td style={{ paddingTop: "1.5mm", maxWidth: "24mm", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      {item.name}
+                    </td>
+                    <td style={{ textAlign: "center", paddingTop: "1.5mm" }}>{item.quantity}</td>
+                    <td style={{ textAlign: "right", paddingTop: "1.5mm" }}>&#8377;{fmt(item.totalPrice)}</td>
+                  </tr>
+                  {item.gstRate && gstAmt > 0 && (
+                    <tr>
+                      <td colSpan={2} style={{ fontSize: "7.5pt", color: "#555", paddingLeft: "2mm" }}>
+                        + GST @{item.gstRate}%
+                      </td>
+                      <td style={{ textAlign: "right", fontSize: "7.5pt", color: "#555" }}>
+                        &#8377;{fmt(gstAmt)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <Divider />
 
         {/* Totals */}
-        <div className="border-b border-dashed border-gray-400 pb-3 mb-3 text-xs">
-          <div className="flex justify-between">
-            <span>Subtotal:</span>
-            <span>₹{data.subtotal}</span>
-          </div>
-          <div className="flex justify-between font-bold text-base mt-1">
-            <span>TOTAL:</span>
-            <span>₹{data.total}</span>
-          </div>
-        </div>
+        <table style={{ width: "100%", fontSize: "9pt", borderCollapse: "collapse" }}>
+          <tbody>
+            {/* Subtotal */}
+            <tr>
+              <td>Subtotal</td>
+              <td style={{ textAlign: "right" }}>&#8377;{fmt(data.subtotal)}</td>
+            </tr>
+
+            {/* Discount */}
+            {!!data.discount && data.discount > 0 && (
+              <tr>
+                <td>Discount{data.discountPercent ? ` (${fmt(data.discountPercent)}%)` : ""}</td>
+                <td style={{ textAlign: "right" }}>- &#8377;{fmt(data.discount)}</td>
+              </tr>
+            )}
+
+            {/* Service Tax (manual additional tax / cess) */}
+            {!!data.tax && data.tax > 0 && (
+              <tr>
+                <td>Service Tax{data.taxPercent ? ` (${data.taxPercent}%)` : ""}</td>
+                <td style={{ textAlign: "right" }}>+ &#8377;{fmt(data.tax)}</td>
+              </tr>
+            )}
+
+            {/* Grand total */}
+            <tr>
+              <td colSpan={2}>
+                <div style={{ borderTop: "1px solid #000", margin: "2px 0" }} />
+              </td>
+            </tr>
+            <tr style={{ fontWeight: "bold", fontSize: "11pt" }}>
+              <td>TOTAL</td>
+              <td style={{ textAlign: "right" }}>&#8377;{fmt(data.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <Divider />
 
         {/* Footer */}
-        <div className="text-center text-xs text-gray-600">
-          <p className="font-bold mb-1">Thank you for your order!</p>
-          <p>Visit again soon</p>
+        <div style={{ textAlign: "center", fontSize: "8pt", marginTop: "2mm", lineHeight: "1.5" }}>
+          <div style={{ fontWeight: "bold" }}>Thank you!</div>
+          <div>Visit us again soon</div>
+          <div style={{ marginTop: "2mm", color: "#888" }}>Powered by banaoo.in</div>
         </div>
+
+        {/* Feed space so thermal cutter doesn't clip last line */}
+        <div style={{ height: "8mm" }} />
       </div>
     );
   }
