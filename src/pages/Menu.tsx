@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,10 +30,6 @@ import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, 
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { MenuImportDialog } from "@/components/MenuImportDialog";
 
-interface Outlet {
-  id: string;
-  name: string;
-}
 interface Category {
   id: string;
   name: string;
@@ -61,11 +58,10 @@ const SPECIAL_LABELS = ["Today's Special", "Chef's Pick", "Must Try", "New"];
 export default function Menu() {
   const { user, getImageUrl } = useAuth();
   const { toast } = useToast();
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [selectedOutlet, setSelectedOutlet] = useState<string>("");
+  const { currentOutlet, loading: outletLoading } = useOutlet();
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -89,7 +85,6 @@ export default function Menu() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const GST_NONE = "__none__";
   const [itemGstCategory, setItemGstCategory] = useState(GST_NONE);
-  const [outletGstRates, setOutletGstRates] = useState<Record<string, number> | null>(null);
 
   // Special & Offer form state
   const [itemIsSpecial, setItemIsSpecial] = useState(false);
@@ -104,57 +99,19 @@ export default function Menu() {
   const [categoryName, setCategoryName] = useState("");
 
   useEffect(() => {
-    if (user) fetchOutlets();
-  }, [user]);
-
-  useEffect(() => {
-    if (selectedOutlet) {
+    if (currentOutlet?.id) {
+      setLoading(true);
       fetchCategories();
       fetchMenuItems();
-      fetchOutletGstRates(selectedOutlet);
     }
-  }, [selectedOutlet]);
-
-  const fetchOutlets = async () => {
-    if (!user) return;
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("outlets")
-      .select("id, name")
-      .eq("owner_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching outlets:", error);
-      toast({ variant: "destructive", title: "Error", description: error.message });
-      setLoading(false);
-      return;
-    }
-
-    if (data) {
-      setOutlets(data);
-      if (data.length > 0 && !selectedOutlet) {
-        setSelectedOutlet(data[0].id);
-      }
-    }
-    setLoading(false);
-  };
-
-  const fetchOutletGstRates = async (outletId: string) => {
-    const { data } = await supabase
-      .from("outlets")
-      .select("gst_categories")
-      .eq("id", outletId)
-      .single();
-    setOutletGstRates((data?.gst_categories as Record<string, number> | null) ?? null);
-  };
+  }, [currentOutlet?.id]);
 
   const fetchCategories = async () => {
-    if (!selectedOutlet) return;
+    if (!currentOutlet?.id) return;
     const { data, error } = await supabase
       .from("menu_categories")
       .select("*")
-      .eq("outlet_id", selectedOutlet)
+      .eq("outlet_id", currentOutlet.id)
       .order("sort_order");
     
     if (error) {
@@ -165,19 +122,21 @@ export default function Menu() {
   };
 
   const fetchMenuItems = async () => {
-    if (!selectedOutlet) return;
+    if (!currentOutlet?.id) return;
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
-      .eq("outlet_id", selectedOutlet)
+      .eq("outlet_id", currentOutlet.id)
       .order("name");
-    
+
     if (error) {
       console.error("Error fetching menu items:", error);
       toast({ variant: "destructive", title: "Error", description: error.message });
+      setLoading(false);
       return;
     }
     setMenuItems(data || []);
+    setLoading(false);
   };
 
   const resetItemForm = () => {
@@ -302,12 +261,12 @@ export default function Menu() {
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categoryName.trim() || !selectedOutlet) return;
+    if (!categoryName.trim() || !currentOutlet?.id) return;
 
     setIsSubmitting(true);
     const { error } = await supabase.from("menu_categories").insert({
       name: categoryName.trim(),
-      outlet_id: selectedOutlet,
+      outlet_id: currentOutlet.id,
     });
     setIsSubmitting(false);
 
@@ -337,7 +296,7 @@ export default function Menu() {
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName.trim() || !itemPrice || !selectedOutlet) {
+    if (!itemName.trim() || !itemPrice || !currentOutlet?.id) {
       toast({ variant: "destructive", title: "Validation Error", description: "Name and price are required" });
       return;
     }
@@ -349,10 +308,9 @@ export default function Menu() {
     setIsSubmitting(true);
     const noImage = !itemImageUrl;
     const savedName = itemName.trim();
-    const savedOutlet = selectedOutlet;
     const { error } = await supabase.from("menu_items").insert({
       ...buildItemPayload(),
-      outlet_id: selectedOutlet,
+      outlet_id: currentOutlet!.id,
     });
     setIsSubmitting(false);
 
@@ -619,7 +577,7 @@ export default function Menu() {
     </div>
   );
 
-  if (loading) {
+  if (outletLoading || loading) {
     return (
       <AppLayout>
         <div className="flex justify-center items-center h-[50vh]">
@@ -629,13 +587,13 @@ export default function Menu() {
     );
   }
 
-  if (outlets.length === 0) {
+  if (!currentOutlet) {
     return (
       <AppLayout>
         <div className="p-6 max-w-7xl mx-auto">
           <EmptyState
             icon={UtensilsCrossed}
-            title="No Outlets Found"
+            title="No Outlet Selected"
             description="Create an outlet first before managing your menu"
             actionLabel="Go to Outlets"
             onAction={() => window.location.href = "/outlets"}
@@ -661,19 +619,8 @@ export default function Menu() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Select value={selectedOutlet} onValueChange={setSelectedOutlet}>
-              <SelectTrigger className="w-[200px] h-10">
-                <SelectValue placeholder="Select outlet" />
-              </SelectTrigger>
-              <SelectContent>
-                {outlets.map((outlet) => (
-                  <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             <MenuImportDialog
-              outletId={selectedOutlet}
+              outletId={currentOutlet.id}
               categories={categories}
               onImportComplete={() => { fetchCategories(); fetchMenuItems(); }}
             />
@@ -779,7 +726,7 @@ export default function Menu() {
                       <SelectContent>
                         <SelectItem value={GST_NONE}>No GST</SelectItem>
                         {GST_CATEGORIES.map(cat => {
-                          const rate = outletGstRates?.[cat.key] ?? cat.defaultRate;
+                          const rate = currentOutlet?.gst_categories?.[cat.key] ?? cat.defaultRate;
                           return (
                             <SelectItem key={cat.key} value={cat.key}>
                               {cat.label} — {rate}%
@@ -987,7 +934,7 @@ export default function Menu() {
                   <SelectContent>
                     <SelectItem value={GST_NONE}>No GST</SelectItem>
                     {GST_CATEGORIES.map(cat => {
-                      const rate = outletGstRates?.[cat.key] ?? cat.defaultRate;
+                      const rate = currentOutlet?.gst_categories?.[cat.key] ?? cat.defaultRate;
                       return (
                         <SelectItem key={cat.key} value={cat.key}>
                           {cat.label} — {rate}%

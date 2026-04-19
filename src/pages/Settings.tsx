@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/use-subscription";
@@ -28,8 +28,18 @@ import {
   Sun,
   Moon,
   ImageIcon,
+  Building2,
+  Check,
+  Store,
+  MapPin,
+  Phone,
+  Plus,
+  ChefHat,
+  Printer,
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
+import { PrinterSettings } from "@/components/settings/PrinterSettings";
+import { useOutlet } from "@/lib/outlet-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +49,14 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +100,7 @@ export default function Settings() {
   } = useNotifications();
   
   const { theme, setTheme } = useTheme();
+  const { currentOutlet, outlets, setCurrentOutlet, canSwitchOutlets } = useOutlet();
 
   // Subscription / plan state
   const [planMonths, setPlanMonths] = useState(1);
@@ -122,6 +141,26 @@ export default function Settings() {
   const [savingBranding, setSavingBranding] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
+  // ── Outlets tab state ───────────────────────────────────────────────────────
+  interface OutletItem { id: string; name: string; address: string | null; phone: string | null; is_active: boolean; }
+  const API_URL = import.meta.env.VITE_API_URL ?? "";
+  const [outletsList, setOutletsList] = useState<OutletItem[]>([]);
+  const [outletsLoading, setOutletsLoading] = useState(false);
+  const [addOutletOpen, setAddOutletOpen] = useState(false);
+  const [addOutletSubmitting, setAddOutletSubmitting] = useState(false);
+  const [newOutletName, setNewOutletName] = useState("");
+  const [newOutletAddress, setNewOutletAddress] = useState("");
+  const [newOutletPhone, setNewOutletPhone] = useState("");
+  const [deleteOutletDialogOpen, setDeleteOutletDialogOpen] = useState(false);
+  const [outletToDelete, setOutletToDelete] = useState<OutletItem | null>(null);
+  const [deleteOutletPassword, setDeleteOutletPassword] = useState("");
+  const [deleteOutletError, setDeleteOutletError] = useState("");
+  const [isDeletingOutlet, setIsDeletingOutlet] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "outlets") fetchOutletsList();
+  }, []);
+
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || "");
@@ -135,15 +174,18 @@ export default function Settings() {
 
   const handleUpdateProfile = async () => {
     if (!user) return;
-    
+
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ full_name: fullName, phone, business_type: businessType || null })
-        .eq("user_id", user.id);
-
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: fullName, phone: phone || null, business_type: businessType || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to update profile");
+      await refreshProfile();
       toast.success("Profile updated successfully");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to update profile";
@@ -170,13 +212,14 @@ export default function Settings() {
 
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
-      
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ logo_url: data.url })
-        .eq("user_id", user.id);
-        
-      if (updateError) throw updateError;
+
+      const saveRes = await fetch(`${API_URL}/api/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_url: data.url }),
+      });
+      if (!saveRes.ok) throw new Error("Failed to save logo");
 
       setLogoPreview(data.url);
       await refreshProfile();
@@ -192,11 +235,14 @@ export default function Settings() {
     if (!user) return;
     setSavingBranding(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ brand_name: brandName || null, brand_color: brandColor })
-        .eq("user_id", user.id);
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brand_name: brandName || null, brand_color: brandColor }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to save branding");
       await refreshProfile();
       toast.success("Branding saved!");
     } catch (err: unknown) {
@@ -206,10 +252,80 @@ export default function Settings() {
     }
   };
 
+  // ── Outlets tab functions ───────────────────────────────────────────────────
+  const fetchOutletsList = async () => {
+    setOutletsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/outlets`, { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to load outlets");
+      setOutletsList((data as { outlets: OutletItem[] }).outlets || []);
+    } catch {
+      setOutletsList([]);
+    }
+    setOutletsLoading(false);
+  };
+
+  const handleAddOutlet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOutletName.trim()) return;
+    setAddOutletSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/outlets`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newOutletName.trim(), address: newOutletAddress.trim() || null, phone: newOutletPhone.trim() || null }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((payload as { error?: string }).error || "Could not create outlet");
+      toast.success("Outlet created!");
+      setNewOutletName(""); setNewOutletAddress(""); setNewOutletPhone("");
+      setAddOutletOpen(false);
+      fetchOutletsList();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create outlet");
+    }
+    setAddOutletSubmitting(false);
+  };
+
+  const handleDeleteOutlet = async () => {
+    if (!outletToDelete || !user || !deleteOutletPassword) {
+      setDeleteOutletError("Please enter your password");
+      return;
+    }
+    setIsDeletingOutlet(true);
+    setDeleteOutletError("");
+    try {
+      const { error: authError } = await (useAuth as any).signIn
+        ? { error: null }
+        : { error: null };
+      // Re-authenticate using supabase directly
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user.email!, password: deleteOutletPassword });
+      if (signInErr) { setDeleteOutletError("Incorrect password. Please try again."); setIsDeletingOutlet(false); return; }
+      const delRes = await fetch(`${API_URL}/api/outlets/${outletToDelete.id}`, { method: "DELETE", credentials: "include" });
+      const delPayload = await delRes.json().catch(() => ({}));
+      if (!delRes.ok) throw new Error((delPayload as { error?: string }).error || "Failed to delete outlet");
+      toast.success(`"${outletToDelete.name}" deleted permanently`);
+      setDeleteOutletDialogOpen(false);
+      setOutletToDelete(null);
+      setDeleteOutletPassword("");
+      fetchOutletsList();
+    } catch (err: unknown) {
+      setDeleteOutletError(err instanceof Error ? err.message : "Failed to delete outlet");
+    }
+    setIsDeletingOutlet(false);
+  };
+
   const handleThemeChange = async (newTheme: "light" | "dark") => {
     setTheme(newTheme);
     if (user) {
-      await supabase.from("profiles").update({ app_theme: newTheme }).eq("user_id", user.id);
+      await fetch(`${API_URL}/api/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app_theme: newTheme }),
+      });
     }
   };
 
@@ -237,20 +353,24 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue={searchParams.get("tab") || "profile"} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="profile" className="gap-2">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7">
+            <TabsTrigger value="profile" className="gap-1.5">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>
             </TabsTrigger>
-            <TabsTrigger value="branding" className="gap-2">
+            <TabsTrigger value="outlets" className="gap-1.5" onClick={fetchOutletsList}>
+              <Store className="h-4 w-4" />
+              <span className="hidden sm:inline">Outlets</span>
+            </TabsTrigger>
+            <TabsTrigger value="branding" className="gap-1.5">
               <Palette className="h-4 w-4" />
               <span className="hidden sm:inline">Branding</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="gap-2">
+            <TabsTrigger value="subscription" className="gap-1.5">
               <CreditCard className="h-4 w-4" />
               <span className="hidden sm:inline">Subscription</span>
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2 relative">
+            <TabsTrigger value="notifications" className="gap-1.5 relative">
               <Bell className="h-4 w-4" />
               <span className="hidden sm:inline">Notifications</span>
               {unreadCount > 0 && (
@@ -259,9 +379,13 @@ export default function Settings() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-2">
+            <TabsTrigger value="preferences" className="gap-1.5">
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Security</span>
+            </TabsTrigger>
+            <TabsTrigger value="printers" className="gap-1.5">
+              <Printer className="h-4 w-4" />
+              <span className="hidden sm:inline">Printers</span>
             </TabsTrigger>
           </TabsList>
 
@@ -405,7 +529,207 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
           </TabsContent>
+
+          {/* Outlets Tab */}
+          <TabsContent value="outlets" className="space-y-6">
+            {/* Active outlet selector — only when user has multiple outlets */}
+            {canSwitchOutlets && outlets.length > 1 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Active Outlet
+                  </CardTitle>
+                  <CardDescription>
+                    All pages (orders, menu, analytics, etc.) show data for the selected outlet. Use a different device per outlet for the best experience.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {outlets.map((outlet) => (
+                    <button
+                      key={outlet.id}
+                      type="button"
+                      onClick={() => setCurrentOutlet(outlet)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-all ${
+                        currentOutlet?.id === outlet.id
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border hover:border-primary/40 hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Building2 className="h-4 w-4 shrink-0" />
+                        <span className="font-medium">{outlet.name}</span>
+                      </div>
+                      {currentOutlet?.id === outlet.id && (
+                        <Check className="h-4 w-4 shrink-0 text-primary" />
+                      )}
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Store className="h-5 w-5" />
+                      Your Outlets
+                    </CardTitle>
+                    <CardDescription>
+                      Manage your restaurant locations — add, view details, or delete outlets
+                    </CardDescription>
+                  </div>
+                  <Button
+                    className="gradient-primary glow-primary shrink-0"
+                    onClick={() => setAddOutletOpen(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Outlet
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {outletsLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                  </div>
+                ) : outletsList.length === 0 ? (
+                  <div className="text-center py-10 space-y-3">
+                    <div className="mx-auto w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
+                      <Store className="h-6 w-6 text-primary-foreground" />
+                    </div>
+                    <p className="font-medium">No outlets yet</p>
+                    <p className="text-sm text-muted-foreground">Add your first restaurant location to get started</p>
+                    <Button onClick={() => setAddOutletOpen(true)} className="gradient-primary">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Your First Outlet
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {outletsList.map((outlet) => (
+                      <div key={outlet.id} className="relative group rounded-xl border border-border hover:border-primary/40 transition-all overflow-hidden">
+                        <Link to={`/outlets/${outlet.id}`} className="block p-4 pr-10">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 rounded-lg gradient-primary shrink-0">
+                              <ChefHat className="h-4 w-4 text-primary-foreground" />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold truncate">{outlet.name}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                                  outlet.is_active ? "bg-green-500/15 text-green-600" : "bg-muted text-muted-foreground"
+                                }`}>
+                                  {outlet.is_active ? "Active" : "Inactive"}
+                                </span>
+                              </div>
+                              {outlet.address && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                                  <MapPin className="h-3 w-3 shrink-0" />{outlet.address}
+                                </p>
+                              )}
+                              {outlet.phone && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Phone className="h-3 w-3 shrink-0" />{outlet.phone}
+                                </p>
+                              )}
+                              <p className="text-xs text-primary font-medium mt-1">Tap to manage →</p>
+                            </div>
+                          </div>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => {
+                            setOutletToDelete(outlet);
+                            setDeleteOutletPassword("");
+                            setDeleteOutletError("");
+                            setDeleteOutletDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Add Outlet Dialog */}
+          <Dialog open={addOutletOpen} onOpenChange={setAddOutletOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-display">Add New Outlet</DialogTitle>
+                <DialogDescription>Create a new restaurant location</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleAddOutlet} className="space-y-4 mt-2">
+                <div className="space-y-2">
+                  <Label>Outlet Name *</Label>
+                  <Input placeholder="e.g. Main Branch, Downtown" value={newOutletName} onChange={(e) => setNewOutletName(e.target.value)} className="h-11" autoFocus />
+                </div>
+                <div className="space-y-2">
+                  <Label>Address</Label>
+                  <Textarea placeholder="Full address" value={newOutletAddress} onChange={(e) => setNewOutletAddress(e.target.value)} rows={2} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input type="tel" placeholder="Contact number" value={newOutletPhone} onChange={(e) => setNewOutletPhone(e.target.value)} className="h-11" />
+                </div>
+                <Button type="submit" className="w-full h-11 gradient-primary" disabled={addOutletSubmitting}>
+                  {addOutletSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Outlet"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Outlet Dialog */}
+          <AlertDialog open={deleteOutletDialogOpen} onOpenChange={setDeleteOutletDialogOpen}>
+            <AlertDialogContent className="max-w-md">
+              <AlertDialogHeader>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-full bg-destructive/10">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                  </div>
+                  <AlertDialogTitle>Delete Outlet Permanently?</AlertDialogTitle>
+                </div>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg space-y-2">
+                      <p className="font-semibold text-destructive text-sm">⚠️ This cannot be undone!</p>
+                      <p className="text-sm text-muted-foreground">
+                        Deleting <span className="font-semibold text-foreground">"{outletToDelete?.name}"</span> will permanently remove all menu items, orders, staff assignments, and associated data.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Enter your password to confirm</Label>
+                      <Input
+                        type="password"
+                        placeholder="Your account password"
+                        value={deleteOutletPassword}
+                        onChange={(e) => { setDeleteOutletPassword(e.target.value); setDeleteOutletError(""); }}
+                        className={deleteOutletError ? "border-destructive" : ""}
+                      />
+                      {deleteOutletError && <p className="text-sm text-destructive">{deleteOutletError}</p>}
+                    </div>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => { setDeleteOutletDialogOpen(false); setOutletToDelete(null); setDeleteOutletPassword(""); setDeleteOutletError(""); }} disabled={isDeletingOutlet}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteOutlet} disabled={isDeletingOutlet || !deleteOutletPassword} className="gap-2">
+                  {isDeletingOutlet ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Trash2 className="h-4 w-4" />Delete Permanently</>}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Branding Tab */}
           <TabsContent value="branding" className="space-y-6">
@@ -457,7 +781,12 @@ export default function Settings() {
                           type="button"
                           className="text-xs text-destructive hover:underline"
                           onClick={async () => {
-                            await supabase.from("profiles").update({ logo_url: null }).eq("user_id", user!.id);
+                            await fetch(`${API_URL}/api/profile`, {
+                              method: "PUT",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ logo_url: null }),
+                            });
                             setLogoPreview(null);
                             await refreshProfile();
                           }}
@@ -1032,6 +1361,11 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Printers Tab */}
+          <TabsContent value="printers" className="space-y-6">
+            <PrinterSettings />
           </TabsContent>
         </Tabs>
       </div>

@@ -79,7 +79,7 @@ export function useStaffPermissions(): StaffPermissionsResult {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .from("staff_members" as any)
       .select("role, page_permissions")
-      .eq("email", email)
+      .eq("system_email", email)   // system_email = "username@banaoo-staff.app" (what staff log in with)
       .maybeSingle()
       .then(({ data }: { data: any }) => {
         if (data) {

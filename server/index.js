@@ -497,6 +497,41 @@ app.delete('/api/outlets/:id', async (req, res) => {
   }
 });
 
+// Update owner profile — handles both personal info and branding fields
+app.put('/api/profile', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  const { full_name, phone, business_type, brand_name, brand_color, logo_url, app_theme } = req.body;
+  if (full_name !== undefined && (!full_name || !full_name.trim())) {
+    return res.status(400).json({ error: 'Full name cannot be empty' });
+  }
+  try {
+    // Build SET clause dynamically from provided fields
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    if (full_name !== undefined)  { fields.push(`full_name = $${idx++}`);   values.push(full_name.trim()); }
+    if (phone !== undefined)      { fields.push(`phone = $${idx++}`);        values.push(phone?.trim() || null); }
+    if (business_type !== undefined){ fields.push(`business_type = $${idx++}`); values.push(business_type || null); }
+    if (brand_name !== undefined) { fields.push(`brand_name = $${idx++}`);   values.push(brand_name || null); }
+    if (brand_color !== undefined){ fields.push(`brand_color = $${idx++}`);  values.push(brand_color); }
+    if (logo_url !== undefined)   { fields.push(`logo_url = $${idx++}`);     values.push(logo_url); }
+    if (app_theme !== undefined)  { fields.push(`app_theme = $${idx++}`);    values.push(app_theme); }
+
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    values.push(req.user.id);
+
+    const { rows } = await pool.query(
+      `UPDATE public.profiles SET ${fields.join(', ')} WHERE user_id = $${idx} RETURNING *`,
+      values
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ profile: rows[0] });
+  } catch (err) {
+    console.error('PUT /api/profile:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Complete onboarding — sets business info, creates first outlet, marks onboarding_completed = true
 app.post('/api/onboarding/complete', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });

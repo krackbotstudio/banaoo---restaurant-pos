@@ -62,7 +62,7 @@ const App = () => (
         <OutletProvider>
           <TooltipProvider>
             <Toaster />
-            <Sonner />
+            <Sonner position="top-right" />
             <SupportChatWidget />
             <BrowserRouter>
               <CookieConsent />

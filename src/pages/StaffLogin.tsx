@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ChefHat, Loader2, ArrowLeft, KeyRound } from "lucide-react";
+import { ChefHat, Loader2, ArrowLeft, KeyRound, AlertTriangle } from "lucide-react";
 
 const STAFF_EMAIL_DOMAIN = "banaoo-staff.app";
 const PIN_PREFIX = "bn_";
@@ -13,7 +13,7 @@ const PIN_PREFIX = "bn_";
 export default function StaffLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn } = useAuth();
+  const { signIn, user, profile } = useAuth();
 
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState(["", "", "", ""]);
@@ -103,6 +103,18 @@ export default function StaffLogin() {
             Enter your username and PIN to access your workspace
           </p>
         </div>
+
+        {/* Session conflict warning */}
+        {user && (
+          <div className="flex items-start gap-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              This browser has an active session
+              {profile?.full_name ? ` (${profile.full_name})` : ""}.
+              Signing in as staff will replace it — use a private window to keep both sessions separate.
+            </span>
+          </div>
+        )}
 
         {/* Login form */}
         <form onSubmit={handleSubmit} className="space-y-5">

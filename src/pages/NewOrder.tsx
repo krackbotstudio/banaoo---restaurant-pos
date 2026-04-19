@@ -23,6 +23,7 @@ import { MenuItemCard } from "@/components/order/MenuItemCard";
 import { CartSummaryBar } from "@/components/order/CartSummaryBar";
 import { CartDrawer } from "@/components/order/CartDrawer";
 import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
+import { usePrinterSettings } from "@/lib/use-printer-settings";
 
 interface Category {
   id: string;
@@ -434,6 +435,7 @@ export default function NewOrder() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [lastOrderData, setLastOrderData] = useState<OrderData | null>(null);
+  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
 
@@ -985,6 +987,12 @@ export default function NewOrder() {
         onOpenChange={setSuccessDialogOpen}
         orderData={lastOrderData}
         onNewOrder={handleNewOrder}
+        autoPrintKitchen={printerSettings.kitchenPrinter.autoPrint}
+        kitchenFontSize={printerSettings.kitchenPrinter.fontSize}
+        kitchenPaperWidth={printerSettings.kitchenPrinter.paperWidth}
+        kitchenPortIndex={printerSettings.kitchenPrinter.usbPortIndex}
+        kitchenBaudRate={printerSettings.kitchenPrinter.baudRate}
+        kitchenPrintMode={printerSettings.kitchenPrinter.printMode}
       />
 
       <VoicePOSOrder

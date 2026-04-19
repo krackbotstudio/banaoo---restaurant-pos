@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,37 +33,26 @@ const fmtShort = (v: number) =>
 
 export default function Analytics() {
   const { user } = useAuth();
+  const { currentOutlet } = useOutlet();
   const [orders, setOrders] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("30");
-  const [outletFilter, setOutletFilter] = useState("all");
-  const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    if (user) fetchData();
-  }, [user, period]);
+    if (user && currentOutlet?.id) fetchData();
+  }, [user, currentOutlet?.id, period]);
 
   const fetchData = async () => {
+    if (!currentOutlet?.id) return;
     setLoading(true);
     const start = new Date();
     start.setDate(start.getDate() - parseInt(period));
 
-    const { data: outletData } = await supabase
-      .from("outlets")
-      .select("id, name")
-      .eq("owner_id", user!.id)
-      .order("name");
-
-    if (!outletData?.length) { setLoading(false); return; }
-    setOutlets(outletData);
-
-    const outletIds = outletData.map((o) => o.id);
-
     const { data: orderData } = await supabase
       .from("orders")
       .select("id, outlet_id, status, order_type, source, total, created_at, customer_phone")
-      .in("outlet_id", outletIds)
+      .eq("outlet_id", currentOutlet.id)
       .gte("created_at", start.toISOString())
       .neq("status", "cancelled")
       .order("created_at");
@@ -80,16 +70,8 @@ export default function Analytics() {
     setLoading(false);
   };
 
-  const filteredOrders = useMemo(
-    () =>
-      outletFilter === "all" ? orders : orders.filter((o) => o.outlet_id === outletFilter),
-    [orders, outletFilter]
-  );
-
-  const filteredItems = useMemo(() => {
-    const orderIds = new Set(filteredOrders.map((o) => o.id));
-    return orderItems.filter((i) => orderIds.has(i.order_id));
-  }, [filteredOrders, orderItems]);
+  const filteredOrders = orders;
+  const filteredItems = orderItems;
 
   // Revenue & orders by day
   const dailyData = useMemo(() => {
@@ -163,20 +145,6 @@ export default function Analytics() {
     return { totalRevenue, totalOrders, avgOrderValue, uniqueCustomers, bestDay };
   }, [filteredOrders, dailyData]);
 
-  // Outlet performance (for multi-outlet)
-  const outletPerf = useMemo(() => {
-    if (outlets.length <= 1) return [];
-    const outletMap = Object.fromEntries(outlets.map((o) => [o.id, o.name]));
-    const map = new Map<string, { name: string; revenue: number; orders: number }>();
-    for (const o of orders) {
-      if (!map.has(o.outlet_id)) {
-        map.set(o.outlet_id, { name: outletMap[o.outlet_id] || o.outlet_id, revenue: 0, orders: 0 });
-      }
-      map.get(o.outlet_id)!.revenue += o.total || 0;
-      map.get(o.outlet_id)!.orders += 1;
-    }
-    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [orders, outlets]);
 
   if (loading) {
     return (
@@ -199,19 +167,10 @@ export default function Analytics() {
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold">Analytics</h1>
-              <p className="text-sm text-muted-foreground">Business performance insights</p>
+              <p className="text-sm text-muted-foreground">{currentOutlet?.name}</p>
             </div>
           </div>
           <div className="flex gap-3">
-            {outlets.length > 1 && (
-              <Select value={outletFilter} onValueChange={setOutletFilter}>
-                <SelectTrigger className="w-40 h-9"><SelectValue placeholder="All Outlets" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Outlets</SelectItem>
-                  {outlets.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
             <div className="flex gap-1">
               {[
                 { label: "7D", value: "7" },
@@ -424,25 +383,6 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Multi-outlet comparison */}
-        {outletPerf.length > 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Outlet Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={outletPerf} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmtShort} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: number) => fmtCurrency(v)} />
-                  <Bar dataKey="revenue" name="Revenue" fill="#f97316" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </AppLayout>
   );

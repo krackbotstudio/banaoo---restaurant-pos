@@ -1,6 +1,5 @@
 import {
   ChefHat,
-  Store,
   UtensilsCrossed,
   ShoppingCart,
   LayoutDashboard,
@@ -9,8 +8,6 @@ import {
   PanelLeftClose,
   PanelLeft,
   Building2,
-  ChevronDown,
-  Check,
   Settings,
   Link2,
   History,
@@ -37,21 +34,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
 const mainNavItems = [
-  { title: "Dashboard",  url: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
-  { title: "Outlets",    url: "/outlets",   icon: Store,           key: "outlets"   },
-  { title: "Menu",       url: "/menu",      icon: UtensilsCrossed, key: "menu"      },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
+  { title: "Menu",      url: "/menu",      icon: UtensilsCrossed, key: "menu"      },
 ];
 
 const operationsItems = [
@@ -68,17 +58,19 @@ const operationsItems = [
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const { profile, signOut, getImageUrl } = useAuth();
-  const { currentOutlet, outlets, setCurrentOutlet, canSwitchOutlets } = useOutlet();
-  const { permissions } = useStaffPermissions();
+  const { currentOutlet } = useOutlet();
+  const { permissions, loading: permissionsLoading } = useStaffPermissions();
   const collapsed = state === "collapsed";
 
   // permissions === null means owner (no filter). Otherwise filter by allowed keys.
-  const allowedMain = permissions === null
-    ? mainNavItems
-    : mainNavItems.filter((item) => permissions.includes(item.key));
-  const allowedOps = permissions === null
-    ? operationsItems
-    : operationsItems.filter((item) => permissions.includes(item.key));
+  // During loading, return [] so staff don't see a flash of all items before filtering.
+  const getAllowed = <T extends { key: string }>(items: T[]): T[] => {
+    if (permissionsLoading && profile?.role !== "owner") return [];
+    if (permissions === null) return items;
+    return items.filter((item) => permissions.includes(item.key));
+  };
+  const allowedMain = getAllowed(mainNavItems);
+  const allowedOps = getAllowed(operationsItems);
 
   const getInitials = (name: string) => {
     return name
@@ -89,29 +81,53 @@ export function AppSidebar() {
       .slice(0, 2);
   };
 
-  const showOutletSwitcher = canSwitchOutlets && outlets.length > 1;
-
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
-      <SidebarHeader className={`border-b border-sidebar-border ${collapsed ? 'py-3 px-1' : 'p-4'}`}>
-        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-          {profile?.logo_url ? (
-            <img
-              src={getImageUrl(profile.logo_url)}
-              alt="Logo"
-              className={`object-contain rounded-lg shrink-0 ${collapsed ? 'h-10 w-10' : 'h-9 w-9'}`}
-            />
-          ) : (
-            <div className={`rounded-lg gradient-warm glow-primary shrink-0 ${collapsed ? 'p-2.5' : 'p-2'}`}>
-              <ChefHat className={`text-white ${collapsed ? 'h-6 w-6' : 'h-5 w-5'}`} />
+      <SidebarHeader className={`border-b border-sidebar-border ${collapsed ? 'py-3 px-1' : 'p-3'}`}>
+        {collapsed ? (
+          /* Collapsed: Banaoo mark on top, restaurant icon below */
+          <div className="flex flex-col items-center gap-2">
+            <img src="/logo.png" alt="Banaoo" className="h-9 w-9 object-contain" />
+            {profile?.logo_url ? (
+              <img
+                src={getImageUrl(profile.logo_url)}
+                alt="Restaurant logo"
+                className="h-6 w-6 object-contain rounded-md shrink-0 opacity-80"
+              />
+            ) : (
+              <div className="rounded-md bg-muted shrink-0 p-1">
+                <ChefHat className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Expanded: Banaoo logo (primary, left) + restaurant logo (secondary, right) */
+          <div className="flex items-center gap-2.5">
+            {/* Banaoo — primary brand */}
+            <img src="/logo.png" alt="Banaoo" className="h-14 w-14 object-contain shrink-0" />
+
+            {/* Divider */}
+            <div className="w-px h-10 bg-border shrink-0" />
+
+            {/* Restaurant — secondary brand */}
+            <div className="flex items-center gap-2 min-w-0">
+              {profile?.logo_url ? (
+                <img
+                  src={getImageUrl(profile.logo_url)}
+                  alt="Restaurant logo"
+                  className="h-14 w-14 object-contain rounded-lg shrink-0"
+                />
+              ) : (
+                <div className="rounded-lg gradient-warm shrink-0 p-3">
+                  <ChefHat className="h-6 w-6 text-white" />
+                </div>
+              )}
+              <span className="font-display text-sm font-semibold truncate leading-tight">
+                {profile?.brand_name || profile?.full_name || 'My Restaurant'}
+              </span>
             </div>
-          )}
-          {!collapsed && (
-            <span className="font-display text-xl font-semibold truncate">
-              {profile?.brand_name || profile?.full_name || 'My Restaurant'}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
@@ -188,59 +204,8 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-3 border-t border-sidebar-border space-y-3">
-        {/* Outlet Switcher - Only visible for owners/managers with multiple outlets */}
-        {showOutletSwitcher && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              {collapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-full h-10 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                    >
-                      <Building2 className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {currentOutlet?.name || "Select outlet"}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between h-10 px-3 text-left hover:bg-sidebar-accent"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-sm font-medium">
-                      {currentOutlet?.name || "Select outlet"}
-                    </span>
-                  </div>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </Button>
-              )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {outlets.map((outlet) => (
-                <DropdownMenuItem
-                  key={outlet.id}
-                  onClick={() => setCurrentOutlet(outlet)}
-                  className="flex items-center justify-between"
-                >
-                  <span className="truncate">{outlet.name}</span>
-                  {currentOutlet?.id === outlet.id && (
-                    <Check className="h-4 w-4 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {/* Single outlet display (non-switcher) */}
-        {currentOutlet && !showOutletSwitcher && (
+        {/* Current outlet — read-only display; switch via Settings */}
+        {currentOutlet && (
           collapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -248,9 +213,7 @@ export function AppSidebar() {
                   <Building2 className="h-5 w-5 text-muted-foreground" />
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="right">
-                {currentOutlet.name}
-              </TooltipContent>
+              <TooltipContent side="right">{currentOutlet.name}</TooltipContent>
             </Tooltip>
           ) : (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-accent/50">

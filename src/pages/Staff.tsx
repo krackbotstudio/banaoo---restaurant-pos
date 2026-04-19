@@ -296,7 +296,7 @@ export default function Staff() {
       phone: member.phone ?? "",
       email: member.email ?? "",
       role: member.role,
-      pin_code: member.pin_code ?? "",
+      pin_code: "",           // leave blank — only filled if user explicitly sets a new PIN
       notes: member.notes ?? "",
       outlet_ids: [...member.outlet_ids],
       page_permissions: member.page_permissions ?? [...(ROLE_DEFAULT_PERMISSIONS[member.role] ?? [])],
@@ -408,10 +408,16 @@ export default function Staff() {
         if (error) throw error;
       }
 
-      setCredentials({ username: username!, pin });
-
       setDialogOpen(false);
-      if (!isNew) {
+
+      if (isNew) {
+        // Always show credentials dialog for new staff
+        setCredentials({ username: username!, pin: pin! });
+      } else if (form.pin_code.trim()) {
+        // Only show if user explicitly typed a new PIN during edit
+        const member = staff.find((s) => s.id === editingId);
+        setCredentials({ username: member?.username ?? "", pin: form.pin_code });
+      } else {
         toast({ title: "Staff member updated" });
       }
       fetchData();
@@ -602,145 +608,155 @@ export default function Staff() {
 
       {/* ── Add / Edit Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display">
-              {editingId ? "Edit Staff Member" : "Add Staff Member"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingId
-                ? "Update staff details and outlet assignments"
-                : "Add a new team member and assign them to outlets"}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-md flex flex-col max-h-[90dvh] p-0 overflow-hidden">
+          {/* Sticky header */}
+          <div className="px-6 pt-6 pb-4 shrink-0 border-b border-border/50">
+            <DialogHeader>
+              <DialogTitle className="font-display">
+                {editingId ? "Edit Staff Member" : "Add Staff Member"}
+              </DialogTitle>
+              <DialogDescription>
+                {editingId
+                  ? "Update staff details and outlet assignments"
+                  : "Add a new team member and assign them to outlets"}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 mt-1">
-            {/* Name */}
-            <div className="space-y-1.5">
-              <Label>Full Name *</Label>
-              <Input
-                placeholder="e.g. Ravi Kumar"
-                value={form.full_name}
-                onChange={(e) => setForm((p) => ({ ...p, full_name: e.target.value }))}
-                className="h-11"
-                autoFocus
-              />
-            </div>
-
-            {/* Phone + PIN */}
-            <div className="grid grid-cols-2 gap-3">
+          {/* Scrollable form body */}
+          <div className="overflow-y-auto flex-1 px-6 py-4">
+            <form id="staff-form" onSubmit={handleSubmit} className="space-y-4">
+              {/* Name */}
               <div className="space-y-1.5">
-                <Label>Phone</Label>
+                <Label>Full Name *</Label>
                 <Input
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  placeholder="e.g. Ravi Kumar"
+                  value={form.full_name}
+                  onChange={(e) => setForm((p) => ({ ...p, full_name: e.target.value }))}
+                  className="h-11"
+                  autoFocus
+                />
+              </div>
+
+              {/* Phone + PIN */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Phone</Label>
+                  <Input
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    value={form.phone}
+                    onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{editingId ? "New PIN (optional)" : "4-Digit PIN"}</Label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="••••"
+                    value={form.pin_code}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, pin_code: e.target.value.replace(/\D/g, "") }))
+                    }
+                    className="h-11 text-center tracking-widest"
+                  />
+                </div>
+              </div>
+
+              {/* Role */}
+              <div className="space-y-1.5">
+                <Label>Role *</Label>
+                <Select
+                  value={form.role}
+                  onValueChange={handleRoleChange}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Outlet assignment */}
+              <div className="space-y-1.5">
+                <Label>Assign to Outlets</Label>
+                <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-muted/30 border border-border/50 min-h-[52px]">
+                  {outlets.map((outlet) => (
+                    <Badge
+                      key={outlet.id}
+                      variant={form.outlet_ids.includes(outlet.id) ? "default" : "outline"}
+                      className="cursor-pointer select-none transition-all"
+                      onClick={() => toggleOutlet(outlet.id)}
+                    >
+                      <Store className="h-3 w-3 mr-1" />
+                      {outlet.name}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">Click badges to assign or unassign</p>
+              </div>
+
+              {/* Module Access */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <Label>Module Access</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose which pages this staff member can access. Defaults are set by role.
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 p-3 rounded-lg bg-muted/30 border border-border/50">
+                  {ALL_MODULES.map((mod) => {
+                    const active = (form.page_permissions ?? []).includes(mod.key);
+                    return (
+                      <button
+                        key={mod.key}
+                        type="button"
+                        onClick={() => toggleModule(mod.key)}
+                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all select-none ${
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground border border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? "bg-primary-foreground" : "bg-muted-foreground/40"}`} />
+                        {mod.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {(form.page_permissions ?? []).length} of {ALL_MODULES.length} modules enabled
+                </p>
+              </div>
+
+              {/* Notes (optional) */}
+              <div className="space-y-1.5">
+                <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  placeholder="e.g. Morning shift, handles delivery"
+                  value={form.notes}
+                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
                   className="h-11"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>4-Digit PIN</Label>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  placeholder="••••"
-                  value={form.pin_code}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, pin_code: e.target.value.replace(/\D/g, "") }))
-                  }
-                  className="h-11 text-center tracking-widest"
-                />
-              </div>
-            </div>
+            </form>
+          </div>
 
-            {/* Role */}
-            <div className="space-y-1.5">
-              <Label>Role *</Label>
-              <Select
-                value={form.role}
-                onValueChange={handleRoleChange}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Outlet assignment */}
-            <div className="space-y-1.5">
-              <Label>Assign to Outlets</Label>
-              <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-muted/30 border border-border/50 min-h-[52px]">
-                {outlets.map((outlet) => (
-                  <Badge
-                    key={outlet.id}
-                    variant={form.outlet_ids.includes(outlet.id) ? "default" : "outline"}
-                    className="cursor-pointer select-none transition-all"
-                    onClick={() => toggleOutlet(outlet.id)}
-                  >
-                    <Store className="h-3 w-3 mr-1" />
-                    {outlet.name}
-                  </Badge>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">Click badges to assign or unassign</p>
-            </div>
-
-            {/* Module Access */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <Label>Module Access</Label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Choose which pages this staff member can access. Defaults are set by role.
-              </p>
-              <div className="grid grid-cols-2 gap-1.5 p-3 rounded-lg bg-muted/30 border border-border/50">
-                {ALL_MODULES.map((mod) => {
-                  const active = (form.page_permissions ?? []).includes(mod.key);
-                  return (
-                    <button
-                      key={mod.key}
-                      type="button"
-                      onClick={() => toggleModule(mod.key)}
-                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all select-none ${
-                        active
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background text-muted-foreground border border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? "bg-primary-foreground" : "bg-muted-foreground/40"}`} />
-                      {mod.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {(form.page_permissions ?? []).length} of {ALL_MODULES.length} modules enabled
-              </p>
-            </div>
-
-            {/* Notes (optional) */}
-            <div className="space-y-1.5">
-              <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              <Input
-                placeholder="e.g. Morning shift, handles delivery"
-                value={form.notes}
-                onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-                className="h-11"
-              />
-            </div>
-
+          {/* Sticky footer with submit button */}
+          <div className="px-6 py-4 shrink-0 border-t border-border/50 bg-background">
             <Button
               type="submit"
+              form="staff-form"
               className="w-full h-11 gradient-primary"
               disabled={isSubmitting}
             >
@@ -752,7 +768,7 @@ export default function Staff() {
                 "Add Staff Member"
               )}
             </Button>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 

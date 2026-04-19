@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isToday, subDays, formatISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
+import { usePrinterSettings } from "@/lib/use-printer-settings";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -13,7 +14,8 @@ import { FloorPlanModal } from "@/components/floor-plan/FloorPlanModal";
 import { Loader2, Plus, ShoppingCart, Clock, CheckCircle, XCircle, ChefHat, MapPin, User, Utensils, Package, Printer, ArrowLeft, PlusCircle, Minus, Trash2, Banknote, CalendarDays, ChevronLeft, ChevronRight, ArrowLeftRight } from "lucide-react";
 import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
-import { PrintableReceipt } from "@/components/order/PrintableReceipt";
+import { toast } from "sonner";
+import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
 
 interface Order {
   id: string;
@@ -104,6 +106,7 @@ const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
 
 export default function Orders() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
+  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -122,7 +125,6 @@ export default function Orders() {
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [tax, setTax] = useState(0); // always percentage
-  const receiptRef = useRef<HTMLDivElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   // Change Table dialog
@@ -411,36 +413,147 @@ export default function Orders() {
     }
   };
 
-  const handlePrintBill = () => {
-    if (!receiptRef.current) return;
-    const printWindow = window.open("", "_blank", "width=220,height=600");
-    if (!printWindow) return;
+  const handlePrintBill = async () => {
+    if (!selectedOrder) return;
+
+    const pw = printerSettings.billingPrinter.paperWidth;
+    const pt = printerSettings.billingPrinter.fontSize;
+    const fmt = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
+    const subtotal = selectedOrder.total;
+    const discountAmt = discountType === "percent"
+      ? Math.round(subtotal * discount / 100 * 100) / 100
+      : discount;
+    const taxable = Math.max(0, subtotal - discountAmt);
+    const ratio = subtotal > 0 ? taxable / subtotal : 1;
+    const gstTotal = orderItems.reduce((sum, item) =>
+      sum + (item.gst_rate ? Math.round(item.total_price * ratio * item.gst_rate / 100 * 100) / 100 : 0), 0);
+    const serviceTax = Math.round(taxable * tax / 100 * 100) / 100;
+    const grandTotal = Math.round(Math.max(0, taxable + gstTotal + serviceTax) * 100) / 100;
+    const discountPercent = discountType === "percent" ? discount : undefined;
+
+    // If a billing port is assigned, always treat this as serial intent.
+    const portIndex = printerSettings.billingPrinter.usbPortIndex;
+    const shouldUseSerial = printerSettings.billingPrinter.printMode === "serial" || portIndex !== null;
+    if (shouldUseSerial) {
+      if (portIndex === null) {
+        toast.error("Billing printer is set to Serial, but no port is assigned in Settings");
+        return;
+      }
+      try {
+        const bytes = buildBillingReceipt({
+          orderNumber: selectedOrder.order_number,
+          outletName: currentOutlet?.name || "",
+          gstNumber: (currentOutlet as any)?.gst_number,
+          orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
+          tableNumber: selectedOrder.table_number || undefined,
+          items: orderItems.map((i) => ({
+            name: i.item_name,
+            quantity: i.quantity,
+            totalPrice: i.total_price,
+            gstRate: i.gst_rate || undefined,
+          })),
+          subtotal,
+          discountAmt,
+          discountPercent,
+          serviceTax,
+          serviceTaxPercent: tax,
+          gstTotal,
+          grandTotal,
+          createdAt: new Date(selectedOrder.created_at),
+        }, pw);
+        await printViaSerial(portIndex, bytes, printerSettings.billingPrinter.baudRate);
+        toast.success("Bill printed");
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Billing serial print failed: ${msg}`);
+        return;
+      }
+    }
+
+    const dateStr = new Date(selectedOrder.created_at).toLocaleString("en-IN", {
+      day: "2-digit", month: "2-digit", year: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    });
+
+    const itemRows = orderItems.map((item) => {
+      const gstAmt = item.gst_rate
+        ? Math.round(item.total_price * ratio * item.gst_rate / 100 * 100) / 100
+        : 0;
+      return `
+        <tr>
+          <td style="padding:2px 3px 2px 0">${item.item_name}</td>
+          <td style="text-align:center;padding:2px">${item.quantity}</td>
+          <td style="text-align:right;padding:2px 0">&#8377;${fmt(item.total_price)}</td>
+        </tr>${item.gst_rate && gstAmt > 0 ? `
+        <tr style="font-size:${pt - 2}pt">
+          <td colspan="2" style="padding-left:4px">+ GST @${item.gst_rate}%</td>
+          <td style="text-align:right">&#8377;${fmt(gstAmt)}</td>
+        </tr>` : ""}`;
+    }).join("");
+
+    const gstNumber = (currentOutlet as any)?.gst_number;
+    const printWindow = window.open("", "_blank", "width=220,height=650");
+    if (!printWindow) {
+      toast.error("Allow popups to use browser print mode");
+      return;
+    }
+
     printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Bill #${selectedOrder?.order_number ?? ""}</title>
+  <meta name="color-scheme" content="light"/>
+  <title>Bill #${selectedOrder.order_number}</title>
   <style>
-    /* 58mm thermal paper: printable width ~48mm */
-    @page {
-      size: 58mm auto;
-      margin: 0;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 58mm;
-      background: #fff;
-    }
-    body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 9pt;
-      color: #000;
-    }
-    table { border-collapse: collapse; }
+    @page { size: ${pw}mm auto; margin: 0; }
+    html, body { margin:0; padding:3mm 2mm; width:${pw}mm; background:#fff; color:#000;
+      font-family:'Courier New',Courier,monospace; font-size:${pt}pt; }
+    * { color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    table { border-collapse:collapse; width:100%; }
+    .dash { border-top:1px dashed #000; margin:4px 0; }
+    .solid { border-top:1px solid #000; margin:3px 0; }
+    .center { text-align:center; }
+    .bold { font-weight:bold; }
+    .right { text-align:right; }
   </style>
 </head>
-<body>${receiptRef.current.innerHTML}</body>
+<body>
+  <div class="center bold" style="font-size:${pt + 2}pt;margin-bottom:1mm">${currentOutlet?.name || ""}</div>
+  ${gstNumber ? `<div class="center" style="font-size:${pt - 2}pt;margin-bottom:2mm">GSTIN: ${gstNumber}</div>` : ""}
+  <div class="dash"></div>
+  <table style="font-size:${pt - 1}pt">
+    <tr><td>Order #</td><td class="right bold">${selectedOrder.order_number}</td></tr>
+    <tr><td>Date</td><td class="right">${dateStr}</td></tr>
+    <tr><td>Type</td><td class="right bold">${selectedOrder.order_type === "dine_in" ? "DINE IN" : "TAKEAWAY"}</td></tr>
+    ${selectedOrder.order_type === "dine_in" && selectedOrder.table_number
+      ? `<tr><td>Table</td><td class="right bold">${selectedOrder.table_number}</td></tr>` : ""}
+  </table>
+  <div class="dash"></div>
+  <table>
+    <thead><tr class="bold" style="font-size:${pt - 1}pt">
+      <td style="width:50%">ITEM</td>
+      <td style="width:10%;text-align:center">QTY</td>
+      <td style="width:40%;text-align:right">AMT</td>
+    </tr></thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+  <div class="dash"></div>
+  <table style="font-size:${pt - 1}pt">
+    <tr><td>Subtotal</td><td class="right">&#8377;${fmt(subtotal)}</td></tr>
+    ${discountAmt > 0 ? `<tr><td>Discount${discountType === "percent" ? ` (${discount}%)` : ""}</td><td class="right">- &#8377;${fmt(discountAmt)}</td></tr>` : ""}
+    ${serviceTax > 0 ? `<tr><td>Service Tax (${tax}%)</td><td class="right">+ &#8377;${fmt(serviceTax)}</td></tr>` : ""}
+    <tr><td colspan="2"><div class="solid"></div></td></tr>
+    <tr class="bold" style="font-size:${pt + 2}pt"><td>TOTAL</td><td class="right">&#8377;${fmt(grandTotal)}</td></tr>
+  </table>
+  <div class="dash"></div>
+  <div class="center" style="font-size:${pt - 1}pt;margin-top:2mm;line-height:1.6">
+    <div class="bold">Thank you!</div>
+    <div>Visit us again soon</div>
+    <div style="margin-top:2mm;font-size:10pt">Powered by banaoo.in</div>
+  </div>
+  <div style="height:10mm"></div>
+</body>
 </html>`);
     printWindow.document.close();
     printWindow.focus();
@@ -1138,45 +1251,6 @@ export default function Orders() {
                 )}
               </div>
 
-              {/* Hidden receipt for printing */}
-              <div className="hidden">
-                <PrintableReceipt
-                  ref={receiptRef}
-                  data={{
-                    orderNumber: selectedOrder.order_number,
-                    outletName: currentOutlet?.name || "",
-                    gstNumber: currentOutlet?.gst_number || null,
-                    orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
-                    tableNumber: selectedOrder.table_number || undefined,
-                    items: orderItems.map((i) => ({
-                      name: i.item_name,
-                      quantity: i.quantity,
-                      unitPrice: i.unit_price,
-                      totalPrice: i.total_price,
-                      gstRate: i.gst_rate || undefined,
-                    })),
-                    subtotal: selectedOrder.total,
-                    discount: (() => { const s=selectedOrder.total; const d=discountType==="percent"?Math.round(s*discount/100*100)/100:discount; return d||undefined; })(),
-                    discountPercent: (() => { const s=selectedOrder.total; return discountType==="percent"?discount:(s>0?Math.round((discount/s)*10000)/100:0)||undefined; })(),
-                    tax: (() => { const s=selectedOrder.total; const d=discountType==="percent"?Math.round(s*discount/100*100)/100:discount; const t=Math.round(Math.max(0,s-d)*tax/100*100)/100; return t||undefined; })(),
-                    taxPercent: tax || undefined,
-                    gstSlabs: (() => {
-                      const s=selectedOrder.total;
-                      const d=discountType==="percent"?Math.round(s*discount/100*100)/100:discount;
-                      const ratio=s>0?Math.max(0,s-d)/s:1;
-                      const map:Record<number,number>={};
-                      orderItems.forEach(item=>{
-                        if(!item.gst_rate)return;
-                        const amt=Math.round(item.total_price*ratio*item.gst_rate/100*100)/100;
-                        map[item.gst_rate]=Math.round(((map[item.gst_rate]??0)+amt)*100)/100;
-                      });
-                      return Object.keys(map).length>0?map:undefined;
-                    })(),
-                    total: (() => { const s=selectedOrder.total; const d=discountType==="percent"?Math.round(s*discount/100*100)/100:discount; const taxable=Math.max(0,s-d); const ratio=s>0?taxable/s:1; const ig=orderItems.reduce((sum,item)=>sum+(item.gst_rate?Math.round(item.total_price*ratio*item.gst_rate/100*100)/100:0),0); return Math.round(Math.max(0,taxable+ig+Math.round(taxable*tax/100*100)/100)*100)/100; })(),
-                    createdAt: new Date(selectedOrder.created_at),
-                  }}
-                />
-              </div>
             </>
           )}
         </SheetContent>

@@ -71,8 +71,8 @@ export default function Kitchen() {
       .filter((i) => i.status !== "cancelled")
       .map((item) => `
         <tr>
-          <td style="padding-top:2mm;padding-right:2mm">${item.item_name}</td>
-          <td style="text-align:right;padding-top:2mm;font-weight:bold;font-size:12pt">x${item.quantity}</td>
+          <td style="padding:3px 4px 3px 0;font-size:13pt">${item.item_name}</td>
+          <td style="text-align:right;padding:3px 0;font-weight:bold;font-size:15pt">x${item.quantity}</td>
         </tr>`)
       .join("");
 
@@ -83,16 +83,18 @@ export default function Kitchen() {
 <head>
   <meta charset="utf-8"/>
   <title>Kitchen #${order.order_number}</title>
+  <meta name="color-scheme" content="light"/>
   <style>
     @page { size: 58mm auto; margin: 0; }
-    html, body { margin:0; padding:0; width:58mm; background:#fff;
-      font-family:'Courier New',Courier,monospace; font-size:10pt; color:#000; }
+    html, body { margin:0; padding:0; width:58mm; background:#fff !important;
+      font-family:'Courier New',Courier,monospace; font-size:13pt; color:#000 !important; }
+    *, *::before, *::after { color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     table { border-collapse:collapse; width:100%; }
-    .dash { border-top:1px dashed #000; margin:3px 0; }
+    .dash { border-top:1px dashed #000; margin:4px 0; }
   </style>
 </head>
 <body>
-  <div style="text-align:center;font-weight:bold;margin-bottom:2mm">** KITCHEN ORDER **</div>
+  <div style="text-align:center;font-weight:bold;font-size:15pt;margin-bottom:3mm">** KITCHEN ORDER **</div>
   <div class="dash"></div>
   <table>
     <tr><td style="font-weight:bold">Order #</td><td style="text-align:right;font-weight:bold">${order.order_number}</td></tr>
@@ -102,12 +104,12 @@ export default function Kitchen() {
   </table>
   <div class="dash"></div>
   <table>
-    <thead><tr style="font-weight:bold"><td>ITEM</td><td style="text-align:right">QTY</td></tr></thead>
+    <thead><tr style="font-weight:bold;font-size:12pt"><td>ITEM</td><td style="text-align:right">QTY</td></tr></thead>
     <tbody>${itemRows}</tbody>
   </table>
   <div class="dash"></div>
-  <div style="text-align:center;font-size:8pt;margin-top:1mm">— Kitchen Copy —</div>
-  <div style="height:8mm"></div>
+  <div style="text-align:center;font-size:11pt;margin-top:2mm">— Kitchen Copy —</div>
+  <div style="height:10mm"></div>
 </body>
 </html>`);
     printWindow.document.close();

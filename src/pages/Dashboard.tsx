@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,8 +34,18 @@ interface AIInsight {
   action?: { label: string; href: string };
 }
 
+// Maps a quick-action href to the permission key required to see it.
+const ACTION_PERMISSION: Record<string, string> = {
+  "/orders/new":  "orders",
+  "/kitchen":     "kitchen",
+  "/menu":        "menu",
+  "/outlets":     "__owner_only__", // outlets is owner-only
+};
+
 export default function Dashboard() {
   const { profile, user } = useAuth();
+  const { currentOutlet } = useOutlet();
+  const { permissions } = useStaffPermissions();
   const [stats, setStats] = useState<DashboardStats>({
     ordersToday: 0,
     revenueToday: 0,
@@ -46,32 +58,26 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (user && currentOutlet?.id) {
       fetchDashboardData();
     }
-  }, [user]);
+  }, [user, currentOutlet?.id]);
 
   const fetchDashboardData = async () => {
+    if (!currentOutlet?.id) return;
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data: outlets } = await supabase
-        .from("outlets")
-        .select("id")
-        .eq("owner_id", user?.id);
-
-      const outletIds = outlets?.map(o => o.id) || [];
-
       const { count: menuCount } = await supabase
         .from("menu_items")
         .select("id", { count: "exact", head: true })
-        .in("outlet_id", outletIds.length > 0 ? outletIds : ['']);
+        .eq("outlet_id", currentOutlet.id);
 
       const { data: ordersData } = await supabase
         .from("orders")
         .select("id, total, status, created_at")
-        .in("outlet_id", outletIds.length > 0 ? outletIds : [''])
+        .eq("outlet_id", currentOutlet.id)
         .gte("created_at", today.toISOString());
 
       const ordersToday = ordersData?.length || 0;
@@ -83,7 +89,7 @@ export default function Dashboard() {
         ordersToday,
         revenueToday,
         coversToday,
-        outletsCount: outlets?.length || 0,
+        outletsCount: 1,
         menuItemsCount: menuCount || 0,
         pendingOrders,
       };
@@ -131,36 +137,46 @@ export default function Dashboard() {
     }
   };
 
-  const quickActions = [
-    { 
-      title: "New Order", 
+  const canAccessAction = (href: string): boolean => {
+    if (permissions === null) return true; // owner sees all
+    const key = ACTION_PERMISSION[href];
+    if (!key) return true; // unmapped hrefs pass through
+    if (key === "__owner_only__") return false; // explicitly owner-only
+    return permissions.includes(key);
+  };
+
+  const allQuickActions = [
+    {
+      title: "New Order",
       description: "Take dine-in or takeaway orders",
-      icon: ShoppingCart, 
+      icon: ShoppingCart,
       href: "/orders/new",
       color: "primary"
     },
-    { 
-      title: "Kitchen Display", 
+    {
+      title: "Kitchen Display",
       description: "View live order queue",
-      icon: ChefHat, 
+      icon: ChefHat,
       href: "/kitchen",
       color: "accent"
     },
-    { 
-      title: "Menu", 
+    {
+      title: "Menu",
       description: "Manage items & categories",
-      icon: UtensilsCrossed, 
+      icon: UtensilsCrossed,
       href: "/menu",
       color: "success"
     },
-    { 
-      title: "Outlets", 
+    {
+      title: "Outlets",
       description: "Manage your restaurants",
-      icon: Store, 
+      icon: Store,
       href: "/outlets",
       color: "purple"
     },
   ];
+
+  const quickActions = allQuickActions.filter((a) => canAccessAction(a.href));
 
   const colorMap: Record<string, string> = {
     primary: "bg-primary/10 text-primary group-hover:bg-primary/15",
@@ -226,7 +242,7 @@ export default function Dashboard() {
           ) : (
             <>
               <p className="text-muted-foreground text-sm mb-4">{insight?.message}</p>
-              {insight?.action && (
+              {insight?.action && canAccessAction(insight.action.href) && (
                 <Button asChild size="sm" className="gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity">
                   <Link to={insight.action.href}>
                     <Plus className="h-4 w-4 mr-1.5" />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,45 +54,34 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function OrderHistory() {
   const { user } = useAuth();
+  const { currentOutlet } = useOutlet();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("month");
-  const [outletFilter, setOutletFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) fetchData();
-  }, [user, period]);
+    if (user && currentOutlet?.id) fetchData();
+  }, [user, currentOutlet?.id, period]);
 
   const fetchData = async () => {
+    if (!currentOutlet?.id) return;
     setLoading(true);
-    const { data: outletData } = await supabase
-      .from("outlets")
-      .select("id, name")
-      .eq("owner_id", user!.id)
-      .order("name");
-
-    if (!outletData?.length) { setLoading(false); return; }
-
-    setOutlets(outletData);
-    const outletIds = outletData.map((o) => o.id);
-    const outletMap = Object.fromEntries(outletData.map((o) => [o.id, o.name]));
 
     const { data } = await supabase
       .from("orders")
       .select("id, order_number, outlet_id, status, order_type, source, table_number, customer_name, customer_phone, total, created_at, order_items(id, item_name, quantity, unit_price, total_price)")
-      .in("outlet_id", outletIds)
+      .eq("outlet_id", currentOutlet.id)
       .gte("created_at", getDateStart(period))
       .order("created_at", { ascending: false });
 
     setOrders(
       (data || []).map((o) => ({
         ...o,
-        outlet_name: outletMap[o.outlet_id] || "",
+        outlet_name: currentOutlet.name,
         order_items: (o.order_items || []) as OrderItem[],
       })) as Order[]
     );
@@ -100,7 +90,6 @@ export default function OrderHistory() {
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
-      if (outletFilter !== "all" && o.outlet_id !== outletFilter) return false;
       if (statusFilter !== "all" && o.status !== statusFilter) return false;
       if (sourceFilter !== "all" && o.source !== sourceFilter) return false;
       if (search) {
@@ -113,7 +102,7 @@ export default function OrderHistory() {
       }
       return true;
     });
-  }, [orders, outletFilter, statusFilter, sourceFilter, search]);
+  }, [orders, statusFilter, sourceFilter, search]);
 
   const stats = useMemo(() => {
     const nonCancelled = filtered.filter((o) => o.status !== "cancelled");
@@ -165,7 +154,7 @@ export default function OrderHistory() {
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold">Order History</h1>
-              <p className="text-sm text-muted-foreground">Detailed order records across all outlets</p>
+              <p className="text-sm text-muted-foreground">{currentOutlet?.name}</p>
             </div>
           </div>
           <Button variant="outline" onClick={exportCSV} className="gap-2">
@@ -207,15 +196,6 @@ export default function OrderHistory() {
             </SelectContent>
           </Select>
 
-          {outlets.length > 1 && (
-            <Select value={outletFilter} onValueChange={setOutletFilter}>
-              <SelectTrigger className="w-40 h-9"><SelectValue placeholder="All Outlets" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Outlets</SelectItem>
-                {outlets.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-36 h-9"><SelectValue placeholder="All Status" /></SelectTrigger>
@@ -266,9 +246,6 @@ export default function OrderHistory() {
                 <tr>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Order</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Date & Time</th>
-                  {outlets.length > 1 && (
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Outlet</th>
-                  )}
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Customer</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                   <th className="text-right px-4 py-3 font-medium text-muted-foreground">Amount</th>
@@ -293,9 +270,6 @@ export default function OrderHistory() {
                         <div>{fmtDate(order.created_at)}</div>
                         <div className="text-xs">{fmtTime(order.created_at)}</div>
                       </td>
-                      {outlets.length > 1 && (
-                        <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{order.outlet_name}</td>
-                      )}
                       <td className="px-4 py-3 hidden md:table-cell">
                         {order.customer_name ? (
                           <div>
@@ -319,7 +293,7 @@ export default function OrderHistory() {
 
                     {expandedId === order.id && (
                       <tr className="bg-muted/20">
-                        <td colSpan={outlets.length > 1 ? 7 : 6} className="px-6 py-4">
+                        <td colSpan={6} className="px-6 py-4">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Items</p>
                           <div className="space-y-1.5 max-w-md">
                             {order.order_items.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ interface CustomerRecord {
 
 export default function Customers() {
   const { user } = useAuth();
+  const { currentOutlet } = useOutlet();
   const { toast } = useToast();
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,29 +39,21 @@ export default function Customers() {
   const [expandedPhone, setExpandedPhone] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) fetchOrders();
-  }, [user]);
+    if (user && currentOutlet?.id) fetchOrders();
+  }, [user, currentOutlet?.id]);
 
   const fetchOrders = async () => {
+    if (!currentOutlet?.id) return;
     setLoading(true);
-    const { data: outletData } = await supabase
-      .from("outlets")
-      .select("id, name")
-      .eq("owner_id", user!.id);
-
-    if (!outletData?.length) { setLoading(false); return; }
-
-    const outletIds = outletData.map((o) => o.id);
-    const outletMap = Object.fromEntries(outletData.map((o) => [o.id, o.name]));
 
     const { data } = await supabase
       .from("orders")
       .select("id, order_number, outlet_id, customer_name, customer_phone, total, status, created_at")
-      .in("outlet_id", outletIds)
+      .eq("outlet_id", currentOutlet.id)
       .not("customer_phone", "is", null)
       .order("created_at", { ascending: false });
 
-    setRawOrders((data || []).map((o) => ({ ...o, outlet_name: outletMap[o.outlet_id] || "" })));
+    setRawOrders((data || []).map((o) => ({ ...o, outlet_name: currentOutlet.name })));
     setLoading(false);
   };
 

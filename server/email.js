@@ -155,7 +155,7 @@ export async function sendSubscriptionConfirmation({
   expiresAt,
 }) {
   const apiKey = process.env.BREVO_API_KEY;
-  
+
   if (!apiKey) {
     console.warn('BREVO_API_KEY not configured, skipping subscription confirmation email');
     return { success: false, error: 'BREVO_API_KEY not configured' };
