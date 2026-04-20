@@ -2,6 +2,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import {
@@ -21,6 +25,8 @@ import {
   Globe,
   Clock,
   Headphones,
+  Download,
+  Loader2,
 } from "lucide-react";
 
 // ─── Hero videos ─────────────────────────────────────────────────────────────
@@ -185,8 +191,13 @@ const whyItems = [
 export default function Landing() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   const marqueeRef = useRef<HTMLDivElement>(null);
   const [videoIndex, setVideoIndex] = useState(0);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [downloadEmail, setDownloadEmail] = useState("");
+  const [downloadPhone, setDownloadPhone] = useState("");
+  const [downloadSubmitting, setDownloadSubmitting] = useState(false);
 
   // Typing animation
   const [typedText, setTypedText] = useState("");
@@ -228,6 +239,56 @@ export default function Landing() {
   // Only hide when we KNOW a user is logged in — redirect is imminent via useEffect.
   // Never block on loading: if auth is slow to initialise the page stays blank.
   if (user) return null;
+
+  const handleDownloadApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = downloadEmail.trim();
+    const phone = downloadPhone.trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ variant: "destructive", title: "Enter a valid email address" });
+      return;
+    }
+    if (!phone || !/^[+]?[0-9\s-]{10,15}$/.test(phone)) {
+      toast({ variant: "destructive", title: "Enter a valid contact number" });
+      return;
+    }
+
+    const apiBase = import.meta.env.VITE_API_URL ?? "";
+    setDownloadSubmitting(true);
+    try {
+      const response = await fetch(`${apiBase}/api/mobile-app/download-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          phone,
+          source: "landing_hero",
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error((data as { error?: string }).error || "Could not generate download link");
+      }
+
+      const downloadUrl = (data as { downloadUrl?: string }).downloadUrl;
+      if (!downloadUrl) throw new Error("Download URL is missing");
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+
+      toast({ title: "Download started", description: "Check your browser downloads if it did not open automatically." });
+      setDownloadDialogOpen(false);
+      setDownloadEmail("");
+      setDownloadPhone("");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Please try again",
+      });
+    } finally {
+      setDownloadSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -283,11 +344,21 @@ export default function Landing() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 h-12 px-8 text-base border-white/40 text-white bg-black/20 hover:bg-black/35"
+                onClick={() => setDownloadDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Download our Android app
+              </Button>
             </div>
 
             <p className="text-xs text-white/60">
               7-day free trial · No credit card required · Cancel anytime
             </p>
+            <p className="text-xs text-white/70">We will be live soon on Play Store.</p>
           </div>
         </div>
       </section>
@@ -599,6 +670,50 @@ export default function Landing() {
       </section>
 
       <Footer />
+
+      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Download Banaoo Android App</DialogTitle>
+            <DialogDescription>
+              Share your email and contact number to get the latest APK instantly.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleDownloadApp}>
+            <div className="space-y-2">
+              <Label htmlFor="download-email">Email</Label>
+              <Input
+                id="download-email"
+                type="email"
+                value={downloadEmail}
+                onChange={(e) => setDownloadEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="download-phone">Contact Number</Label>
+              <Input
+                id="download-phone"
+                type="tel"
+                value={downloadPhone}
+                onChange={(e) => setDownloadPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                autoComplete="tel"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full gap-2" disabled={downloadSubmitting}>
+              {downloadSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {downloadSubmitting ? "Preparing download..." : "Get APK"}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Play Store release is coming soon.
+            </p>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

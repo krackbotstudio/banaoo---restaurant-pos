@@ -476,6 +476,49 @@ app.get('/auth/supabase-token', (req, res) => {
   res.json({ access_token });
 });
 
+function getAndroidApkUrl() {
+  if (process.env.ANDROID_APK_URL && process.env.ANDROID_APK_URL.trim()) {
+    return process.env.ANDROID_APK_URL.trim();
+  }
+  const frontend = (process.env.FRONTEND_URL || 'https://banaoo.in').split(',')[0].trim();
+  return `${frontend.replace(/\/+$/, '')}/downloads/banaoo-latest.apk`;
+}
+
+app.post('/api/mobile-app/download-request', async (req, res) => {
+  const { email, phone, source } = req.body || {};
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanPhone = String(phone || '').trim();
+  const cleanSource = String(source || 'landing_unknown').trim().slice(0, 80);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({ error: 'A valid email is required' });
+  }
+  if (!/^[+]?[0-9\s-]{10,15}$/.test(cleanPhone)) {
+    return res.status(400).json({ error: 'A valid contact number is required' });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO public.mobile_app_leads (email, phone, source, user_agent, ip_address)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        cleanEmail,
+        cleanPhone,
+        cleanSource,
+        String(req.headers['user-agent'] || '').slice(0, 512) || null,
+        String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() || null,
+      ]
+    );
+    res.json({
+      success: true,
+      downloadUrl: getAndroidApkUrl(),
+    });
+  } catch (err) {
+    console.error('POST /api/mobile-app/download-request:', err);
+    res.status(500).json({ error: 'Unable to process download request' });
+  }
+});
+
 // Outlets — use Postgres directly so the browser does not depend on reaching Supabase REST (avoids "Failed to fetch")
 app.get('/api/outlets', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
@@ -672,6 +715,24 @@ app.get('/api/admin/accounts', isAdmin, async (req, res) => {
     res.json({ accounts: rows });
   } catch (err) {
     console.error('Admin list accounts error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/mobile-app-leads', isAdmin, async (req, res) => {
+  try {
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 250;
+    const { rows } = await pool.query(
+      `SELECT id, email, phone, source, user_agent, ip_address, created_at
+       FROM public.mobile_app_leads
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    res.json({ leads: rows });
+  } catch (err) {
+    console.error('GET /api/admin/mobile-app-leads:', err);
     res.status(500).json({ error: err.message });
   }
 });
