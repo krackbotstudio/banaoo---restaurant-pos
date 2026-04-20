@@ -23,7 +23,7 @@ interface BridgeMessage {
 
 function rootUrl() {
   const trimmedBase = WEBAPP_URL.replace(/\/+$/, "");
-  return `${trimmedBase}/`;
+  return `${trimmedBase}/auth`;
 }
 
 function isValidMessage(data: unknown): data is BridgeMessage {
@@ -108,6 +108,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const payload = parsed.payload as Record<string, unknown>;
     const outletId = typeof payload.outletId === "string" ? payload.outletId : undefined;
     const settings = await loadEffectivePrinterSettings(outletId);
+    const requestedPaperWidth = payload.paperWidth === 80 ? 80 : payload.paperWidth === 58 ? 58 : undefined;
 
     if (parsed.role === "kitchen") {
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
@@ -115,7 +116,10 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asKitchenItems(payload.items);
       if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) return;
-      await printKitchenSlip(settings, {
+      const runtimeSettings = requestedPaperWidth
+        ? { ...settings, kitchenPrinter: { ...settings.kitchenPrinter, paperWidth: requestedPaperWidth } }
+        : settings;
+      await printKitchenSlip(runtimeSettings, {
         orderNumber,
         orderType: orderTypeRaw,
         tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
@@ -132,7 +136,10 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
     if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) return;
 
-    await printBillingReceipt(settings, {
+    const runtimeSettings = requestedPaperWidth
+      ? { ...settings, billingPrinter: { ...settings.billingPrinter, paperWidth: requestedPaperWidth } }
+      : settings;
+    await printBillingReceipt(runtimeSettings, {
       orderNumber,
       outletName,
       gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,

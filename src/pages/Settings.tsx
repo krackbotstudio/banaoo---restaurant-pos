@@ -101,6 +101,7 @@ export default function Settings() {
   
   const { theme, setTheme } = useTheme();
   const { currentOutlet, outlets, setCurrentOutlet, canSwitchOutlets } = useOutlet();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
 
   // Subscription / plan state
   const [planMonths, setPlanMonths] = useState(1);
@@ -352,8 +353,37 @@ export default function Settings() {
           </p>
         </div>
 
-        <Tabs defaultValue={searchParams.get("tab") || "profile"} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7">
+        <Tabs
+          value={activeTab}
+          onValueChange={(nextTab) => {
+            setActiveTab(nextTab);
+            if (nextTab === "outlets") void fetchOutletsList();
+          }}
+          className="space-y-6"
+        >
+          <div className="sm:hidden sticky top-14 z-20 bg-background/95 backdrop-blur py-1 border-b border-border/60">
+            <Select
+              value={activeTab}
+              onValueChange={(nextTab) => {
+                setActiveTab(nextTab);
+                if (nextTab === "outlets") void fetchOutletsList();
+              }}
+            >
+              <SelectTrigger className="h-10">
+                <SelectValue placeholder="Select settings section" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="profile">Profile</SelectItem>
+                <SelectItem value="outlets">Outlets</SelectItem>
+                <SelectItem value="branding">Branding</SelectItem>
+                <SelectItem value="subscription">Subscription</SelectItem>
+                <SelectItem value="notifications">Notifications</SelectItem>
+                <SelectItem value="preferences">Security</SelectItem>
+                <SelectItem value="printers">Printers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <TabsList className="hidden sm:grid sm:w-full sm:grid-cols-7">
             <TabsTrigger value="profile" className="gap-1.5">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>

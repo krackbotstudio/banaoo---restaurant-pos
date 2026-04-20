@@ -37,17 +37,6 @@ export function AppButton({
   labelStyle,
   ...props
 }: AppButtonProps) {
-  const buttonStyles = [
-    styles.buttonBase,
-    variant === "primary" && styles.buttonPrimary,
-    variant === "secondary" && styles.buttonSecondary,
-    variant === "outline" && styles.buttonOutline,
-    variant === "destructive" && styles.buttonDestructive,
-    variant === "success" && styles.buttonSuccess,
-    (disabled || loading) && styles.buttonDisabled,
-    style as StyleProp<ViewStyle>,
-  ];
-
   const textStyles = [
     styles.buttonLabel,
     (variant === "secondary" || variant === "outline") && styles.buttonLabelDark,
@@ -56,7 +45,22 @@ export function AppButton({
   ];
 
   return (
-    <Pressable {...props} disabled={disabled || loading} style={buttonStyles}>
+    <Pressable
+      {...props}
+      disabled={disabled || loading}
+      android_ripple={{ color: "rgba(255,255,255,0.16)" }}
+      style={({ pressed }) => [
+        styles.buttonBase,
+        variant === "primary" && styles.buttonPrimary,
+        variant === "secondary" && styles.buttonSecondary,
+        variant === "outline" && styles.buttonOutline,
+        variant === "destructive" && styles.buttonDestructive,
+        variant === "success" && styles.buttonSuccess,
+        (disabled || loading) && styles.buttonDisabled,
+        pressed && !(disabled || loading) && styles.buttonPressed,
+        style as StyleProp<ViewStyle>,
+      ]}
+    >
       {loading ? <ActivityIndicator color="#fff" /> : <Text style={textStyles}>{label}</Text>}
     </Pressable>
   );
@@ -114,6 +118,10 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
   },
   buttonLabel: {
     color: tokens.colors.primaryForeground,

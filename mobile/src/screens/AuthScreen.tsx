@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -50,7 +51,8 @@ export function AuthScreen() {
       style={styles.container}
     >
       <AppCard style={styles.card}>
-        <AppTitle style={styles.title}>Banaoo POS Mobile</AppTitle>
+        <Image source={require("../../assets/icon.png")} style={styles.logo} resizeMode="contain" />
+        <AppTitle style={styles.title}>Banaoo POS</AppTitle>
         <Text style={styles.subtitle}>Use the same account and data as your web POS.</Text>
 
         {isSignup && (
@@ -111,6 +113,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   card: { borderRadius: 14, padding: 18, gap: 10 },
+  logo: {
+    width: 64,
+    height: 64,
+    alignSelf: "center",
+    marginBottom: 2,
+  },
   title: {
     fontSize: 22,
     color: tokens.colors.foreground,

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { ChefHat, Clock, CheckCircle2, XCircle, Mail, LogOut, Loader2 } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, Mail, LogOut, Loader2 } from "lucide-react";
 
 export default function AccountPending() {
   const { user, profile, loading, profileLoading, refreshProfile, signOut } = useAuth();
@@ -43,7 +43,7 @@ export default function AccountPending() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4">
       {/* Logo */}
       <div className="flex items-center justify-center h-16 w-16 rounded-2xl gradient-warm glow-primary mb-6">
-        <ChefHat className="h-8 w-8 text-white" />
+        <img src="/favicon.svg" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
       </div>
 
       <h1 className="font-display text-3xl font-bold tracking-tight mb-1">banaoo.io</h1>

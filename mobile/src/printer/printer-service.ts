@@ -19,6 +19,7 @@ export interface RolePrinterConfig {
   characteristicUUID: string;
   transport: PrinterTransport;
   paperWidth: 58 | 80;
+  fontSize: number;
   mode: PrinterMode;
 }
 
@@ -76,6 +77,7 @@ export const DEFAULT_ROLE_PRINTER: RolePrinterConfig = {
   characteristicUUID: "",
   transport: "bluetooth-classic",
   paperWidth: 58,
+  fontSize: 12,
   mode: "silent",
 };
 
@@ -171,7 +173,11 @@ export async function printKitchenSlip(
   data: KitchenSlipPayload
 ): Promise<PrintResult> {
   const capability = getPrintCapability();
-  const payload = buildKitchenSlip(data, settings.kitchenPrinter.paperWidth);
+  const payload = buildKitchenSlip(
+    data,
+    settings.kitchenPrinter.paperWidth,
+    settings.kitchenPrinter.fontSize
+  );
   return executePrint("kitchen", settings.kitchenPrinter, capability, payload);
 }
 
@@ -180,6 +186,10 @@ export async function printBillingReceipt(
   data: BillingReceiptPayload
 ): Promise<PrintResult> {
   const capability = getPrintCapability();
-  const payload = buildBillingReceipt(data, settings.billingPrinter.paperWidth);
+  const payload = buildBillingReceipt(
+    data,
+    settings.billingPrinter.paperWidth,
+    settings.billingPrinter.fontSize
+  );
   return executePrint("billing", settings.billingPrinter, capability, payload);
 }

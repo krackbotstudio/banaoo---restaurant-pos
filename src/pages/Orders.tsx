@@ -121,6 +121,7 @@ export default function Orders() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [printingBill, setPrintingBill] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   // Discount: value + type toggle (% or ₹). Tax: always %
   const [discount, setDiscount] = useState(0);
@@ -415,7 +416,9 @@ export default function Orders() {
   };
 
   const handlePrintBill = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || printingBill) return;
+    setPrintingBill(true);
+    try {
 
     const pw = printerSettings.billingPrinter.paperWidth;
     const pt = printerSettings.billingPrinter.fontSize;
@@ -592,6 +595,9 @@ export default function Orders() {
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
+    } finally {
+      setPrintingBill(false);
+    }
   };
 
   // "paid" is NOT in the auto-flow; it's reached via the explicit "Mark as Paid" button
@@ -1239,11 +1245,11 @@ export default function Orders() {
                 {selectedOrder.status !== "cancelled" && <Button
                   variant="outline"
                   className="w-full h-11 gap-2 font-medium border-border"
-                  disabled={itemsLoading}
+                  disabled={itemsLoading || printingBill}
                   onClick={handlePrintBill}
                 >
-                  <Printer className="h-4 w-4" />
-                  Print Bill
+                  {printingBill ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                  {printingBill ? "Printing..." : "Print Bill"}
                 </Button>}
 
                 {/* Progress: pending→preparing→ready→completed */}

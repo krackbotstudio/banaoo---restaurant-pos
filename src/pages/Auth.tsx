@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ChefHat, Loader2, Sparkles, ArrowLeft } from "lucide-react";
+import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
 
 const emailSchema = z.string().email("Please enter a valid email");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -250,7 +250,7 @@ export default function Auth() {
         {/* Logo & Branding */}
         <div className="flex flex-col items-center space-y-4 pt-8">
           <div className="flex items-center justify-center h-20 w-20 rounded-2xl gradient-warm glow-primary animate-float">
-            <ChefHat className="h-10 w-10 text-white" />
+            <img src="/favicon.svg" alt="Banaoo" className="h-10 w-10 object-contain brightness-0 invert" />
           </div>
           <div className="text-center">
             <h1 className="font-display text-4xl font-bold tracking-tight">banaoo.io</h1>

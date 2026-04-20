@@ -2,17 +2,21 @@ import React, { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { getPrintCapability, PrinterTransport } from "../printer/printer-service";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
+import { useOutlet } from "../context/OutletContext";
 import { DiscoveredPrinter, scanBluetoothPrinters } from "../printer/bluetooth-ble-adapter";
 import { ClassicPrinterDevice, getPairedClassicPrinters } from "../printer/bluetooth-classic-adapter";
 import { tokens } from "../theme/tokens";
 
 export function NativePrinterScreen() {
-  const { settings, updateKitchen, updateBilling } = usePrinterSettings(undefined);
+  const { currentOutlet } = useOutlet();
+  const { settings, updateKitchen, updateBilling } = usePrinterSettings(currentOutlet?.id);
   const capability = getPrintCapability();
   const [scanning, setScanning] = useState(false);
   const [bleDevices, setBleDevices] = useState<DiscoveredPrinter[]>([]);
   const [classicDevices, setClassicDevices] = useState<ClassicPrinterDevice[]>([]);
   const [scanMessage, setScanMessage] = useState<string>("");
+  const [showKitchenAdvanced, setShowKitchenAdvanced] = useState(false);
+  const [showBillingAdvanced, setShowBillingAdvanced] = useState(false);
 
   const scanBleDevices = async () => {
     setScanning(true);
@@ -53,6 +57,18 @@ export function NativePrinterScreen() {
   const setBillingTransport = (transport: PrinterTransport) => {
     void updateBilling({ transport });
   };
+  const setKitchenPaperWidth = (paperWidth: 58 | 80) => {
+    void updateKitchen({ paperWidth });
+  };
+  const setBillingPaperWidth = (paperWidth: 58 | 80) => {
+    void updateBilling({ paperWidth });
+  };
+  const setKitchenFontSize = (fontSize: number) => {
+    void updateKitchen({ fontSize });
+  };
+  const setBillingFontSize = (fontSize: number) => {
+    void updateBilling({ fontSize });
+  };
 
   const showKitchenBleFields = settings.kitchenPrinter.transport !== "bluetooth-classic";
   const showBillingBleFields = settings.billingPrinter.transport !== "bluetooth-classic";
@@ -60,7 +76,8 @@ export function NativePrinterScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Native Printers</Text>
-      <Text style={styles.text}>These settings are used for kitchen and billing jobs sent from the in-app WebView POS.</Text>
+      <Text style={styles.text}>Configure only the required options for kitchen and billing print routing.</Text>
+      <Text style={styles.metaText}>Outlet: {currentOutlet?.name || "Global default"}</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Printer capability</Text>
@@ -193,20 +210,29 @@ export function NativePrinterScreen() {
         </View>
         {showKitchenBleFields ? (
           <>
-            <TextInput
-              style={styles.input}
-              placeholder="BLE Service UUID (required for BLE)"
-              value={settings.kitchenPrinter.serviceUUID}
-              onChangeText={(serviceUUID) => updateKitchen({ serviceUUID })}
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="BLE Characteristic UUID (required for BLE)"
-              value={settings.kitchenPrinter.characteristicUUID}
-              onChangeText={(characteristicUUID) => updateKitchen({ characteristicUUID })}
-              autoCapitalize="none"
-            />
+          <Pressable style={styles.advancedBtn} onPress={() => setShowKitchenAdvanced((prev) => !prev)}>
+            <Text style={styles.advancedText}>
+              {showKitchenAdvanced ? "Hide BLE Advanced Options" : "Show BLE Advanced Options"}
+            </Text>
+          </Pressable>
+          {showKitchenAdvanced ? (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="BLE Service UUID (required for BLE)"
+                value={settings.kitchenPrinter.serviceUUID}
+                onChangeText={(serviceUUID) => updateKitchen({ serviceUUID })}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="BLE Characteristic UUID (required for BLE)"
+                value={settings.kitchenPrinter.characteristicUUID}
+                onChangeText={(characteristicUUID) => updateKitchen({ characteristicUUID })}
+                autoCapitalize="none"
+              />
+            </>
+          ) : null}
           </>
         ) : (
           <Text style={styles.metaText}>Classic transport uses the paired device address; no BLE UUIDs required.</Text>
@@ -217,6 +243,33 @@ export function NativePrinterScreen() {
             value={settings.kitchenPrinter.mode === "silent"}
             onValueChange={(silent) => updateKitchen({ mode: silent ? "silent" : "dialog" })}
           />
+        </View>
+        <Text style={styles.label}>Paper Width</Text>
+        <View style={styles.segmentRow}>
+          <Pressable
+            style={[styles.segmentBtn, settings.kitchenPrinter.paperWidth === 58 && styles.segmentBtnActive]}
+            onPress={() => setKitchenPaperWidth(58)}
+          >
+            <Text style={styles.segmentText}>58mm</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, settings.kitchenPrinter.paperWidth === 80 && styles.segmentBtnActive]}
+            onPress={() => setKitchenPaperWidth(80)}
+          >
+            <Text style={styles.segmentText}>80mm</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.label}>Font Size</Text>
+        <View style={styles.segmentRow}>
+          {[10, 12, 14].map((size) => (
+            <Pressable
+              key={`k-fs-${size}`}
+              style={[styles.segmentBtn, settings.kitchenPrinter.fontSize === size && styles.segmentBtnActive]}
+              onPress={() => setKitchenFontSize(size)}
+            >
+              <Text style={styles.segmentText}>{size}pt</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
@@ -258,20 +311,29 @@ export function NativePrinterScreen() {
         </View>
         {showBillingBleFields ? (
           <>
-            <TextInput
-              style={styles.input}
-              placeholder="BLE Service UUID (required for BLE)"
-              value={settings.billingPrinter.serviceUUID}
-              onChangeText={(serviceUUID) => updateBilling({ serviceUUID })}
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="BLE Characteristic UUID (required for BLE)"
-              value={settings.billingPrinter.characteristicUUID}
-              onChangeText={(characteristicUUID) => updateBilling({ characteristicUUID })}
-              autoCapitalize="none"
-            />
+          <Pressable style={styles.advancedBtn} onPress={() => setShowBillingAdvanced((prev) => !prev)}>
+            <Text style={styles.advancedText}>
+              {showBillingAdvanced ? "Hide BLE Advanced Options" : "Show BLE Advanced Options"}
+            </Text>
+          </Pressable>
+          {showBillingAdvanced ? (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="BLE Service UUID (required for BLE)"
+                value={settings.billingPrinter.serviceUUID}
+                onChangeText={(serviceUUID) => updateBilling({ serviceUUID })}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="BLE Characteristic UUID (required for BLE)"
+                value={settings.billingPrinter.characteristicUUID}
+                onChangeText={(characteristicUUID) => updateBilling({ characteristicUUID })}
+                autoCapitalize="none"
+              />
+            </>
+          ) : null}
           </>
         ) : (
           <Text style={styles.metaText}>Classic transport uses the paired device address; no BLE UUIDs required.</Text>
@@ -282,6 +344,33 @@ export function NativePrinterScreen() {
             value={settings.billingPrinter.mode === "silent"}
             onValueChange={(silent) => updateBilling({ mode: silent ? "silent" : "dialog" })}
           />
+        </View>
+        <Text style={styles.label}>Paper Width</Text>
+        <View style={styles.segmentRow}>
+          <Pressable
+            style={[styles.segmentBtn, settings.billingPrinter.paperWidth === 58 && styles.segmentBtnActive]}
+            onPress={() => setBillingPaperWidth(58)}
+          >
+            <Text style={styles.segmentText}>58mm</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, settings.billingPrinter.paperWidth === 80 && styles.segmentBtnActive]}
+            onPress={() => setBillingPaperWidth(80)}
+          >
+            <Text style={styles.segmentText}>80mm</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.label}>Font Size</Text>
+        <View style={styles.segmentRow}>
+          {[10, 12, 14].map((size) => (
+            <Pressable
+              key={`b-fs-${size}`}
+              style={[styles.segmentBtn, settings.billingPrinter.fontSize === size && styles.segmentBtnActive]}
+              onPress={() => setBillingFontSize(size)}
+            >
+              <Text style={styles.segmentText}>{size}pt</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
     </ScrollView>
@@ -294,8 +383,9 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.mutedBackground,
   },
   content: {
-    padding: 16,
-    gap: 10,
+    padding: 14,
+    gap: 12,
+    paddingBottom: 28,
   },
   title: { fontSize: 24, fontWeight: "700", color: tokens.colors.foreground },
   text: { color: tokens.colors.mutedForeground, lineHeight: 20 },
@@ -305,10 +395,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: "#fff",
     padding: 12,
-    gap: 8,
+    gap: 10,
   },
   cardTitle: {
     fontWeight: "700",
@@ -361,7 +451,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: tokens.colors.border,
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 9,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -373,6 +463,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
     color: tokens.colors.foreground,
+  },
+  advancedBtn: {
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  advancedText: {
+    color: tokens.colors.mutedForeground,
+    fontWeight: "600",
+    fontSize: 12,
   },
   deviceRow: {
     flexDirection: "row",
@@ -396,7 +501,7 @@ const styles = StyleSheet.create({
     borderColor: tokens.colors.border,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
   assignText: {
     fontWeight: "700",

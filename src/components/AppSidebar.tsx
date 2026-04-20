@@ -87,7 +87,7 @@ export function AppSidebar() {
         {collapsed ? (
           /* Collapsed: Banaoo mark on top, restaurant icon below */
           <div className="flex flex-col items-center gap-2">
-            <img src="/logo.png" alt="Banaoo" className="h-9 w-9 object-contain" />
+            <img src="/favicon.svg" alt="Banaoo" className="h-9 w-9 object-contain" />
             {profile?.logo_url ? (
               <img
                 src={getImageUrl(profile.logo_url)}
@@ -95,8 +95,8 @@ export function AppSidebar() {
                 className="h-6 w-6 object-contain rounded-md shrink-0 opacity-80"
               />
             ) : (
-              <div className="rounded-md bg-muted shrink-0 p-1">
-                <ChefHat className="h-4 w-4 text-muted-foreground" />
+                <div className="rounded-md bg-muted shrink-0 p-1">
+                <img src="/favicon.svg" alt="Default logo" className="h-4 w-4 object-contain opacity-70" />
               </div>
             )}
           </div>
@@ -104,7 +104,7 @@ export function AppSidebar() {
           /* Expanded: Banaoo logo (primary, left) + restaurant logo (secondary, right) */
           <div className="flex items-center gap-2.5">
             {/* Banaoo — primary brand */}
-            <img src="/logo.png" alt="Banaoo" className="h-14 w-14 object-contain shrink-0" />
+            <img src="/favicon.svg" alt="Banaoo" className="h-14 w-14 object-contain shrink-0" />
 
             {/* Divider */}
             <div className="w-px h-10 bg-border shrink-0" />
@@ -119,7 +119,7 @@ export function AppSidebar() {
                 />
               ) : (
                 <div className="rounded-lg gradient-warm shrink-0 p-3">
-                  <ChefHat className="h-6 w-6 text-white" />
+                  <img src="/favicon.svg" alt="Default logo" className="h-6 w-6 object-contain brightness-0 invert" />
                 </div>
               )}
               <span className="font-display text-sm font-semibold truncate leading-tight">

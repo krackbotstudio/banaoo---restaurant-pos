@@ -43,6 +43,7 @@ export function OrdersScreen() {
   const [itemsLoading, setItemsLoading] = useState(false);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [updating, setUpdating] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [discountInput, setDiscountInput] = useState("0");
   const [serviceTaxInput, setServiceTaxInput] = useState("0");
@@ -163,27 +164,32 @@ export function OrdersScreen() {
   };
 
   const printBill = async () => {
-    if (!selectedOrder) return;
-    const result = await printBillingReceipt(printerSettings, {
-      orderNumber: selectedOrder.order_number,
-      outletName: currentOutlet?.name || "Outlet",
-      orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
-      tableNumber: selectedOrder.table_number || undefined,
-      items: selectedItems.map((item) => ({
-        name: item.item_name,
-        quantity: item.quantity,
-        totalPrice: item.total_price,
-        gstRate: item.gst_rate || undefined,
-      })),
-      subtotal: selectedSubtotal,
-      discountAmt: discountAmount,
-      serviceTax: serviceTaxAmount,
-      serviceTaxPercent,
-      gstTotal: itemGstTotal,
-      grandTotal: payable,
-      createdAt: new Date(selectedOrder.created_at),
-    });
-    Alert.alert(result.ok ? "Print" : "Print error", result.message);
+    if (!selectedOrder || printing) return;
+    setPrinting(true);
+    try {
+      const result = await printBillingReceipt(printerSettings, {
+        orderNumber: selectedOrder.order_number,
+        outletName: currentOutlet?.name || "Outlet",
+        orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
+        tableNumber: selectedOrder.table_number || undefined,
+        items: selectedItems.map((item) => ({
+          name: item.item_name,
+          quantity: item.quantity,
+          totalPrice: item.total_price,
+          gstRate: item.gst_rate || undefined,
+        })),
+        subtotal: selectedSubtotal,
+        discountAmt: discountAmount,
+        serviceTax: serviceTaxAmount,
+        serviceTaxPercent,
+        gstTotal: itemGstTotal,
+        grandTotal: payable,
+        createdAt: new Date(selectedOrder.created_at),
+      });
+      Alert.alert(result.ok ? "Print" : "Print error", result.message);
+    } finally {
+      setPrinting(false);
+    }
   };
 
   if (!currentOutlet) {
@@ -355,8 +361,12 @@ export function OrdersScreen() {
                     </Text>
                   </Pressable>
 
-                  <Pressable style={styles.printBtn} onPress={() => void printBill()}>
-                    <Text style={styles.printText}>Print Bill</Text>
+                  <Pressable
+                    style={[styles.printBtn, printing && styles.actionDisabled]}
+                    onPress={() => void printBill()}
+                    disabled={printing}
+                  >
+                    <Text style={styles.printText}>{printing ? "Printing..." : "Print Bill"}</Text>
                   </Pressable>
                 </View>
               )}

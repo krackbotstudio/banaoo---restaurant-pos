@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog } from "lucide-react";
+import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed, Settings } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { TrialBanner } from "@/components/TrialBanner";
@@ -19,7 +19,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const { permissions, loading: permissionsLoading } = useStaffPermissions();
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
   const mobileHeaderTitle = location.pathname === "/orders/new" ? "New Order" : "";
 
   const isStaff = profile && profile.role !== "owner";
@@ -148,36 +148,51 @@ export function AppLayout({ children }: AppLayoutProps) {
             </header>
 
             {/* Scrollable page content — only this area scrolls */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden pb-28 lg:pb-0 w-full min-w-0">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden pb-32 lg:pb-0 w-full min-w-0">
               {children}
             </main>
           </SidebarInset>
         </div>
 
-        {/* Mobile + tablet bottom navigation — only shows pages the current user can access */}
-        {(canAccess("orders") || canAccess("kitchen")) && (
+        {/* Mobile + tablet bottom navigation — always available pages for quick movement */}
+        {(canAccess("dashboard") || canAccess("menu") || canAccess("orders") || canAccess("kitchen") || canAccess("settings")) && (
           <nav className="fixed bottom-0 left-0 right-0 z-[70] border-t border-border bg-background/95 shadow-[0_-6px_20px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
-            <div
-              className={`grid items-center px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] ${
-                canAccess("orders") && canAccess("kitchen") ? "grid-cols-3" : "grid-cols-1"
-              }`}
-            >
-              {canAccess("orders") ? (
+            <div className="flex items-center gap-1 overflow-x-auto px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {canAccess("dashboard") && (
+                <Link
+                  to="/dashboard"
+                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                    isActive("/dashboard") ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <LayoutDashboard className="h-5 w-5" />
+                  <span>Home</span>
+                </Link>
+              )}
+              {canAccess("menu") && (
+                <Link
+                  to="/menu"
+                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                    isActive("/menu") ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <UtensilsCrossed className="h-5 w-5" />
+                  <span>Menu</span>
+                </Link>
+              )}
+              {canAccess("orders") && (
                 <Link
                   to="/orders"
-                  className={`flex flex-col items-center justify-center gap-1 rounded-lg py-2 text-xs transition-colors ${
+                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
                     isActive("/orders") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <ClipboardList className="h-5 w-5" />
                   <span>Orders</span>
                 </Link>
-              ) : (
-                canAccess("kitchen") && <div />
               )}
-
               {canAccess("orders") && (
-                <div className="flex justify-center">
+                <div className="flex min-w-[68px] justify-center px-1">
                   <Button
                     asChild
                     size="icon"
@@ -189,19 +204,27 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </Button>
                 </div>
               )}
-
-              {canAccess("kitchen") ? (
+              {canAccess("kitchen") && (
                 <Link
                   to="/kitchen"
-                  className={`flex flex-col items-center justify-center gap-1 rounded-lg py-2 text-xs transition-colors ${
+                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
                     isActive("/kitchen") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <ChefHat className="h-5 w-5" />
                   <span>Kitchen</span>
                 </Link>
-              ) : (
-                canAccess("orders") && <div />
+              )}
+              {canAccess("settings") && (
+                <Link
+                  to="/settings"
+                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                    isActive("/settings") ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Settings className="h-5 w-5" />
+                  <span>Settings</span>
+                </Link>
               )}
             </div>
           </nav>

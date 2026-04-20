@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ChefHat, Loader2, ArrowLeft, KeyRound, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, KeyRound, AlertTriangle } from "lucide-react";
 
 const STAFF_EMAIL_DOMAIN = "banaoo-staff.app";
 const PIN_PREFIX = "bn_";
@@ -95,7 +95,7 @@ export default function StaffLogin() {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center">
             <div className="p-3 rounded-2xl gradient-primary glow-primary">
-              <ChefHat className="h-8 w-8 text-primary-foreground" />
+              <img src="/favicon.svg" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
             </div>
           </div>
           <h1 className="font-display text-2xl font-bold">Staff Login</h1>

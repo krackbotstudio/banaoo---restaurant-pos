@@ -25,6 +25,12 @@ class EscPosDoc {
     return this;
   }
 
+  font(condensed: boolean) {
+    // ESC M n -> 0: Font A (normal), 1: Font B (condensed)
+    this.bytesArr.push(ESC, 0x4d, condensed ? 1 : 0);
+    return this;
+  }
+
   text(value: string) {
     const safe = value.replace(/₹/g, "Rs.").replace(/[^\x00-\xFF]/g, "?");
     for (let i = 0; i < safe.length; i++) {
@@ -92,10 +98,13 @@ export interface BillingReceiptPayload {
 
 export function buildKitchenSlip(
   data: KitchenSlipPayload,
-  paperWidth: 58 | 80 = 58
+  paperWidth: 58 | 80 = 58,
+  fontSize = 12
 ): Uint8Array {
   const w = columns(paperWidth);
   const d = new EscPosDoc().init();
+  const condensed = fontSize <= 11;
+  d.font(condensed);
   const time = data.createdAt.toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -126,10 +135,13 @@ export function buildKitchenSlip(
 
 export function buildBillingReceipt(
   data: BillingReceiptPayload,
-  paperWidth: 58 | 80 = 58
+  paperWidth: 58 | 80 = 58,
+  fontSize = 12
 ): Uint8Array {
   const w = columns(paperWidth);
   const d = new EscPosDoc().init();
+  const condensed = fontSize <= 11;
+  d.font(condensed);
   const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
   const date = data.createdAt.toLocaleString("en-IN", {
     day: "2-digit",
