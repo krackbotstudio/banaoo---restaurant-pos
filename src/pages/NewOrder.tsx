@@ -47,6 +47,7 @@ interface CartItem {
 }
 
 interface OrderData {
+  outletId?: string;
   orderNumber: string;
   outletName: string;
   orderType: "dine_in" | "takeaway";
@@ -587,6 +588,7 @@ export default function NewOrder() {
 
         // Show kitchen slip popup for the newly added items
         setLastOrderData({
+          outletId: currentOutlet?.id,
           orderNumber: orderMeta?.order_number ?? addToOrderId,
           outletName: currentOutlet?.name ?? "",
           orderType: addToType,
@@ -653,6 +655,7 @@ export default function NewOrder() {
       if (itemsError) throw itemsError;
 
       const receiptData: OrderData = {
+        outletId: currentOutlet.id,
         orderNumber: order.order_number,
         outletName: currentOutlet.name,
         orderType,

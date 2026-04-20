@@ -373,10 +373,45 @@ app.post('/auth/login', (req, res, next) => {
   })(req, res, next);
 });
 
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google', (req, res, next) => {
+  const redirectUri = typeof req.query.redirect_uri === 'string' ? req.query.redirect_uri : '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectUri)) {
+    req.session.oauth_redirect_uri = redirectUri;
+  }
+  const state = redirectUri ? Buffer.from(redirectUri, 'utf8').toString('base64url') : undefined;
+  const authenticator = passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    ...(state ? { state } : {}),
+  });
+  authenticator(req, res, next);
+});
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/auth' }), (req, res) => {
-  console.log('Google OAuth successful, redirecting to frontend...');
-  res.redirect(process.env.FRONTEND_URL || 'http://localhost:8080');
+  console.log('Google OAuth successful, redirecting...');
+  const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const redirectFromSession = typeof req.session?.oauth_redirect_uri === 'string' ? req.session.oauth_redirect_uri : '';
+  if (req.session?.oauth_redirect_uri) delete req.session.oauth_redirect_uri;
+
+  if (state) {
+    try {
+      const redirectUri = Buffer.from(state, 'base64url').toString('utf8');
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectUri)) {
+        const separator = redirectUri.includes('?') ? '&' : '?';
+        res.redirect(`${redirectUri}${separator}auth=success`);
+        return;
+      }
+    } catch (error) {
+      console.warn('Invalid OAuth redirect state:', error);
+    }
+  }
+
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectFromSession)) {
+    const separator = redirectFromSession.includes('?') ? '&' : '?';
+    res.redirect(`${redirectFromSession}${separator}auth=success`);
+    return;
+  }
+
+  res.redirect(fallback);
 });
 
 // Clear orphaned sessions (for debugging)

@@ -1,25 +1,30 @@
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  View,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { AppButton, AppCard, AppInput, AppTitle } from "../components/ui/primitives";
+import { tokens } from "../theme/tokens";
+import { PwaRouteScreen } from "./PwaRouteScreen";
 
 export function AuthScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSignup, setIsSignup] = useState(false);
+  const [staffLoginMode, setStaffLoginMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
+
+  if (staffLoginMode) {
+    return <PwaRouteScreen routePath="/staff-login" title="Staff Login" onClose={() => setStaffLoginMode(false)} />;
+  }
 
   const onSubmit = async () => {
     setLoading(true);
@@ -31,27 +36,33 @@ export function AuthScreen() {
     setLoading(false);
   };
 
+  const onGoogle = async () => {
+    setLoading(true);
+    setErrorText("");
+    const result = await signInWithGoogle();
+    if (result.error) setErrorText(result.error.message);
+    setLoading(false);
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>Banaoo POS Mobile</Text>
+      <AppCard style={styles.card}>
+        <AppTitle style={styles.title}>Banaoo POS Mobile</AppTitle>
         <Text style={styles.subtitle}>Use the same account and data as your web POS.</Text>
 
         {isSignup && (
           <>
-            <TextInput
+            <AppInput
               placeholder="Full Name"
-              style={styles.input}
               autoCapitalize="words"
               value={fullName}
               onChangeText={setFullName}
             />
-            <TextInput
+            <AppInput
               placeholder="Phone"
-              style={styles.input}
               keyboardType="phone-pad"
               value={phone}
               onChangeText={setPhone}
@@ -59,17 +70,15 @@ export function AuthScreen() {
           </>
         )}
 
-        <TextInput
+        <AppInput
           placeholder="Email"
-          style={styles.input}
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
           onChangeText={setEmail}
         />
-        <TextInput
+        <AppInput
           placeholder="Password"
-          style={styles.input}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -77,20 +86,19 @@ export function AuthScreen() {
 
         {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
 
-        <Pressable style={styles.submitButton} onPress={onSubmit} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitText}>{isSignup ? "Create Account" : "Sign In"}</Text>
-          )}
-        </Pressable>
+        <AppButton label={isSignup ? "Create Account" : "Sign In"} onPress={onSubmit} loading={loading} />
+
+        <AppButton label="Continue with Google" onPress={onGoogle} disabled={loading} variant="outline" />
 
         <Pressable onPress={() => setIsSignup((prev) => !prev)}>
           <Text style={styles.switchText}>
             {isSignup ? "Already have an account? Sign In" : "No account yet? Create one"}
           </Text>
         </Pressable>
-      </View>
+        <Pressable onPress={() => setStaffLoginMode(true)}>
+          <Text style={styles.switchText}>Staff login</Text>
+        </Pressable>
+      </AppCard>
     </KeyboardAvoidingView>
   );
 }
@@ -98,54 +106,26 @@ export function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: tokens.colors.mutedBackground,
     justifyContent: "center",
     paddingHorizontal: 18,
   },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 18,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
+  card: { borderRadius: 14, padding: 18, gap: 10 },
   title: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#0f172a",
+    color: tokens.colors.foreground,
   },
   subtitle: {
-    color: "#64748b",
+    color: tokens.colors.mutedForeground,
     marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
-  },
-  submitButton: {
-    marginTop: 8,
-    backgroundColor: "#f97316",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  submitText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
   },
   switchText: {
     marginTop: 8,
     textAlign: "center",
-    color: "#334155",
+    color: tokens.colors.secondaryForeground,
   },
   errorText: {
-    color: "#dc2626",
+    color: tokens.colors.destructive,
     fontSize: 13,
   },
 });

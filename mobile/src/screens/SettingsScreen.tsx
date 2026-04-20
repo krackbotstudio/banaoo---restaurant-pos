@@ -5,6 +5,7 @@ import { useOutlet } from "../context/OutletContext";
 import { getPrintCapability } from "../printer/printer-service";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
 import { DiscoveredPrinter, scanBluetoothPrinters } from "../printer/bluetooth-ble-adapter";
+import { tokens } from "../theme/tokens";
 
 export function SettingsScreen() {
   const { signOut, profile } = useAuth();
@@ -18,7 +19,7 @@ export function SettingsScreen() {
     setScanning(true);
     try {
       const list = await scanBluetoothPrinters();
-      setDevices(list);
+      setDevices([...list].sort((a, b) => a.name.localeCompare(b.name)));
     } finally {
       setScanning(false);
     }
@@ -29,7 +30,7 @@ export function SettingsScreen() {
       <Text style={styles.title}>Settings</Text>
       <Text style={styles.text}>Role: {profile?.role || "unknown"}</Text>
       <Text style={styles.text}>
-        Mobile app uses the same backend stack and auth model as the existing PWA.
+        This screen mirrors PWA printer intent with native BLE fields required for silent mobile printing.
       </Text>
       <Text style={styles.metaText}>Outlet: {currentOutlet?.name || "No outlet selected"}</Text>
 
@@ -46,6 +47,7 @@ export function SettingsScreen() {
         <Pressable style={styles.scanBtn} onPress={scanDevices} disabled={scanning}>
           {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanText}>Scan Bluetooth Devices</Text>}
         </Pressable>
+        <Text style={styles.metaText}>Tip: Assign unique devices to Kitchen and Billing to prevent duplicate destination prints.</Text>
         {devices.map((device) => (
           <View key={device.id} style={styles.deviceRow}>
             <View style={{ flex: 1 }}>
@@ -103,14 +105,14 @@ export function SettingsScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="BLE Service UUID"
+          placeholder="BLE Service UUID (required for silent mode)"
           value={settings.kitchenPrinter.serviceUUID}
           onChangeText={(serviceUUID) => updateKitchen({ serviceUUID })}
           autoCapitalize="none"
         />
         <TextInput
           style={styles.input}
-          placeholder="BLE Characteristic UUID"
+          placeholder="BLE Characteristic UUID (required for silent mode)"
           value={settings.kitchenPrinter.characteristicUUID}
           onChangeText={(characteristicUUID) => updateKitchen({ characteristicUUID })}
           autoCapitalize="none"
@@ -147,14 +149,14 @@ export function SettingsScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="BLE Service UUID"
+          placeholder="BLE Service UUID (required for silent mode)"
           value={settings.billingPrinter.serviceUUID}
           onChangeText={(serviceUUID) => updateBilling({ serviceUUID })}
           autoCapitalize="none"
         />
         <TextInput
           style={styles.input}
-          placeholder="BLE Characteristic UUID"
+          placeholder="BLE Characteristic UUID (required for silent mode)"
           value={settings.billingPrinter.characteristicUUID}
           onChangeText={(characteristicUUID) => updateBilling({ characteristicUUID })}
           autoCapitalize="none"
@@ -178,14 +180,14 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: tokens.colors.mutedBackground,
   },
   content: {
     padding: 16,
     gap: 10,
   },
-  title: { fontSize: 24, fontWeight: "700", color: "#0f172a" },
-  text: { color: "#64748b", lineHeight: 20 },
+  title: { fontSize: 24, fontWeight: "700", color: tokens.colors.foreground },
+  text: { color: tokens.colors.mutedForeground, lineHeight: 20 },
   metaText: { color: "#475569", lineHeight: 18 },
   card: {
     marginTop: 2,

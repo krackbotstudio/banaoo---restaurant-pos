@@ -43,6 +43,7 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 
 // ── Port detection panel ──────────────────────────────────────────────────────
 type PortStatus = "idle" | "testing" | "ok" | "error";
@@ -75,7 +76,8 @@ function PortDetectionPanel({
   const [portNames, setPortNames] = useState<Record<number, string>>({});
   const [editingPort, setEditingPort] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
-  const supported = isWebSerialSupported();
+  const inNativeApp = isNativePrinterBridgeExpected();
+  const supported = isWebSerialSupported() && !inNativeApp;
   const isMobile = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
@@ -121,12 +123,26 @@ function PortDetectionPanel({
   };
 
   const handleAdd = async (type: "usb" | "bluetooth") => {
+    if (isMobile && type === "bluetooth") {
+      toast.message(
+        "Mobile browsers often cannot list Bluetooth printers in Web Serial. Use the mobile app for direct Bluetooth printing, or use desktop Chrome/Edge."
+      );
+      openPhoneBluetoothSettings();
+      return;
+    }
+
     setAdding(type);
     try {
       const idx = await requestAndGetPortIndex(type);
       if (idx !== null) {
         await refresh();
         toast.success("Printer added — assign it to Kitchen or Billing below");
+      } else {
+        toast.warning(
+          type === "bluetooth"
+            ? "No compatible Bluetooth serial device found in browser picker. Pair in system settings and retry, or use mobile app for native Bluetooth printing."
+            : "No compatible serial device found."
+        );
       }
     } finally {
       setAdding(null);
@@ -187,6 +203,23 @@ function PortDetectionPanel({
               On mobile, you can still use manual browser printing, but each print may ask for printer selection.
             </p>
           )}
+          {inNativeApp && (
+            <div className="mt-3">
+              <Button
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  const opened = openNativePrinterSettings();
+                  if (!opened) {
+                    toast.error("Native printer settings bridge is unavailable. Please reopen the app.");
+                  }
+                }}
+              >
+                <Bluetooth className="h-4 w-4" />
+                Open Native Printer Settings
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -217,9 +250,9 @@ function PortDetectionPanel({
             <p className="text-sm font-medium">Mobile quick setup for 2 printers</p>
             <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-0.5">
               <li>Pair both printers in your phone Bluetooth settings first</li>
-              <li>Tap <strong>Add Bluetooth Printer</strong> twice</li>
-              <li>Assign one as Kitchen and one as Billing</li>
-              <li>Use <strong>Test</strong> on each port to verify output</li>
+              <li>Mobile browser serial picker may show <strong>No compatible devices</strong></li>
+              <li>For reliable kitchen+billing direct printing, use the native mobile app or desktop Chrome/Edge</li>
+              <li>If continuing in browser mode, printing may require manual dialog selection</li>
             </ol>
             <div className="flex gap-2 pt-1">
               <Button variant="outline" size="sm" className="h-8" onClick={openPhoneBluetoothSettings}>

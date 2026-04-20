@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, Check, X, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import { buildKitchenSlip, printViaSerial } from "@/lib/serial-printer";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
 
 interface KitchenItem {
   name: string;
@@ -18,6 +19,7 @@ interface KitchenItem {
 }
 
 interface OrderData {
+  outletId?: string;
   orderNumber: string;
   outletName: string;
   orderType: "dine_in" | "takeaway";
@@ -56,6 +58,28 @@ export function OrderSuccessDialog({
   // Prefer assigned serial port for kitchen jobs; use browser only when explicitly unassigned.
   const handlePrint = async () => {
     if (!orderData) return;
+
+    const postedToNative = postNativeKitchenPrint({
+      outletId: orderData.outletId,
+      paperWidth: kitchenPaperWidth,
+      orderNumber: orderData.orderNumber,
+      orderType: orderData.orderType,
+      tableNumber: orderData.tableNumber,
+      items: orderData.items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+      })),
+      createdAt: orderData.createdAt.toISOString(),
+    });
+    if (postedToNative) {
+      toast.success("Kitchen slip sent to native printer bridge");
+      return;
+    }
+    if (isNativePrinterBridgeExpected()) {
+      toast.error("Native printer bridge unavailable. Open Native Printer Settings and try again.");
+      openNativePrinterSettings();
+      return;
+    }
 
     // If a port is assigned, always treat this as serial intent.
     const shouldUseSerial = kitchenPrintMode === "serial" || kitchenPortIndex !== null;

@@ -4,43 +4,23 @@ import {
   DEFAULT_MOBILE_PRINTER_SETTINGS,
   MobilePrinterSettings,
 } from "./printer-service";
-
-function settingsKey(outletId: string | null | undefined) {
-  return outletId ? `mobile_printer_settings_${outletId}` : null;
-}
+import { loadPrinterSettingsByKey, printerStorageKey } from "./printer-storage";
 
 export function usePrinterSettings(outletId: string | null | undefined) {
   const [settings, setSettings] = useState<MobilePrinterSettings>(DEFAULT_MOBILE_PRINTER_SETTINGS);
-  const key = settingsKey(outletId);
+  const key = printerStorageKey(outletId);
 
   useEffect(() => {
     const load = async () => {
-      if (!key) {
-        setSettings(DEFAULT_MOBILE_PRINTER_SETTINGS);
-        return;
-      }
-      const stored = await storage.getItem<MobilePrinterSettings>(key);
-      setSettings({
-        ...DEFAULT_MOBILE_PRINTER_SETTINGS,
-        ...stored,
-        kitchenPrinter: {
-          ...DEFAULT_MOBILE_PRINTER_SETTINGS.kitchenPrinter,
-          ...stored?.kitchenPrinter,
-        },
-        billingPrinter: {
-          ...DEFAULT_MOBILE_PRINTER_SETTINGS.billingPrinter,
-          ...stored?.billingPrinter,
-        },
-      });
+      const loaded = await loadPrinterSettingsByKey(key);
+      setSettings(loaded);
     };
     void load();
   }, [key]);
 
   const save = async (next: MobilePrinterSettings) => {
     setSettings(next);
-    if (key) {
-      await storage.setItem(key, { ...next, updatedAt: new Date().toISOString() });
-    }
+    await storage.setItem(key, { ...next, updatedAt: new Date().toISOString() });
   };
 
   const updateKitchen = async (

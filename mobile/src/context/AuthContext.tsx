@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { API_URL } from "../lib/config";
 import { storage } from "../lib/storage";
 import { supabase } from "../lib/supabase";
 
 const AUTH_SNAPSHOT_KEY = "mobile_auth_snapshot_v1";
+const NATIVE_AUTH_CALLBACK_PATH = "auth/callback";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export interface User {
   id: string;
@@ -15,6 +20,7 @@ export interface Profile {
   user_id: string;
   full_name: string;
   role: "owner" | "manager" | "kitchen" | "service";
+  is_admin?: boolean;
   onboarding_completed?: boolean;
   account_status?: "pending" | "approved" | "rejected" | null;
 }
@@ -35,6 +41,7 @@ interface AuthContextType {
     fullName: string,
     phone: string
   ) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -160,6 +167,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInWithGoogle: AuthContextType["signInWithGoogle"] = async () => {
+    try {
+      if (!API_URL) throw new Error("Missing EXPO_PUBLIC_API_URL");
+      const redirectUri = Linking.createURL(NATIVE_AUTH_CALLBACK_PATH, { scheme: "banaoo" });
+      const authUrl = `${API_URL}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type !== "success") {
+        return { error: new Error("Google sign-in was cancelled") };
+      }
+
+      await refreshProfile();
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error(String(err)) };
+    }
+  };
+
   const signOut = async () => {
     try {
       if (API_URL) {
@@ -177,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ user, profile, loading, signIn, signUp, signOut, refreshProfile }),
+    () => ({ user, profile, loading, signIn, signUp, signInWithGoogle, signOut, refreshProfile }),
     [user, profile, loading]
   );
 

@@ -6,8 +6,9 @@ import {
   KitchenSlipPayload,
 } from "./escpos";
 import { printViaBle } from "./bluetooth-ble-adapter";
+import { printViaClassic } from "./bluetooth-classic-adapter";
 
-export type PrinterTransport = "bluetooth" | "network";
+export type PrinterTransport = "bluetooth" | "bluetooth-ble" | "bluetooth-classic" | "network";
 export type PrinterMode = "silent" | "dialog";
 
 export interface RolePrinterConfig {
@@ -73,7 +74,7 @@ export const DEFAULT_ROLE_PRINTER: RolePrinterConfig = {
   connectionId: "",
   serviceUUID: "",
   characteristicUUID: "",
-  transport: "bluetooth",
+  transport: "bluetooth-classic",
   paperWidth: 58,
   mode: "silent",
 };
@@ -88,8 +89,11 @@ function validatePrinterConfig(config: RolePrinterConfig): string | null {
   if (!config.name.trim()) return "Printer name is required";
   if (config.mode === "silent") {
     if (!config.connectionId.trim()) return "Connection id/device identifier is required";
-    if (!config.serviceUUID.trim()) return "BLE service UUID is required";
-    if (!config.characteristicUUID.trim()) return "BLE characteristic UUID is required";
+    const normalizedTransport = config.transport === "bluetooth" ? "bluetooth-ble" : config.transport;
+    if (normalizedTransport === "bluetooth-ble") {
+      if (!config.serviceUUID.trim()) return "BLE service UUID is required";
+      if (!config.characteristicUUID.trim()) return "BLE characteristic UUID is required";
+    }
   }
   return null;
 }
@@ -123,17 +127,31 @@ async function executePrint(
 
   if (requestedMode === "silent") {
     try {
-      await printViaBle({
-        deviceId: config.connectionId,
-        serviceUUID: config.serviceUUID,
-        characteristicUUID: config.characteristicUUID,
-        payload,
-      });
+      const normalizedTransport = config.transport === "bluetooth" ? "bluetooth-ble" : config.transport;
+      if (normalizedTransport === "bluetooth-ble") {
+        await printViaBle({
+          deviceId: config.connectionId,
+          serviceUUID: config.serviceUUID,
+          characteristicUUID: config.characteristicUUID,
+          payload,
+        });
+      } else if (normalizedTransport === "bluetooth-classic") {
+        await printViaClassic({
+          deviceId: config.connectionId,
+          payload,
+        });
+      } else {
+        return {
+          ok: false,
+          modeUsed: "silent",
+          message: `${role} transport ${normalizedTransport} is not supported for silent print.`,
+        };
+      }
     } catch (err) {
       return {
         ok: false,
         modeUsed: "silent",
-        message: `${role} BLE print failed: ${err instanceof Error ? err.message : String(err)}`,
+        message: `${role} print failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

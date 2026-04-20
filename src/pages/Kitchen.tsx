@@ -9,6 +9,7 @@ import { Loader2, ChefHat, CheckCircle, Timer, Volume2, VolumeX, Truck, Utensils
 import { useToast } from "@/hooks/use-toast";
 import { useNotificationSound } from "@/hooks/use-notification-sound";
 import { PlatformBadge } from "@/components/integrations";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
 
 type ItemStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
 
@@ -60,6 +61,27 @@ export default function Kitchen() {
   const [tick, setTick] = useState(0);
 
   const printKitchenSlip = (order: KitchenOrder) => {
+    const orderType = order.order_type === "dine_in" ? "dine_in" : "takeaway";
+    const postedToNative = postNativeKitchenPrint({
+      outletId: currentOutlet?.id,
+      orderNumber: order.order_number,
+      orderType,
+      tableNumber: order.table_number || undefined,
+      items: order.order_items
+        .filter((i) => i.status !== "cancelled")
+        .map((i) => ({ name: i.item_name, quantity: i.quantity })),
+      createdAt: new Date(order.created_at).toISOString(),
+    });
+    if (postedToNative) {
+      toast({ title: "Kitchen slip sent to native printer bridge" });
+      return;
+    }
+    if (isNativePrinterBridgeExpected()) {
+      toast({ title: "Native printer bridge unavailable. Open Native Printer Settings and try again." });
+      openNativePrinterSettings();
+      return;
+    }
+
     const time = new Date(order.created_at).toLocaleTimeString("en-IN", {
       hour: "2-digit", minute: "2-digit", hour12: true,
     });

@@ -2,6 +2,7 @@
   "expo": {
     "name": "Banaoo POS",
     "slug": "banaoo-pos-mobile",
+    "scheme": "banaoo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -29,11 +30,19 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "apiUrl": "https://banaoo.in",
+      "webappUrl": "https://banaoo.in",
+      "eas": {
+        "projectId": "ff1f4b1f-181e-415c-a2db-2e70d060a4f2"
+      }
+    },
+    "owner": "krackbotstudio"
   }
 }

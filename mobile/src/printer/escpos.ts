@@ -76,11 +76,13 @@ export interface KitchenSlipPayload {
 export interface BillingReceiptPayload {
   orderNumber: string;
   outletName: string;
+  gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
   items: Array<{ name: string; quantity: number; totalPrice: number; gstRate?: number }>;
   subtotal: number;
   discountAmt: number;
+  discountPercent?: number;
   serviceTax: number;
   serviceTaxPercent: number;
   gstTotal: number;
@@ -139,6 +141,7 @@ export function buildBillingReceipt(
   });
 
   d.align("C").bold(true).line(data.outletName.slice(0, w)).bold(false);
+  if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
   d.align("L").dashes(w);
   d.cols("Order #", data.orderNumber, w);
   d.cols("Date", date, w);
@@ -154,15 +157,22 @@ export function buildBillingReceipt(
     const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
     const pad = Math.max(1, w - name.length - qty.length - amt.length - 1);
     d.line(name + " " + qty + " ".repeat(pad) + amt);
+    if (item.gstRate && item.totalPrice > 0) {
+      const gstAmt = fmt(item.totalPrice * item.gstRate / 100);
+      d.line(`  +GST @${item.gstRate}%`.padEnd(w - gstAmt.length) + gstAmt);
+    }
   }
 
   d.dashes(w);
   d.cols("Subtotal", fmt(data.subtotal), w);
-  if (data.discountAmt > 0) d.cols("Discount", "-" + fmt(data.discountAmt), w);
+  if (data.discountAmt > 0) {
+    const discountLabel = data.discountPercent ? `Discount (${data.discountPercent}%)` : "Discount";
+    d.cols(discountLabel, "-" + fmt(data.discountAmt), w);
+  }
   if (data.gstTotal > 0) d.cols("GST", fmt(data.gstTotal), w);
   if (data.serviceTax > 0) d.cols(`Service (${data.serviceTaxPercent}%)`, "+" + fmt(data.serviceTax), w);
   d.dashes(w);
   d.bold(true).size(false, true).cols("TOTAL", fmt(data.grandTotal), w).size(false, false).bold(false);
-  d.dashes(w).align("C").line("Thank you!").line("Powered by banaoo.in").feed(4).cut();
+  d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by banaoo.in").feed(4).cut();
   return d.bytes();
 }

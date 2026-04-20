@@ -1,4 +1,5 @@
 import { BleManager, Device, State } from "react-native-ble-plx";
+import { PermissionsAndroid, Platform } from "react-native";
 
 const manager = new BleManager();
 
@@ -26,6 +27,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export async function ensureBluetoothReady(): Promise<void> {
+  await ensureAndroidBlePermissions();
   const state = await manager.state();
   if (state === State.PoweredOn) return;
 
@@ -42,6 +44,28 @@ export async function ensureBluetoothReady(): Promise<void> {
       reject(new Error("Bluetooth is not powered on"));
     }, 8000);
   });
+}
+
+async function ensureAndroidBlePermissions(): Promise<void> {
+  if (Platform.OS !== "android") return;
+
+  if (Platform.Version >= 31) {
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    ]);
+    const scanGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
+    const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
+    if (!scanGranted || !connectGranted) {
+      throw new Error("Bluetooth permissions denied. Allow Nearby devices to scan printers.");
+    }
+    return;
+  }
+
+  const location = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+  if (location !== PermissionsAndroid.RESULTS.GRANTED) {
+    throw new Error("Location permission denied. Android requires it for BLE scanning.");
+  }
 }
 
 export async function scanBluetoothPrinters(timeoutMs = 6000): Promise<DiscoveredPrinter[]> {

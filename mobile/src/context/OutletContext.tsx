@@ -51,7 +51,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
       } else {
         const { data } = await supabase
           .from("staff_outlet_assignments")
-          .select("outlet_id, outlets(id, name, gst_number)")
+          .select("outlet_id, outlets(id, name, gst_number, gst_categories)")
           .eq("user_id", user.id);
         rows =
           data?.map((item: any) => item.outlets).filter(Boolean).map((item: any) => ({

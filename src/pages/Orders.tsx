@@ -16,6 +16,7 @@ import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
 
 interface Order {
   id: string;
@@ -430,6 +431,39 @@ export default function Orders() {
     const serviceTax = Math.round(taxable * tax / 100 * 100) / 100;
     const grandTotal = Math.round(Math.max(0, taxable + gstTotal + serviceTax) * 100) / 100;
     const discountPercent = discountType === "percent" ? discount : undefined;
+
+    const postedToNative = postNativeBillingPrint({
+      outletId: currentOutlet?.id,
+      paperWidth: pw,
+      orderNumber: selectedOrder.order_number,
+      outletName: currentOutlet?.name || "",
+      gstNumber: (currentOutlet as any)?.gst_number,
+      orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
+      tableNumber: selectedOrder.table_number || undefined,
+      items: orderItems.map((i) => ({
+        name: i.item_name,
+        quantity: i.quantity,
+        totalPrice: i.total_price,
+        gstRate: i.gst_rate || undefined,
+      })),
+      subtotal,
+      discountAmt,
+      discountPercent,
+      serviceTax,
+      serviceTaxPercent: tax,
+      gstTotal,
+      grandTotal,
+      createdAt: new Date(selectedOrder.created_at).toISOString(),
+    });
+    if (postedToNative) {
+      toast.success("Bill sent to native printer bridge");
+      return;
+    }
+    if (isNativePrinterBridgeExpected()) {
+      toast.error("Native printer bridge unavailable. Open Native Printer Settings and try again.");
+      openNativePrinterSettings();
+      return;
+    }
 
     // If a billing port is assigned, always treat this as serial intent.
     const portIndex = printerSettings.billingPrinter.usbPortIndex;
