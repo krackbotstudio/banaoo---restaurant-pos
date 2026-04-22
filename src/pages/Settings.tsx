@@ -36,9 +36,9 @@ import {
   Plus,
   ChefHat,
   Printer,
+  Bluetooth,
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { PrinterSettings } from "@/components/settings/PrinterSettings";
 import { useOutlet } from "@/lib/outlet-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -361,7 +362,7 @@ export default function Settings() {
           }}
           className="space-y-6"
         >
-          <div className="sm:hidden sticky top-14 z-20 bg-background/95 backdrop-blur py-1 border-b border-border/60">
+          <div className="sm:hidden sticky top-14 z-40 bg-background py-2 border-b border-border shadow-sm">
             <Select
               value={activeTab}
               onValueChange={(nextTab) => {
@@ -369,10 +370,10 @@ export default function Settings() {
                 if (nextTab === "outlets") void fetchOutletsList();
               }}
             >
-              <SelectTrigger className="h-10">
+              <SelectTrigger className="h-10 bg-background">
                 <SelectValue placeholder="Select settings section" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={6}>
                 <SelectItem value="profile">Profile</SelectItem>
                 <SelectItem value="outlets">Outlets</SelectItem>
                 <SelectItem value="branding">Branding</SelectItem>
@@ -1395,7 +1396,43 @@ export default function Settings() {
 
           {/* Printers Tab */}
           <TabsContent value="printers" className="space-y-6">
-            <PrinterSettings />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bluetooth className="h-5 w-5 text-primary" />
+                  Native Printer Settings
+                </CardTitle>
+                <CardDescription>
+                  Printer configuration is handled directly in the mobile native screen for better Bluetooth support and cleaner setup.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-sm font-medium text-foreground">
+                    Use Native Printer screen to configure Kitchen and Billing printers.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This avoids duplicate settings and keeps mobile printing behavior consistent.
+                  </p>
+                </div>
+                <Button
+                  className="gap-2"
+                  onClick={() => {
+                    const opened = openNativePrinterSettings();
+                    if (!opened) {
+                      toast.error(
+                        isNativePrinterBridgeExpected()
+                          ? "Native printer settings are unavailable right now. Please reopen the app and try again."
+                          : "Native printer settings can be opened only inside the Banaoo mobile app."
+                      );
+                    }
+                  }}
+                >
+                  <Bluetooth className="h-4 w-4" />
+                  Open Native Printer Settings
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

@@ -43,7 +43,7 @@ export default function AccountPending() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4">
       {/* Logo */}
       <div className="flex items-center justify-center h-16 w-16 rounded-2xl gradient-warm glow-primary mb-6">
-        <img src="/favicon.svg" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
+        <img src="/logo.png" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
       </div>
 
       <h1 className="font-display text-3xl font-bold tracking-tight mb-1">banaoo.io</h1>

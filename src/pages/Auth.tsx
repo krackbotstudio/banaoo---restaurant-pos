@@ -250,7 +250,7 @@ export default function Auth() {
         {/* Logo & Branding */}
         <div className="flex flex-col items-center space-y-4 pt-8">
           <div className="flex items-center justify-center h-20 w-20 rounded-2xl gradient-warm glow-primary animate-float">
-            <img src="/favicon.svg" alt="Banaoo" className="h-10 w-10 object-contain brightness-0 invert" />
+            <img src="/logo.png" alt="Banaoo" className="h-10 w-10 object-contain brightness-0 invert" />
           </div>
           <div className="text-center">
             <h1 className="font-display text-4xl font-bold tracking-tight">banaoo.io</h1>

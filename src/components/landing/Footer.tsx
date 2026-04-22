@@ -8,7 +8,7 @@ export function Footer() {
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="flex items-center gap-2">
-              <img src="/favicon.svg" alt="banaoo.io" className="h-9 w-9 object-contain" />
+              <img src="/logo.png" alt="banaoo.io" className="h-9 w-9 object-contain" />
               <span className="text-xl font-bold">banaoo.io</span>
             </Link>
             <p className="text-sm text-muted-foreground">

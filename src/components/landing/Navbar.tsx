@@ -70,7 +70,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="banaoo.io" className="h-9 w-9 object-contain" />
+          <img src="/logo.png" alt="banaoo.io" className="h-9 w-9 object-contain" />
           <span className="text-xl font-bold min-w-[5rem] inline-block">
             {typedBrand}
             <span className="inline-block w-0.5 h-4 bg-foreground ml-0.5 align-middle animate-pulse" />

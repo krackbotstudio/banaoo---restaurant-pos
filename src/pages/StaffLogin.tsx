@@ -95,7 +95,7 @@ export default function StaffLogin() {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center">
             <div className="p-3 rounded-2xl gradient-primary glow-primary">
-              <img src="/favicon.svg" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
+              <img src="/logo.png" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
             </div>
           </div>
           <h1 className="font-display text-2xl font-bold">Staff Login</h1>

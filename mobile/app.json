@@ -43,6 +43,9 @@
         "projectId": "ff1f4b1f-181e-415c-a2db-2e70d060a4f2"
       }
     },
-    "owner": "krackbotstudio"
+    "owner": "krackbotstudio",
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }
