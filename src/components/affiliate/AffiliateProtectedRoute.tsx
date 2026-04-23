@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { API_URL } from "@/lib/api-url";
 
 interface AffiliateProtectedRouteProps {
   children: React.ReactNode;
@@ -11,7 +11,7 @@ interface AffiliateProtectedRouteProps {
 export function AffiliateProtectedRoute({ children }: AffiliateProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [isAffiliate, setIsAffiliate] = useState<boolean | null>(null);
+  const [affiliateStatus, setAffiliateStatus] = useState<"pending" | "approved" | "suspended" | null>(null);
   const [checkingAffiliate, setCheckingAffiliate] = useState(true);
 
   useEffect(() => {
@@ -22,21 +22,17 @@ export function AffiliateProtectedRoute({ children }: AffiliateProtectedRoutePro
       }
 
       try {
-        const { data, error } = await supabase
-          .from("affiliates")
-          .select("id, status")
-          .eq("user_id", user.id)
-          .single();
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error checking affiliate:", error);
-          setIsAffiliate(false);
+        const res = await fetch(`${API_URL}/api/affiliate/me`, { credentials: "include" });
+        if (!res.ok) {
+          setAffiliateStatus(null);
         } else {
-          setIsAffiliate(!!data);
+          const payload = await res.json();
+          const status = payload?.affiliate?.status as "pending" | "approved" | "suspended" | undefined;
+          setAffiliateStatus(status || null);
         }
       } catch (err) {
         console.error("Error:", err);
-        setIsAffiliate(false);
+        setAffiliateStatus(null);
       } finally {
         setCheckingAffiliate(false);
       }
@@ -53,10 +49,16 @@ export function AffiliateProtectedRoute({ children }: AffiliateProtectedRoutePro
       return;
     }
 
-    if (!checkingAffiliate && !isAffiliate && user) {
-      navigate("/affiliate/auth");
+    if (!checkingAffiliate && user) {
+      if (!affiliateStatus) {
+        navigate("/affiliate/auth");
+        return;
+      }
+      if (affiliateStatus !== "approved") {
+        navigate(`/affiliate/auth?status=${affiliateStatus}`);
+      }
     }
-  }, [authLoading, user, checkingAffiliate, isAffiliate, navigate]);
+  }, [authLoading, user, checkingAffiliate, affiliateStatus, navigate]);
 
   if (authLoading || checkingAffiliate) {
     return (
@@ -66,7 +68,7 @@ export function AffiliateProtectedRoute({ children }: AffiliateProtectedRoutePro
     );
   }
 
-  if (!user || !isAffiliate) {
+  if (!user || affiliateStatus !== "approved") {
     return null;
   }
 

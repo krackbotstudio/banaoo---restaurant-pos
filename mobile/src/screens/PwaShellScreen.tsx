@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Linking, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
-import { WEBAPP_URL } from "../lib/config";
+import * as Updates from "expo-updates";
+import Constants from "expo-constants";
+import { API_URL, WEBAPP_URL } from "../lib/config";
 import { printBillingReceipt, printKitchenSlip } from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
 import { tokens } from "../theme/tokens";
@@ -19,6 +21,28 @@ interface BridgeMessage {
   type: "banaoo-native-print" | "banaoo-native-open-printers";
   role: BridgeRole;
   payload: Record<string, unknown>;
+}
+
+const OTA_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
+function versionToParts(version: string): number[] {
+  return version
+    .split(".")
+    .map((segment) => Number.parseInt(segment.replace(/[^\d].*$/, ""), 10))
+    .map((n) => (Number.isFinite(n) ? n : 0));
+}
+
+function compareVersions(a: string, b: string): number {
+  const aParts = versionToParts(a);
+  const bParts = versionToParts(b);
+  const maxLen = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const av = aParts[i] ?? 0;
+    const bv = bParts[i] ?? 0;
+    if (av > bv) return 1;
+    if (av < bv) return -1;
+  }
+  return 0;
 }
 
 function rootUrl() {
@@ -72,7 +96,64 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [forceUpdateRequired, setForceUpdateRequired] = useState(false);
+  const [forceUpdateMessage, setForceUpdateMessage] = useState<string | null>(null);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const url = useMemo(() => rootUrl(), []);
+  const appVersion = useMemo(() => {
+    return (
+      Constants.expoConfig?.version ||
+      Constants.nativeAppVersion ||
+      "0.0.0"
+    );
+  }, []);
+
+  const checkForOtaUpdate = async () => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        setUpdateAvailable(true);
+        setUpdateError(null);
+      }
+    } catch {
+      // Keep silent in UI for routine background checks.
+    }
+  };
+
+  const applyOtaUpdate = async () => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    setApplyingUpdate(true);
+    setUpdateError(null);
+    try {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    } catch {
+      setUpdateError("Update failed. Please try again.");
+      setApplyingUpdate(false);
+    }
+  };
+
+  const checkForceUpdatePolicy = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/mobile-app/update-policy`);
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        minVersion?: string;
+        forceUpdate?: boolean;
+        message?: string;
+      };
+      const minVersion = typeof data.minVersion === "string" ? data.minVersion : "0.0.0";
+      const forceUpdate = Boolean(data.forceUpdate);
+      const mustUpdate = forceUpdate && compareVersions(appVersion, minVersion) < 0;
+      setForceUpdateRequired(mustUpdate);
+      setForceUpdateMessage(mustUpdate ? data.message || "A critical update is required." : null);
+    } catch {
+      // Keep previous value if network fails.
+    }
+  };
 
   useEffect(() => {
     const onUrl = ({ url: incomingUrl }: { url: string }) => {
@@ -91,6 +172,25 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const timer = setTimeout(() => setLoading(false), 12000);
     return () => clearTimeout(timer);
   }, [reloadKey]);
+
+  useEffect(() => {
+    void checkForOtaUpdate();
+    void checkForceUpdatePolicy();
+    const interval = setInterval(() => {
+      void checkForOtaUpdate();
+      void checkForceUpdatePolicy();
+    }, OTA_CHECK_INTERVAL_MS);
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void checkForOtaUpdate();
+        void checkForceUpdatePolicy();
+      }
+    });
+    return () => {
+      clearInterval(interval);
+      appStateSub.remove();
+    };
+  }, []);
 
   const handleWebMessage = async (event: WebViewMessageEvent) => {
     let parsed: unknown = null;
@@ -204,6 +304,32 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         mixedContentMode="always"
         onMessage={handleWebMessage}
       />
+      {(updateAvailable || forceUpdateRequired) ? (
+        <View style={styles.updateBanner}>
+          <View style={styles.updateTextWrap}>
+            <Text style={styles.updateTitle}>
+              {forceUpdateRequired ? "Update required" : "Update available"}
+            </Text>
+            <Text style={styles.updateSubtitle}>
+              {forceUpdateRequired
+                ? forceUpdateMessage || "Please update to continue using the app."
+                : "Tap to install the latest app improvements."}
+            </Text>
+            {updateError ? <Text style={styles.updateError}>{updateError}</Text> : null}
+          </View>
+          <Pressable
+            style={[styles.updateBtn, applyingUpdate && styles.updateBtnDisabled]}
+            onPress={() => void applyOtaUpdate()}
+            disabled={applyingUpdate}
+          >
+            {applyingUpdate ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.updateBtnText}>Update</Text>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -246,6 +372,63 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: tokens.colors.background,
+  },
+  updateBanner: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 14,
+    zIndex: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  updateTextWrap: {
+    flex: 1,
+  },
+  updateTitle: {
+    color: "#9a3412",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  updateSubtitle: {
+    color: "#7c2d12",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  updateError: {
+    color: "#b91c1c",
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  updateBtn: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 8,
+    minWidth: 88,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  updateBtnDisabled: {
+    opacity: 0.8,
+  },
+  updateBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
   },
   fallback: {
     flex: 1,

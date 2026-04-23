@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
+import { API_URL } from "@/lib/api-url";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -18,6 +19,8 @@ import {
   ChefHat,
   Download,
   Smartphone,
+  Wallet,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +51,35 @@ interface MobileAppLead {
   created_at: string;
 }
 
+interface AffiliateApplication {
+  id: string;
+  user_id: string;
+  referral_code: string;
+  status: "pending" | "approved" | "suspended";
+  created_at: string;
+  approved_at: string | null;
+  payment_details: Record<string, unknown> | null;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+}
+
+interface AffiliatePayout {
+  id: string;
+  affiliate_id: string;
+  amount: number;
+  status: "requested" | "processing" | "completed" | "failed";
+  payment_method: string;
+  payment_details: Record<string, unknown> | null;
+  transaction_id: string | null;
+  requested_at: string;
+  processed_at: string | null;
+  notes: string | null;
+  referral_code: string | null;
+  email: string | null;
+  full_name: string | null;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending: { label: "Pending", variant: "secondary" },
   approved: { label: "Approved", variant: "default" },
@@ -59,11 +91,15 @@ export default function AdminAccounts() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [leads, setLeads] = useState<MobileAppLead[]>([]);
+  const [affiliates, setAffiliates] = useState<AffiliateApplication[]>([]);
+  const [affiliatePayouts, setAffiliatePayouts] = useState<AffiliatePayout[]>([]);
   const [loading, setLoading] = useState(true);
   const [leadsLoading, setLeadsLoading] = useState(false);
+  const [affiliatesLoading, setAffiliatesLoading] = useState(false);
+  const [payoutsLoading, setPayoutsLoading] = useState(false);
   const [actioning, setActioning] = useState<string | null>(null);
   const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
-  const [adminTab, setAdminTab] = useState<"accounts" | "leads">("accounts");
+  const [adminTab, setAdminTab] = useState<"accounts" | "affiliates" | "payouts" | "leads">("accounts");
 
   // Redirect non-admins back to the landing page
   useEffect(() => {
@@ -75,7 +111,6 @@ export default function AdminAccounts() {
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const response = await fetch(`${API_URL}/api/admin/accounts?status=${filter}`, {
         headers: {
           'Accept': 'application/json',
@@ -99,7 +134,6 @@ export default function AdminAccounts() {
   const fetchLeads = useCallback(async () => {
     setLeadsLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL ?? "";
       const response = await fetch(`${API_URL}/api/admin/mobile-app-leads?limit=250`, {
         headers: { Accept: "application/json" },
         credentials: "include",
@@ -118,6 +152,46 @@ export default function AdminAccounts() {
     if (!profile?.is_admin) return;
     if (adminTab === "leads") void fetchLeads();
   }, [adminTab, fetchLeads, profile]);
+
+  const fetchAffiliates = useCallback(async () => {
+    setAffiliatesLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/affiliates?status=all`, {
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch affiliates");
+      const data = await response.json();
+      setAffiliates((data.affiliates || []) as AffiliateApplication[]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load affiliates");
+    } finally {
+      setAffiliatesLoading(false);
+    }
+  }, []);
+
+  const fetchAffiliatePayouts = useCallback(async () => {
+    setPayoutsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/affiliate-payouts?status=all`, {
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch affiliate payouts");
+      const data = await response.json();
+      setAffiliatePayouts((data.payouts || []) as AffiliatePayout[]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load affiliate payouts");
+    } finally {
+      setPayoutsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!profile?.is_admin) return;
+    if (adminTab === "affiliates") void fetchAffiliates();
+    if (adminTab === "payouts") void fetchAffiliatePayouts();
+  }, [adminTab, fetchAffiliates, fetchAffiliatePayouts, profile]);
 
   const downloadLeadsCsv = () => {
     if (leads.length === 0) {
@@ -153,7 +227,7 @@ export default function AdminAccounts() {
   const handleAction = async (userId: string, action: "approve" | "reject") => {
     setActioning(userId);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL ?? ""}/api/admin/accounts/action`, {
+      const response = await fetch(`${API_URL}/api/admin/accounts/action`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -167,6 +241,49 @@ export default function AdminAccounts() {
       await fetchAccounts();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to perform action");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const handleAffiliateAction = async (affiliateId: string, action: "approve" | "suspend") => {
+    setActioning(affiliateId);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/affiliates/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ affiliate_id: affiliateId, action }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) throw new Error(data?.error || "Action failed");
+      toast.success(action === "approve" ? "Affiliate approved" : "Affiliate suspended");
+      await fetchAffiliates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update affiliate status");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const handlePayoutAction = async (
+    payoutId: string,
+    status: "processing" | "completed" | "failed"
+  ) => {
+    setActioning(payoutId);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/affiliate-payouts/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ payout_id: payoutId, status }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) throw new Error(data?.error || "Action failed");
+      toast.success(`Payout marked as ${status}`);
+      await fetchAffiliatePayouts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update payout");
     } finally {
       setActioning(null);
     }
@@ -192,14 +309,24 @@ export default function AdminAccounts() {
               <ChefHat className="h-3.5 w-3.5" />
               <span>banaoo Admin</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Account Approvals</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
             <p className="text-muted-foreground mt-1">
-              Review and approve restaurant owner accounts
+              Manage owners, affiliates, payouts, and app leads
             </p>
           </div>
           {adminTab === "accounts" ? (
             <Button variant="outline" size="sm" onClick={fetchAccounts} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          ) : adminTab === "affiliates" ? (
+            <Button variant="outline" size="sm" onClick={fetchAffiliates} disabled={affiliatesLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${affiliatesLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          ) : adminTab === "payouts" ? (
+            <Button variant="outline" size="sm" onClick={fetchAffiliatePayouts} disabled={payoutsLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${payoutsLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
           ) : (
@@ -221,6 +348,14 @@ export default function AdminAccounts() {
             <TabsTrigger value="accounts" className="gap-2">
               <Users className="h-4 w-4" />
               Accounts
+            </TabsTrigger>
+            <TabsTrigger value="affiliates" className="gap-2">
+              <Users className="h-4 w-4" />
+              Affiliates
+            </TabsTrigger>
+            <TabsTrigger value="payouts" className="gap-2">
+              <Wallet className="h-4 w-4" />
+              Affiliate Payouts
             </TabsTrigger>
             <TabsTrigger value="leads" className="gap-2">
               <Smartphone className="h-4 w-4" />
@@ -382,6 +517,165 @@ export default function AdminAccounts() {
                 </TabsContent>
               ))}
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="affiliates" className="mt-4">
+            {affiliatesLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : affiliates.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-3">
+                  <Users className="h-10 w-10 text-muted-foreground/40" />
+                  <div>
+                    <p className="font-medium">No affiliate applications</p>
+                    <p className="text-sm text-muted-foreground">New affiliate signup requests will appear here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {affiliates.map((item) => (
+                  <Card key={item.id}>
+                    <CardContent className="py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold truncate">{item.full_name || item.email || "Affiliate"}</p>
+                            <Badge
+                              variant={
+                                item.status === "approved"
+                                  ? "default"
+                                  : item.status === "pending"
+                                  ? "secondary"
+                                  : "destructive"
+                              }
+                              className="capitalize"
+                            >
+                              {item.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {item.email || "No email"} {item.phone ? `· ${item.phone}` : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Referral code: <span className="font-mono">{item.referral_code}</span> · Applied{" "}
+                            {format(new Date(item.created_at), "MMM d, yyyy 'at' h:mm a")}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {item.status !== "approved" ? (
+                            <Button
+                              size="sm"
+                              className="h-9 gap-1.5 bg-green-600 hover:bg-green-700 text-white border-0"
+                              onClick={() => handleAffiliateAction(item.id, "approve")}
+                              disabled={actioning === item.id}
+                            >
+                              {actioning === item.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              )}
+                              Approve
+                            </Button>
+                          ) : null}
+                          {item.status !== "suspended" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                              onClick={() => handleAffiliateAction(item.id, "suspend")}
+                              disabled={actioning === item.id}
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                              Suspend
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="payouts" className="mt-4">
+            {payoutsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : affiliatePayouts.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-3">
+                  <Wallet className="h-10 w-10 text-muted-foreground/40" />
+                  <div>
+                    <p className="font-medium">No payout requests</p>
+                    <p className="text-sm text-muted-foreground">Affiliate payout requests will appear here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {affiliatePayouts.map((payout) => (
+                  <Card key={payout.id}>
+                    <CardContent className="py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold">{payout.full_name || payout.email || "Affiliate"}</p>
+                            <Badge variant={payout.status === "completed" ? "default" : payout.status === "failed" ? "destructive" : "secondary"} className="capitalize">
+                              {payout.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            ₹{Number(payout.amount).toFixed(2)} · {payout.payment_method.replace("_", " ")}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Requested {format(new Date(payout.requested_at), "MMM d, yyyy 'at' h:mm a")}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {payout.status === "requested" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePayoutAction(payout.id, "processing")}
+                              disabled={actioning === payout.id}
+                            >
+                              Mark Processing
+                            </Button>
+                          ) : null}
+                          {payout.status !== "completed" ? (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => handlePayoutAction(payout.id, "completed")}
+                              disabled={actioning === payout.id}
+                            >
+                              Complete
+                            </Button>
+                          ) : null}
+                          {payout.status !== "failed" && payout.status !== "completed" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                              onClick={() => handlePayoutAction(payout.id, "failed")}
+                              disabled={actioning === payout.id}
+                            >
+                              Fail
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="leads" className="mt-4">

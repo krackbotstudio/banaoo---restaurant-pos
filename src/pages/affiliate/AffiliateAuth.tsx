@@ -1,21 +1,28 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { z } from "zod";
+import { Textarea } from "@/components/ui/textarea";
+import { API_URL } from "@/lib/api-url";
 
 const emailSchema = z.string().email("Invalid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 const nameSchema = z.string().min(2, "Name must be at least 2 characters");
 const phoneSchema = z.string().min(10, "Phone number must be at least 10 digits");
+
+type AffiliateRecord = {
+  id: string;
+  status: "pending" | "approved" | "suspended";
+  referral_code: string;
+};
 
 export default function AffiliateAuth() {
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
@@ -24,6 +31,7 @@ export default function AffiliateAuth() {
   const [view, setView] = useState<"auth" | "forgot">("auth");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingAffiliate, setCheckingAffiliate] = useState(false);
+  const [affiliate, setAffiliate] = useState<AffiliateRecord | null>(null);
 
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
@@ -34,24 +42,39 @@ export default function AffiliateAuth() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupBusinessName, setSignupBusinessName] = useState("");
+  const [signupBusinessType, setSignupBusinessType] = useState("");
+  const [signupReason, setSignupReason] = useState("");
+  const [signupUpiId, setSignupUpiId] = useState("");
 
   // Forgot password
   const [resetEmail, setResetEmail] = useState("");
 
-  // Check if user is already an affiliate
+  const statusText = useMemo(() => {
+    if (!affiliate) return null;
+    if (affiliate.status === "approved") return "Affiliate account approved";
+    if (affiliate.status === "pending") return "Application under review";
+    return "Affiliate account suspended";
+  }, [affiliate]);
+
+  const fetchAffiliate = async () => {
+    if (!user) return null;
+    const res = await fetch(`${API_URL}/api/affiliate/me`, { credentials: "include" });
+    if (!res.ok) return null;
+    const payload = await res.json();
+    const record = (payload.affiliate || null) as AffiliateRecord | null;
+    setAffiliate(record);
+    return record;
+  };
+
   useEffect(() => {
     const checkAndRedirect = async () => {
       if (!user) return;
 
       setCheckingAffiliate(true);
       try {
-        const { data, error } = await supabase
-          .from("affiliates")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-
-        if (data && !error) {
+        const record = await fetchAffiliate();
+        if (record?.status === "approved") {
           navigate("/affiliate/dashboard");
         }
       } catch (err) {
@@ -65,12 +88,6 @@ export default function AffiliateAuth() {
       checkAndRedirect();
     }
   }, [user, authLoading, navigate]);
-
-  const generateReferralCode = (name: string): string => {
-    const prefix = name.replace(/\s+/g, "").substring(0, 4).toUpperCase();
-    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `${prefix}${randomSuffix}`;
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,23 +111,26 @@ export default function AffiliateAuth() {
         return;
       }
 
-      // Check if user is an affiliate in the database
-      if (user) {
-        const { data: affiliateData } = await supabase
-          .from("affiliates")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-
-        if (!affiliateData) {
-          toast.error("This account is not registered as an affiliate. Please sign up.");
-          await signOut();
-          return;
-        }
-
+      const meRes = await fetch(`${API_URL}/api/affiliate/me`, { credentials: "include" });
+      if (!meRes.ok) {
+        toast.error("This account is not registered as an affiliate. Please sign up.");
+        await signOut();
+        return;
+      }
+      const payload = await meRes.json();
+      const record = (payload.affiliate || null) as AffiliateRecord | null;
+      setAffiliate(record);
+      if (!record) {
+        toast.error("This account is not registered as an affiliate. Please sign up.");
+        await signOut();
+        return;
+      }
+      if (record.status === "approved") {
         toast.success("Welcome back!");
         navigate("/affiliate/dashboard");
+        return;
       }
+      toast.message(record.status === "pending" ? "Application under review." : "Account is suspended.");
     } catch (err) {
       console.error("Login error:", err);
       toast.error("An error occurred during login");
@@ -137,42 +157,34 @@ export default function AffiliateAuth() {
     }
 
     try {
-      // Sign up the user using our new backend
-      const { error: signUpError } = await signUp(signupEmail, signupPassword, signupName);
+      const { error: signUpError } = await signUp(signupEmail, signupPassword, signupName, signupPhone);
       if (signUpError) {
         toast.error(signUpError.message);
         return;
       }
 
-      // User is now logged in via signUp() call automatically in our backend
-      if (!user) {
-        toast.error("Failed to create account");
-        return;
-      }
-
-      // Update profile with phone
-      await supabase
-        .from("profiles")
-        .update({ phone: signupPhone, role: "affiliate" })
-        .eq("user_id", user.id);
-
-      // Create affiliate record
-      const referralCode = generateReferralCode(signupName);
-      const { error: affiliateError } = await supabase.from("affiliates").insert({
-        user_id: user.id,
-        referral_code: referralCode,
-        status: "pending",
-        payment_details: {},
+      const applyRes = await fetch(`${API_URL}/api/affiliate/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          phone: signupPhone,
+          business_name: signupBusinessName || null,
+          business_type: signupBusinessType || null,
+          reason: signupReason || null,
+          payment_details: {
+            upi_id: signupUpiId || null,
+          },
+        }),
       });
-
-      if (affiliateError) {
-        console.error("Error creating affiliate:", affiliateError);
-        toast.error("Failed to create affiliate account");
+      const applyPayload = await applyRes.json().catch(() => ({}));
+      if (!applyRes.ok && applyRes.status !== 409) {
+        toast.error((applyPayload as { error?: string }).error || "Failed to submit affiliate application");
         return;
       }
 
+      await fetchAffiliate();
       toast.success("Account created! Your affiliate application is now pending approval.");
-      navigate("/affiliate/dashboard");
     } catch (err) {
       console.error("Signup error:", err);
       toast.error("An error occurred during signup");
@@ -252,7 +264,30 @@ export default function AffiliateAuth() {
           </CardHeader>
 
           <CardContent>
-            {view === "forgot" ? (
+            {affiliate && affiliate.status !== "approved" ? (
+              <div className="space-y-4">
+                <div className={`rounded-lg border p-4 ${affiliate.status === "pending" ? "border-amber-200 bg-amber-50/50" : "border-destructive/30 bg-destructive/5"}`}>
+                  <div className="flex items-start gap-3">
+                    {affiliate.status === "pending" ? (
+                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                    )}
+                    <div>
+                      <p className="font-semibold">{statusText}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {affiliate.status === "pending"
+                          ? "Your profile has been submitted. You can access the dashboard once our admin approves your application."
+                          : "Please contact support to reactivate your affiliate account."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button variant="outline" className="w-full" onClick={() => void signOut()}>
+                  Sign Out
+                </Button>
+              </div>
+            ) : view === "forgot" ? (
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="reset-email">Email</Label>
@@ -359,6 +394,36 @@ export default function AffiliateAuth() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="signup-business-name">Business / Network Name (optional)</Label>
+                      <Input
+                        id="signup-business-name"
+                        type="text"
+                        placeholder="Food Consultant Network"
+                        value={signupBusinessName}
+                        onChange={(e) => setSignupBusinessName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-business-type">Business Type (optional)</Label>
+                      <Input
+                        id="signup-business-type"
+                        type="text"
+                        placeholder="Consultant, Agency, Influencer"
+                        value={signupBusinessType}
+                        onChange={(e) => setSignupBusinessType(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-upi">UPI ID (optional)</Label>
+                      <Input
+                        id="signup-upi"
+                        type="text"
+                        placeholder="yourname@upi"
+                        value={signupUpiId}
+                        onChange={(e) => setSignupUpiId(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
                       <Input
                         id="signup-password"
@@ -367,6 +432,16 @@ export default function AffiliateAuth() {
                         value={signupPassword}
                         onChange={(e) => setSignupPassword(e.target.value)}
                         required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-reason">Why do you want to join? (optional)</Label>
+                      <Textarea
+                        id="signup-reason"
+                        placeholder="Tell us how you will bring restaurant referrals."
+                        value={signupReason}
+                        onChange={(e) => setSignupReason(e.target.value)}
+                        rows={3}
                       />
                     </div>
                     <Button type="submit" className="w-full" disabled={isSubmitting}>

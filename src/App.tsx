@@ -5,10 +5,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SupportChatWidget } from "@/components/support";
 import { CookieConsent } from "@/components/CookieConsent";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { OutletProvider } from "@/lib/outlet-context";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AffiliateLayout } from "@/components/affiliate/AffiliateLayout";
+import { AffiliateProtectedRoute } from "@/components/affiliate/AffiliateProtectedRoute";
 import { ThemeProvider } from "@/lib/theme";
 import { Loader2 } from "lucide-react";
 
@@ -29,6 +31,13 @@ const Privacy = lazy(() => import("./pages/Privacy"));
 const Refund = lazy(() => import("./pages/Refund"));
 const Shipping = lazy(() => import("./pages/Shipping"));
 const Affiliate = lazy(() => import("./pages/Affiliate"));
+const AffiliateAuth = lazy(() => import("./pages/affiliate/AffiliateAuth"));
+const AffiliateDashboard = lazy(() => import("./pages/affiliate/AffiliateDashboard"));
+const AffiliateReferrals = lazy(() => import("./pages/affiliate/AffiliateReferrals"));
+const AffiliateCommissions = lazy(() => import("./pages/affiliate/AffiliateCommissions"));
+const AffiliatePayouts = lazy(() => import("./pages/affiliate/AffiliatePayouts"));
+const AffiliateMarketing = lazy(() => import("./pages/affiliate/AffiliateMarketing"));
+const AffiliateSettings = lazy(() => import("./pages/affiliate/AffiliateSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const QRMenuBuilder = lazy(() => import("./pages/tools/QRMenuBuilder"));
 const MenuViewer = lazy(() => import("./pages/tools/MenuViewer"));
@@ -77,6 +86,7 @@ const App = () => (
                   <Route path="/refund" element={<Refund />} />
                   <Route path="/shipping" element={<Shipping />} />
                   <Route path="/affiliate" element={<Affiliate />} />
+                  <Route path="/affiliate/auth" element={<AffiliateAuth />} />
 
                   {/* Staff login (separate from owner auth) */}
                   <Route path="/staff-login" element={<StaffLogin />} />
@@ -97,7 +107,25 @@ const App = () => (
                   <Route path="/account-pending" element={<ProtectedRoute><AccountPending /></ProtectedRoute>} />
 
                   {/* Admin routes */}
+                  <Route path="/admin/account" element={<Navigate to="/admin/accounts" replace />} />
                   <Route path="/admin/accounts" element={<ProtectedRoute><AdminAccounts /></ProtectedRoute>} />
+
+                  {/* Affiliate portal */}
+                  <Route
+                    path="/affiliate"
+                    element={
+                      <AffiliateProtectedRoute>
+                        <AffiliateLayout />
+                      </AffiliateProtectedRoute>
+                    }
+                  >
+                    <Route path="dashboard" element={<AffiliateDashboard />} />
+                    <Route path="referrals" element={<AffiliateReferrals />} />
+                    <Route path="commissions" element={<AffiliateCommissions />} />
+                    <Route path="payouts" element={<AffiliatePayouts />} />
+                    <Route path="marketing" element={<AffiliateMarketing />} />
+                    <Route path="settings" element={<AffiliateSettings />} />
+                  </Route>
 
                   {/* Protected routes */}
                   <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />

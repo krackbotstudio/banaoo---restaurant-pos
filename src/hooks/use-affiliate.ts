@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { API_URL } from "@/lib/api-url";
 
 interface Affiliate {
   id: string;
   user_id: string;
   referral_code: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "suspended";
   payment_details: {
     upi_id?: string;
     bank_name?: string;
@@ -82,24 +83,19 @@ export function useAffiliate() {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from("affiliates")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching affiliate:", error);
+      const response = await fetch(`${API_URL}/api/affiliate/me`, { credentials: "include" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      const data = (payload.affiliate || null) as Affiliate | null;
+      if (!data) {
+        setAffiliate(null);
         return;
       }
-
-      if (data) {
-        setAffiliate(data as Affiliate);
-      }
+      setAffiliate(data);
     } catch (err) {
       console.error("Error:", err);
     }
-  }, [user]);
+  }, [user, API_URL]);
 
   const fetchReferrals = useCallback(async () => {
     if (!affiliate) return;
@@ -260,7 +256,7 @@ export function useAffiliate() {
     loading,
     isApproved: affiliate?.status === "approved",
     isPending: affiliate?.status === "pending",
-    isRejected: affiliate?.status === "rejected",
+    isSuspended: affiliate?.status === "suspended",
     requestPayout,
     updatePaymentDetails,
     refetch: async () => {

@@ -1,21 +1,14 @@
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import {
   Users,
   Share2,
@@ -24,106 +17,10 @@ import {
   Clock,
   BarChart3,
   Gift,
-  CheckCircle2,
-  Loader2,
   ArrowRight,
 } from "lucide-react";
 
-interface AffiliateData {
-  id: string;
-  referral_code: string;
-  status: string;
-  created_at: string;
-}
-
 export default function Affiliate() {
-  const { user, profile } = useAuth();
-  const [affiliateData, setAffiliateData] = useState<AffiliateData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    phone: "",
-    upiId: "",
-    bankName: "",
-    accountNumber: "",
-    ifscCode: "",
-    reason: "",
-  });
-
-  useEffect(() => {
-    if (user) {
-      fetchAffiliateData();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchAffiliateData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("affiliates")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle();
-
-      if (error) throw error;
-      setAffiliateData(data);
-    } catch (error) {
-      console.error("Error fetching affiliate data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateReferralCode = () => {
-    const name = profile?.full_name?.split(" ")[0]?.toUpperCase() || "USER";
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `${name}${random}`;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      toast.error("Please log in to apply");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const { error } = await supabase.from("affiliates").insert({
-        user_id: user.id,
-        referral_code: generateReferralCode(),
-        payment_details: {
-          phone: formData.phone,
-          upi_id: formData.upiId,
-          bank_name: formData.bankName,
-          account_number: formData.accountNumber,
-          ifsc_code: formData.ifscCode,
-        },
-        status: "pending",
-      });
-
-      if (error) throw error;
-
-      toast.success("Application submitted! We'll review it within 48 hours.");
-      await fetchAffiliateData();
-    } catch (error: unknown) {
-      console.error("Error submitting application:", error);
-      const message = error instanceof Error ? error.message : "Failed to submit application";
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const copyReferralLink = () => {
-    if (affiliateData?.referral_code) {
-      const link = `${window.location.origin}/auth?ref=${affiliateData.referral_code}`;
-      navigator.clipboard.writeText(link);
-      toast.success("Referral link copied!");
-    }
-  };
-
   const benefits = [
     {
       icon: TrendingUp,
@@ -228,10 +125,10 @@ export default function Affiliate() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild>
-              <a href="#apply">
+              <Link to="/affiliate/auth">
                 Become an Affiliate
                 <ArrowRight className="ml-2 h-4 w-4" />
-              </a>
+              </Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <a href="#how-it-works">Learn More</a>
@@ -299,180 +196,24 @@ export default function Affiliate() {
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Apply Now</h2>
-              <p className="text-xl text-muted-foreground">
-                {user
-                  ? "Fill out the form below to join our affiliate program"
-                  : "Log in to apply for the affiliate program"}
-              </p>
+              <p className="text-xl text-muted-foreground">Create your affiliate account and complete the application in the affiliate portal.</p>
             </div>
-
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : !user ? (
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <p className="text-muted-foreground mb-4">
-                    You need to be logged in to apply for the affiliate program.
-                  </p>
-                  <Button asChild>
-                    <Link to="/auth">Log In to Apply</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : affiliateData ? (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                        affiliateData.status === "approved"
-                          ? "bg-green-100 text-green-600"
-                          : affiliateData.status === "pending"
-                          ? "bg-yellow-100 text-yellow-600"
-                          : "bg-red-100 text-red-600"
-                      }`}
-                    >
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <CardTitle>Application {affiliateData.status === "approved" ? "Approved" : affiliateData.status === "pending" ? "Under Review" : "Status"}</CardTitle>
-                      <CardDescription>
-                        {affiliateData.status === "approved"
-                          ? "You're now a Banaoo affiliate!"
-                          : affiliateData.status === "pending"
-                          ? "We'll review your application within 48 hours"
-                          : `Status: ${affiliateData.status}`}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                {affiliateData.status === "approved" && (
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label className="text-sm text-muted-foreground">Your Referral Code</Label>
-                      <p className="text-2xl font-mono font-bold text-primary">
-                        {affiliateData.referral_code}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-muted-foreground">Your Referral Link</Label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          readOnly
-                          value={`${window.location.origin}/auth?ref=${affiliateData.referral_code}`}
-                          className="font-mono text-sm"
-                        />
-                        <Button onClick={copyReferralLink}>Copy</Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Affiliate Application</CardTitle>
-                  <CardDescription>
-                    Complete the form below to apply for our affiliate program
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid gap-4">
-                      <div>
-                        <Label htmlFor="name">Full Name</Label>
-                        <Input
-                          id="name"
-                          value={profile?.full_name || ""}
-                          disabled
-                          className="bg-muted"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="phone">Phone Number *</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="+91 98765 43210"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h4 className="font-medium">Payment Details</h4>
-                      <div>
-                        <Label htmlFor="upiId">UPI ID (Preferred)</Label>
-                        <Input
-                          id="upiId"
-                          placeholder="yourname@upi"
-                          value={formData.upiId}
-                          onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
-                        />
-                      </div>
-                      <p className="text-sm text-muted-foreground text-center">— OR —</p>
-                      <div className="grid gap-4 sm:grid-cols-3">
-                        <div>
-                          <Label htmlFor="bankName">Bank Name</Label>
-                          <Input
-                            id="bankName"
-                            placeholder="HDFC Bank"
-                            value={formData.bankName}
-                            onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="accountNumber">Account Number</Label>
-                          <Input
-                            id="accountNumber"
-                            placeholder="1234567890"
-                            value={formData.accountNumber}
-                            onChange={(e) =>
-                              setFormData({ ...formData, accountNumber: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="ifscCode">IFSC Code</Label>
-                          <Input
-                            id="ifscCode"
-                            placeholder="HDFC0001234"
-                            value={formData.ifscCode}
-                            onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="reason">Why do you want to join? (Optional)</Label>
-                      <Textarea
-                        id="reason"
-                        placeholder="Tell us about your network and how you plan to promote Banaoo..."
-                        value={formData.reason}
-                        onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-
-                    <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                      {submitting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Submitting...
-                        </>
-                      ) : (
-                        "Submit Application"
-                      )}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Start Your Affiliate Application</CardTitle>
+                <CardDescription>
+                  Use the affiliate auth portal to sign up, sign in, and submit your profile for approval.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col sm:flex-row gap-3">
+                <Button asChild className="sm:flex-1">
+                  <Link to="/affiliate/auth">Open Affiliate Portal</Link>
+                </Button>
+                <Button variant="outline" asChild className="sm:flex-1">
+                  <Link to="/affiliate/auth">Sign In / Sign Up</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -510,7 +251,7 @@ export default function Affiliate() {
             Join hundreds of affiliates already earning with Banaoo
           </p>
           <Button size="lg" asChild>
-            <a href="#apply">Apply Now</a>
+            <Link to="/affiliate/auth">Apply Now</Link>
           </Button>
         </div>
       </section>

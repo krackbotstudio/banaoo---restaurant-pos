@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "@/lib/auth";
+import { API_URL } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +31,6 @@ export default function Auth() {
   useEffect(() => {
     const clearOrphanedSession = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL ?? "";
         const res = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
         
         if (res.status === 401) {
@@ -65,8 +65,8 @@ export default function Auth() {
     setIsSubmitting(true);
     try {
       console.log('Initiating Google sign-in...');
-      const API_URL = import.meta.env.VITE_API_URL ?? "";
-      const googleUrl = `${API_URL}/auth/google`;
+      const callbackUrl = `${window.location.origin}/auth/callback`;
+      const googleUrl = `${API_URL}/auth/google?redirect_uri=${encodeURIComponent(callbackUrl)}`;
       console.log('Redirecting to:', googleUrl);
       
       // Test if the endpoint exists first

@@ -53,11 +53,20 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    
-    const allowedOrigins = process.env.FRONTEND_URL
-      ? process.env.FRONTEND_URL.split(',')
-      : ['http://localhost:8080'];
-    
+
+    const envOrigins = process.env.FRONTEND_URL
+      ? process.env.FRONTEND_URL.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+    const localDevOrigins = [
+      'http://localhost:8080',
+      'http://127.0.0.1:8080',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ];
+    const allowedOrigins = [...new Set([...envOrigins, ...localDevOrigins])];
+
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -308,6 +317,17 @@ const isAdmin = (req, res, next) => {
   }
 };
 
+const requireAuth = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  return next();
+};
+
+function generateAffiliateReferralCode(name = 'AFF') {
+  const base = String(name || 'AFF').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'AFF';
+  const random = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `${base}${random}`;
+}
+
 // --- Auth Routes ---
 
 app.post('/auth/register', async (req, res) => {
@@ -359,6 +379,9 @@ app.post('/auth/register', async (req, res) => {
     });
   } catch (err) {
     console.error('Registration error details:', err);
+    if (err?.code === '23505' && err?.constraint === 'users_email_key') {
+      return res.status(409).json({ error: 'Email is already registered. Please sign in instead.' });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -465,6 +488,87 @@ app.get('/auth/me', async (req, res) => {
   res.json({ user: req.user, profile: rows[0] });
 });
 
+app.get('/api/affiliate/me', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT a.*, u.email, p.full_name, p.phone
+       FROM public.affiliates a
+       JOIN public.users u ON u.id = a.user_id
+       LEFT JOIN public.profiles p ON p.user_id = a.user_id
+       WHERE a.user_id = $1
+       LIMIT 1`,
+      [req.user.id]
+    );
+    res.json({ affiliate: rows[0] || null });
+  } catch (err) {
+    console.error('GET /api/affiliate/me:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/affiliate/apply', requireAuth, async (req, res) => {
+  const {
+    phone,
+    business_name,
+    business_type,
+    reason,
+    payment_details = {},
+  } = req.body || {};
+
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT id, status, referral_code FROM public.affiliates WHERE user_id = $1 LIMIT 1',
+      [req.user.id]
+    );
+    if (existing[0]) {
+      return res.status(409).json({ error: 'Affiliate application already exists', affiliate: existing[0] });
+    }
+
+    const { rows: profileRows } = await pool.query(
+      'SELECT full_name FROM public.profiles WHERE user_id = $1 LIMIT 1',
+      [req.user.id]
+    );
+    const fullName = profileRows[0]?.full_name || 'AFF';
+    const referralCode = generateAffiliateReferralCode(fullName);
+
+    const details = {
+      ...(payment_details || {}),
+      application: {
+        reason: reason || null,
+        business_name: business_name || null,
+        business_type: business_type || null,
+        contact_phone: phone || null,
+      },
+    };
+
+    await pool.query(
+      `INSERT INTO public.affiliates (user_id, referral_code, status, payment_details)
+       VALUES ($1, $2, 'pending', $3::jsonb)`,
+      [req.user.id, referralCode, JSON.stringify(details)]
+    );
+
+    if (phone || business_type) {
+      await pool.query(
+        `UPDATE public.profiles
+         SET phone = COALESCE($1, phone),
+             business_type = COALESCE($2, business_type)
+         WHERE user_id = $3`,
+        [phone || null, business_type || null, req.user.id]
+      );
+    }
+
+    const { rows: createdRows } = await pool.query(
+      'SELECT id, status, referral_code, created_at FROM public.affiliates WHERE user_id = $1 LIMIT 1',
+      [req.user.id]
+    );
+
+    res.status(201).json({ success: true, affiliate: createdRows[0] });
+  } catch (err) {
+    console.error('POST /api/affiliate/apply:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Bridge Passport session → Supabase client: RLS policies use auth.uid() = JWT sub
 app.get('/auth/supabase-token', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
@@ -483,6 +587,30 @@ function getAndroidApkUrl() {
   const frontend = (process.env.FRONTEND_URL || 'https://banaoo.in').split(',')[0].trim();
   return `${frontend.replace(/\/+$/, '')}/downloads/banaoo-latest.apk`;
 }
+
+function parseBooleanEnv(value, fallback = false) {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+app.get('/api/mobile-app/update-policy', (req, res) => {
+  const minVersion = String(process.env.MOBILE_MIN_VERSION || '0.0.0').trim();
+  const forceUpdate = parseBooleanEnv(process.env.MOBILE_FORCE_UPDATE, false);
+  const message = String(
+    process.env.MOBILE_FORCE_UPDATE_MESSAGE ||
+    'A critical update is required. Please update the app to continue.'
+  ).trim();
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    minVersion,
+    forceUpdate,
+    message,
+  });
+});
 
 app.post('/api/mobile-app/download-request', async (req, res) => {
   const { email, phone, source } = req.body || {};
@@ -715,6 +843,115 @@ app.get('/api/admin/accounts', isAdmin, async (req, res) => {
     res.json({ accounts: rows });
   } catch (err) {
     console.error('Admin list accounts error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/affiliates', isAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || 'all').toLowerCase();
+    const values = [];
+    let whereSql = '';
+    if (status !== 'all') {
+      values.push(status);
+      whereSql = `WHERE a.status = $${values.length}`;
+    }
+    const { rows } = await pool.query(
+      `SELECT a.id, a.user_id, a.referral_code, a.status, a.created_at, a.approved_at,
+              a.payment_details, u.email, p.full_name, p.phone
+       FROM public.affiliates a
+       JOIN public.users u ON u.id = a.user_id
+       LEFT JOIN public.profiles p ON p.user_id = a.user_id
+       ${whereSql}
+       ORDER BY a.created_at DESC`,
+      values
+    );
+    res.json({ affiliates: rows });
+  } catch (err) {
+    console.error('GET /api/admin/affiliates:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/affiliates/action', isAdmin, async (req, res) => {
+  try {
+    const { affiliate_id, action } = req.body || {};
+    if (!affiliate_id || !action) {
+      return res.status(400).json({ error: 'affiliate_id and action are required' });
+    }
+    if (!['approve', 'suspend'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+
+    const nextStatus = action === 'approve' ? 'approved' : 'suspended';
+    const { rowCount } = await pool.query(
+      `UPDATE public.affiliates
+       SET status = $1,
+           approved_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE approved_at END
+       WHERE id = $2`,
+      [nextStatus, affiliate_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Affiliate not found' });
+
+    res.json({ success: true, status: nextStatus });
+  } catch (err) {
+    console.error('POST /api/admin/affiliates/action:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/affiliate-payouts', isAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || 'all').toLowerCase();
+    const values = [];
+    let whereSql = '';
+    if (status !== 'all') {
+      values.push(status);
+      whereSql = `WHERE ap.status = $${values.length}`;
+    }
+    const { rows } = await pool.query(
+      `SELECT ap.id, ap.affiliate_id, ap.amount, ap.status, ap.payment_method, ap.payment_details,
+              ap.transaction_id, ap.requested_at, ap.processed_at, ap.notes,
+              a.referral_code, u.email, p.full_name
+       FROM public.affiliate_payouts ap
+       JOIN public.affiliates a ON a.id = ap.affiliate_id
+       JOIN public.users u ON u.id = a.user_id
+       LEFT JOIN public.profiles p ON p.user_id = a.user_id
+       ${whereSql}
+       ORDER BY ap.requested_at DESC`,
+      values
+    );
+    res.json({ payouts: rows });
+  } catch (err) {
+    console.error('GET /api/admin/affiliate-payouts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/affiliate-payouts/action', isAdmin, async (req, res) => {
+  try {
+    const { payout_id, status, transaction_id, notes } = req.body || {};
+    if (!payout_id || !status) {
+      return res.status(400).json({ error: 'payout_id and status are required' });
+    }
+    const allowed = ['requested', 'processing', 'completed', 'failed'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: 'Invalid payout status' });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE public.affiliate_payouts
+       SET status = $1,
+           transaction_id = COALESCE($2, transaction_id),
+           notes = COALESCE($3, notes),
+           processed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE processed_at END
+       WHERE id = $4`,
+      [status, transaction_id || null, notes || null, payout_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Payout request not found' });
+    res.json({ success: true, status });
+  } catch (err) {
+    console.error('POST /api/admin/affiliate-payouts/action:', err);
     res.status(500).json({ error: err.message });
   }
 });

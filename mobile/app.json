@@ -4,6 +4,14 @@
     "slug": "banaoo-pos-mobile",
     "scheme": "banaoo",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ff1f4b1f-181e-415c-a2db-2e70d060a4f2",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
