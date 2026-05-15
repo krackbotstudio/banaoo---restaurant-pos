@@ -4,13 +4,15 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install production deps only
-COPY package.json package-lock.json ./
+COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
-# Copy application source (excluding files listed in .dockerignore)
-COPY . .
+# Application source
+COPY server/ .
 
-# Create uploads directory; persisted via a Docker volume
+# Android APK for website download (build after mobile/build-apk.cmd)
+COPY public/downloads/banaoo-latest.apk ./downloads/banaoo-latest.apk
+
 RUN mkdir -p uploads
 
 EXPOSE 5000

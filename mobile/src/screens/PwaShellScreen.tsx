@@ -44,7 +44,7 @@ const INJECT_AFTER_LOAD = `(function(){try{Object.defineProperty(navigator,'seri
 
 /** Chrome-like UA so PWAs that sniff WebView do not block the shell (Android). */
 const ANDROID_WEBVIEW_UA =
-  "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/0.5";
+  "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/0.6";
 
 function versionToParts(version: string): number[] {
   return version

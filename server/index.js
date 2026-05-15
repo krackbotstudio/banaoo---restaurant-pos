@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
+import fs from 'fs';
 import pool from './db.js';
 import multer from 'multer';
 import path from 'path';
@@ -117,6 +118,22 @@ const upload = multer({
 
 // Serve uploads folder as static
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+function resolveDownloadsDir() {
+  const candidates = [
+    path.join(__dirname, 'downloads'),
+    path.join(__dirname, '../public/downloads'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  return null;
+}
+
+const downloadsDir = resolveDownloadsDir();
+if (downloadsDir) {
+  app.use('/downloads', express.static(downloadsDir));
+}
 
 // --- Passport Local Strategy ---
 passport.use(new LocalStrategy({ usernameField: 'email' }, async (email, password, done) => {
@@ -580,13 +597,63 @@ app.get('/auth/supabase-token', (req, res) => {
   res.json({ access_token });
 });
 
+const ANDROID_APK_CANDIDATES = [
+  path.join(__dirname, 'downloads/banaoo-latest.apk'),
+  path.join(__dirname, '../public/downloads/banaoo-latest.apk'),
+  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.6.apk'),
+  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.5.apk'),
+  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/app-release.apk'),
+];
+
+function resolveAndroidApkPath() {
+  for (const candidate of ANDROID_APK_CANDIDATES) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function getAndroidApkUrl() {
   if (process.env.ANDROID_APK_URL && process.env.ANDROID_APK_URL.trim()) {
     return process.env.ANDROID_APK_URL.trim();
   }
-  const frontend = (process.env.FRONTEND_URL || 'https://banaoo.in').split(',')[0].trim();
-  return `${frontend.replace(/\/+$/, '')}/downloads/banaoo-latest.apk`;
+  // Proxied to the backend in production (nginx /api/ → Express).
+  return '/api/mobile-app/apk';
 }
+
+let mobileAppLeadsTableReady = false;
+
+async function ensureMobileAppLeadsTable() {
+  if (mobileAppLeadsTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.mobile_app_leads (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'landing_unknown',
+      user_agent TEXT,
+      ip_address TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_created_at
+      ON public.mobile_app_leads (created_at DESC)
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_email
+      ON public.mobile_app_leads (email)
+  `);
+  mobileAppLeadsTableReady = true;
+}
+
+app.get('/api/mobile-app/apk', (req, res) => {
+  const apkPath = resolveAndroidApkPath();
+  if (!apkPath) {
+    return res.status(404).json({ error: 'Android APK is not available yet' });
+  }
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.download(apkPath, 'banaoo-app.apk');
+});
 
 function parseBooleanEnv(value, fallback = false) {
   if (typeof value !== 'string') return fallback;
@@ -625,7 +692,15 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
     return res.status(400).json({ error: 'A valid contact number is required' });
   }
 
+  const apkPath = resolveAndroidApkPath();
+  if (!apkPath) {
+    return res.status(404).json({ error: 'Android APK is not available yet' });
+  }
+
+  const downloadUrl = getAndroidApkUrl();
+
   try {
+    await ensureMobileAppLeadsTable();
     await pool.query(
       `INSERT INTO public.mobile_app_leads (email, phone, source, user_agent, ip_address)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -637,14 +712,15 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
         String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() || null,
       ]
     );
-    res.json({
-      success: true,
-      downloadUrl: getAndroidApkUrl(),
-    });
   } catch (err) {
-    console.error('POST /api/mobile-app/download-request:', err);
-    res.status(500).json({ error: 'Unable to process download request' });
+    console.error('POST /api/mobile-app/download-request (lead save):', err);
+    // APK download should still work even if lead capture fails.
   }
+
+  res.json({
+    success: true,
+    downloadUrl,
+  });
 });
 
 // Outlets — use Postgres directly so the browser does not depend on reaching Supabase REST (avoids "Failed to fetch")
@@ -1816,6 +1892,12 @@ app.post('/api/webhooks/zomato', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-console.log(`Server running on port ${PORT}`);
-});
+ensureMobileAppLeadsTable()
+  .catch((err) => {
+    console.error('mobile_app_leads bootstrap on startup:', err);
+  })
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  });

@@ -11,3 +11,7 @@ README.md
 server/node_modules
 server/dist
 server/.env
+
+# Keep Docker backend context small (APK is copied from public/downloads only)
+mobile/android
+mobile/node_modules

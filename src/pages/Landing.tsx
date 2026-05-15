@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { API_URL } from "@/lib/api-url";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import {
@@ -254,7 +255,7 @@ export default function Landing() {
       return;
     }
 
-    const apiBase = import.meta.env.VITE_API_URL ?? "";
+    const apiBase = API_URL || window.location.origin;
     setDownloadSubmitting(true);
     try {
       const response = await fetch(`${apiBase}/api/mobile-app/download-request`, {
@@ -273,9 +274,24 @@ export default function Landing() {
 
       const downloadUrl = (data as { downloadUrl?: string }).downloadUrl;
       if (!downloadUrl) throw new Error("Download URL is missing");
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
 
-      toast({ title: "Download started", description: "Check your browser downloads if it did not open automatically." });
+      const siteOrigin = window.location.origin;
+      const resolvedUrl = downloadUrl.startsWith("http")
+        ? downloadUrl
+        : `${siteOrigin}${downloadUrl.startsWith("/") ? downloadUrl : `/${downloadUrl}`}`;
+
+      const anchor = document.createElement("a");
+      anchor.href = resolvedUrl;
+      anchor.download = "banaoo-app.apk";
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      toast({
+        title: "Download started",
+        description: "If nothing happens, check your browser downloads or allow downloads from this site.",
+      });
       setDownloadDialogOpen(false);
       setDownloadEmail("");
       setDownloadPhone("");
@@ -347,7 +363,7 @@ export default function Landing() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 h-12 px-8 text-base border-white/40 text-white bg-black/20 hover:bg-black/35"
+                className="gap-2 h-12 px-8 text-base border-white/40 text-white bg-white/10 hover:bg-white/20 hover:text-white hover:border-white [&_svg]:text-current"
                 onClick={() => setDownloadDialogOpen(true)}
               >
                 <Download className="h-4 w-4" />
@@ -358,7 +374,7 @@ export default function Landing() {
             <p className="text-xs text-white/60">
               7-day free trial · No credit card required · Cancel anytime
             </p>
-            <p className="text-xs text-white/70">We will be live soon on Play Store.</p>
+            <p className="text-xs text-white/70">Android APK available now — install directly on your device.</p>
           </div>
         </div>
       </section>
@@ -709,7 +725,7 @@ export default function Landing() {
               {downloadSubmitting ? "Preparing download..." : "Get APK"}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Play Store release is coming soon.
+              Google Play listing is in progress — use the APK for early access.
             </p>
           </form>
         </DialogContent>

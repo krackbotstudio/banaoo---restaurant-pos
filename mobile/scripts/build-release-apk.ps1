@@ -28,5 +28,10 @@ if (-not $apk) {
   if (Test-Path $legacy) { $apk = Get-Item $legacy }
 }
 if ($apk) {
+  $webApkDir = Join-Path (Split-Path $MobileRoot -Parent) "public\downloads"
+  New-Item -ItemType Directory -Force -Path $webApkDir | Out-Null
+  $webApk = Join-Path $webApkDir "banaoo-latest.apk"
+  Copy-Item -Force $apk.FullName $webApk
   Write-Host "`nAPK: $($apk.FullName)" -ForegroundColor Green
+  Write-Host "Web download: $webApk" -ForegroundColor Green
 }

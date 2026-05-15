@@ -3,7 +3,7 @@
     "name": "Banaoo App",
     "slug": "banaoo-pos-mobile",
     "scheme": "banaoo",
-    "version": "0.5",
+    "version": "0.6",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -17,6 +17,7 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/splash.png",
       "backgroundColor": "#ffffff",
       "resizeMode": "contain"
     },
@@ -56,6 +57,7 @@
       [
         "expo-splash-screen",
         {
+          "image": "./assets/splash.png",
           "backgroundColor": "#ffffff",
           "resizeMode": "contain"
         }
