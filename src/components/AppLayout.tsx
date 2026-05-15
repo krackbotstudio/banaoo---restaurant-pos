@@ -153,72 +153,81 @@ export function AppLayout({ children }: AppLayoutProps) {
             </main>
           </SidebarInset>
         </div>
+      </SidebarProvider>
 
-        {/* Mobile + tablet bottom navigation — always available pages for quick movement */}
-        {(canAccess("dashboard") || canAccess("menu") || canAccess("orders") || canAccess("kitchen")) && (
-          <nav className="fixed bottom-0 left-0 right-0 z-[70] border-t border-border bg-background/95 shadow-[0_-6px_20px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
-            <div className="flex items-center gap-1 overflow-x-auto px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {canAccess("dashboard") && (
+      {(canAccess("dashboard") || canAccess("menu") || canAccess("orders") || canAccess("kitchen")) && (
+        <nav className="fixed bottom-0 left-0 right-0 z-[70] border-t border-border bg-background/95 shadow-[0_-6px_20px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
+          <div className="flex w-full min-w-0 items-end px-1 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-2">
+            {canAccess("dashboard") && (
+              <div className="flex min-h-[52px] min-w-0 flex-1 basis-0 flex-col items-center justify-end">
                 <Link
                   to="/dashboard"
-                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                  className={`mx-auto flex w-full max-w-[72px] flex-col items-center justify-end gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium leading-tight transition-colors ${
                     isActive("/dashboard") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <LayoutDashboard className="h-5 w-5" />
-                  <span>Home</span>
+                  <LayoutDashboard className="h-5 w-5 shrink-0" />
+                  <span className="max-w-full truncate text-center">Home</span>
                 </Link>
-              )}
-              {canAccess("menu") && (
+              </div>
+            )}
+            {canAccess("menu") && (
+              <div className="flex min-h-[52px] min-w-0 flex-1 basis-0 flex-col items-center justify-end">
                 <Link
                   to="/menu"
-                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                  className={`mx-auto flex w-full max-w-[72px] flex-col items-center justify-end gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium leading-tight transition-colors ${
                     isActive("/menu") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <UtensilsCrossed className="h-5 w-5" />
-                  <span>Menu</span>
+                  <UtensilsCrossed className="h-5 w-5 shrink-0" />
+                  <span className="max-w-full truncate text-center">Menu</span>
                 </Link>
-              )}
-              {canAccess("orders") && (
-                <div className="flex min-w-[68px] justify-center px-1">
+              </div>
+            )}
+            {canAccess("orders") && (
+              <div className="flex min-h-[52px] min-w-0 flex-1 basis-0 flex-col items-center justify-end">
+                <div className="mx-auto flex w-full max-w-[72px] justify-center">
                   <Button
                     asChild
                     size="icon"
-                    className="h-12 w-12 rounded-full gradient-warm text-white shadow-lg"
+                    className="h-12 w-12 shrink-0 rounded-full gradient-warm text-white shadow-lg"
                   >
                     <Link to="/orders/new" aria-label="New Order">
                       <Plus className="h-5 w-5" />
                     </Link>
                   </Button>
                 </div>
-              )}
-              {canAccess("orders") && (
+              </div>
+            )}
+            {canAccess("orders") && (
+              <div className="flex min-h-[52px] min-w-0 flex-1 basis-0 flex-col items-center justify-end">
                 <Link
                   to="/orders"
-                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                  className={`mx-auto flex w-full max-w-[72px] flex-col items-center justify-end gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium leading-tight transition-colors ${
                     isActive("/orders") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <ClipboardList className="h-5 w-5" />
-                  <span>Orders</span>
+                  <ClipboardList className="h-5 w-5 shrink-0" />
+                  <span className="max-w-full truncate text-center">Orders</span>
                 </Link>
-              )}
-              {canAccess("kitchen") && (
+              </div>
+            )}
+            {canAccess("kitchen") && (
+              <div className="flex min-h-[52px] min-w-0 flex-1 basis-0 flex-col items-center justify-end">
                 <Link
                   to="/kitchen"
-                  className={`flex min-w-[68px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                  className={`mx-auto flex w-full max-w-[72px] flex-col items-center justify-end gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium leading-tight transition-colors ${
                     isActive("/kitchen") ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <ChefHat className="h-5 w-5" />
-                  <span>Kitchen</span>
+                  <ChefHat className="h-5 w-5 shrink-0" />
+                  <span className="max-w-full truncate text-center">Kitchen</span>
                 </Link>
-              )}
-            </div>
-          </nav>
-        )}
-      </SidebarProvider>
+              </div>
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

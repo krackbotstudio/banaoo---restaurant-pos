@@ -41,6 +41,9 @@ interface OrderSuccessDialogProps {
   kitchenPortIndex?: number | null;
   kitchenBaudRate?: number;
   kitchenPrintMode?: "serial" | "browser";
+  kitchenPostPrintFeedLines?: number;
+  kitchenShowTearCutLine?: boolean;
+  kitchenDualCopies?: boolean;
 }
 
 export function OrderSuccessDialog({
@@ -54,6 +57,9 @@ export function OrderSuccessDialog({
   kitchenPortIndex = null,
   kitchenBaudRate = 9600,
   kitchenPrintMode = "browser",
+  kitchenPostPrintFeedLines = 4,
+  kitchenShowTearCutLine = true,
+  kitchenDualCopies = false,
 }: OrderSuccessDialogProps) {
   // Prefer assigned serial port for kitchen jobs; use browser only when explicitly unassigned.
   const handlePrint = async () => {
@@ -89,13 +95,21 @@ export function OrderSuccessDialog({
         return;
       }
       try {
-        const bytes = buildKitchenSlip({
-          orderNumber: orderData.orderNumber,
-          orderType: orderData.orderType,
-          tableNumber: orderData.tableNumber,
-          items: orderData.items,
-          createdAt: orderData.createdAt,
-        }, kitchenPaperWidth);
+        const bytes = buildKitchenSlip(
+          {
+            orderNumber: orderData.orderNumber,
+            orderType: orderData.orderType,
+            tableNumber: orderData.tableNumber,
+            items: orderData.items,
+            createdAt: orderData.createdAt,
+          },
+          kitchenPaperWidth,
+          {
+            postPrintFeedLines: kitchenPostPrintFeedLines,
+            showTearCutLine: kitchenShowTearCutLine,
+            dualKitchenCopies: kitchenDualCopies,
+          }
+        );
         await printViaSerial(kitchenPortIndex, bytes, kitchenBaudRate);
         toast.success("Kitchen slip printed");
         return;

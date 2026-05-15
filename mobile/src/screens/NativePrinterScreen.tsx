@@ -1,11 +1,41 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { getPrintCapability, PrinterTransport } from "../printer/printer-service";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
 import { useOutlet } from "../context/OutletContext";
 import { DiscoveredPrinter, scanBluetoothPrinters } from "../printer/bluetooth-ble-adapter";
 import { ClassicPrinterDevice, getPairedClassicPrinters } from "../printer/bluetooth-classic-adapter";
 import { tokens } from "../theme/tokens";
+
+async function openSystemBluetoothSettings(): Promise<void> {
+  try {
+    if (Platform.OS === "android") {
+      await Linking.openURL("intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end");
+      return;
+    }
+    await Linking.openSettings();
+  } catch {
+    try {
+      await Linking.openSettings();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+const ripple = { color: "rgba(249, 115, 22, 0.25)", borderless: false };
 
 export function NativePrinterScreen() {
   const { currentOutlet } = useOutlet();
@@ -75,12 +105,41 @@ export function NativePrinterScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Native Printers</Text>
-      <Text style={styles.text}>Configure only the required options for kitchen and billing print routing.</Text>
-      <Text style={styles.metaText}>Outlet: {currentOutlet?.name || "Global default"}</Text>
+      <View style={styles.hero}>
+        <Image
+          source={require("../../assets/icon.png")}
+          style={styles.heroLogo}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <View style={styles.heroTextCol}>
+          <Text style={styles.title}>Native printer settings</Text>
+          <Text style={styles.heroSubtitle}>
+            Same intent as the web app Printers tab: pick devices, then assign Kitchen and Billing.
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.outletLine}>Outlet: {currentOutlet?.name || "Global default"}</Text>
+
+      <View style={styles.callout}>
+        <Text style={styles.calloutTitle}>Mobile quick setup</Text>
+        <Text style={styles.calloutStep}>1. Pair printers in system Bluetooth first.</Text>
+        <Text style={styles.calloutStep}>2. Load paired Classic or scan BLE, then tap Kitchen or Billing on each device.</Text>
+        <Text style={styles.calloutStep}>3. Use different devices for each role when you can.</Text>
+        <Pressable
+          style={({ pressed }) => [styles.outlineBtn, pressed && styles.pressedOpacity]}
+          onPress={() => void openSystemBluetoothSettings()}
+          accessibilityRole="button"
+          accessibilityLabel="Open system Bluetooth settings"
+          android_ripple={ripple}
+        >
+          <Text style={styles.outlineBtnText}>Open Bluetooth settings</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Printer capability</Text>
+        <Text style={styles.cardDescription}>What this device can do for silent vs dialog printing.</Text>
         <Text style={styles.metaText}>Platform: {capability.platform}</Text>
         <Text style={styles.metaText}>
           Silent Bluetooth: {capability.supportsSilentBluetooth ? "Supported" : "Not supported"}
@@ -90,11 +149,35 @@ export function NativePrinterScreen() {
         </Text>
         <Text style={styles.text}>{capability.message}</Text>
         <View style={styles.scanRow}>
-          <Pressable style={[styles.scanBtn, styles.scanHalf]} onPress={scanClassicDevices} disabled={scanning}>
-            {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanText}>Load Paired Classic</Text>}
+          <Pressable
+            style={({ pressed }) => [
+              styles.scanBtn,
+              styles.scanHalf,
+              scanning && styles.btnDisabled,
+              pressed && !scanning && styles.pressedOpacity,
+            ]}
+            onPress={() => void scanClassicDevices()}
+            disabled={scanning}
+            accessibilityRole="button"
+            accessibilityLabel="Load paired classic Bluetooth printers"
+            android_ripple={ripple}
+          >
+            {scanning ? <ActivityIndicator color={tokens.colors.primaryForeground} /> : <Text style={styles.scanText}>Load Paired Classic</Text>}
           </Pressable>
-          <Pressable style={[styles.scanBtn, styles.scanHalf]} onPress={scanBleDevices} disabled={scanning}>
-            {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanText}>Scan BLE Devices</Text>}
+          <Pressable
+            style={({ pressed }) => [
+              styles.scanBtn,
+              styles.scanHalf,
+              scanning && styles.btnDisabled,
+              pressed && !scanning && styles.pressedOpacity,
+            ]}
+            onPress={() => void scanBleDevices()}
+            disabled={scanning}
+            accessibilityRole="button"
+            accessibilityLabel="Scan for BLE printers"
+            android_ripple={ripple}
+          >
+            {scanning ? <ActivityIndicator color={tokens.colors.primaryForeground} /> : <Text style={styles.scanText}>Scan BLE Devices</Text>}
           </Pressable>
         </View>
         <Text style={styles.metaText}>
@@ -109,28 +192,34 @@ export function NativePrinterScreen() {
               <Text style={styles.deviceId}>{device.id} · Classic</Text>
             </View>
             <Pressable
-              style={styles.assignBtn}
+              style={({ pressed }) => [styles.assignBtn, pressed && styles.pressedOpacity]}
               onPress={() =>
-                updateKitchen({
+                void updateKitchen({
                   enabled: true,
                   transport: "bluetooth-classic",
                   name: device.name,
                   connectionId: device.id,
                 })
               }
+              accessibilityRole="button"
+              accessibilityLabel={`Assign ${device.name} to kitchen`}
+              android_ripple={ripple}
             >
               <Text style={styles.assignText}>Kitchen</Text>
             </Pressable>
             <Pressable
-              style={styles.assignBtn}
+              style={({ pressed }) => [styles.assignBtn, pressed && styles.pressedOpacity]}
               onPress={() =>
-                updateBilling({
+                void updateBilling({
                   enabled: true,
                   transport: "bluetooth-classic",
                   name: device.name,
                   connectionId: device.id,
                 })
               }
+              accessibilityRole="button"
+              accessibilityLabel={`Assign ${device.name} to billing`}
+              android_ripple={ripple}
             >
               <Text style={styles.assignText}>Billing</Text>
             </Pressable>
@@ -143,28 +232,34 @@ export function NativePrinterScreen() {
               <Text style={styles.deviceId}>{device.id} · BLE</Text>
             </View>
             <Pressable
-              style={styles.assignBtn}
+              style={({ pressed }) => [styles.assignBtn, pressed && styles.pressedOpacity]}
               onPress={() =>
-                updateKitchen({
+                void updateKitchen({
                   enabled: true,
                   transport: "bluetooth-ble",
                   name: device.name,
                   connectionId: device.id,
                 })
               }
+              accessibilityRole="button"
+              accessibilityLabel={`Assign ${device.name} to kitchen`}
+              android_ripple={ripple}
             >
               <Text style={styles.assignText}>Kitchen</Text>
             </Pressable>
             <Pressable
-              style={styles.assignBtn}
+              style={({ pressed }) => [styles.assignBtn, pressed && styles.pressedOpacity]}
               onPress={() =>
-                updateBilling({
+                void updateBilling({
                   enabled: true,
                   transport: "bluetooth-ble",
                   name: device.name,
                   connectionId: device.id,
                 })
               }
+              accessibilityRole="button"
+              accessibilityLabel={`Assign ${device.name} to billing`}
+              android_ripple={ripple}
             >
               <Text style={styles.assignText}>Billing</Text>
             </Pressable>
@@ -271,6 +366,40 @@ export function NativePrinterScreen() {
             </Pressable>
           ))}
         </View>
+
+        <Text style={styles.sectionLabel}>Receipt layout</Text>
+        <Text style={styles.metaText}>Blank feed before cut (1–24). Lower saves paper.</Text>
+        <View style={styles.feedWrap}>
+          {[1, 2, 3, 4, 5, 6, 8, 10, 12, 16].map((n) => (
+            <Pressable
+              key={`k-feed-${n}`}
+              style={[
+                styles.feedChip,
+                settings.kitchenPrinter.postPrintFeedLines === n && styles.segmentBtnActive,
+              ]}
+              onPress={() => void updateKitchen({ postPrintFeedLines: n })}
+            >
+              <Text style={styles.feedChipText}>{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.rowBetween}>
+          <Text style={styles.label}>Tear / cut guide</Text>
+          <Switch
+            value={settings.kitchenPrinter.showTearCutLine}
+            onValueChange={(showTearCutLine) => void updateKitchen({ showTearCutLine })}
+          />
+        </View>
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.label}>Two slips (kitchen + table/parcel)</Text>
+            <Text style={styles.metaText}>One print: kitchen copy, then table or parcel copy.</Text>
+          </View>
+          <Switch
+            value={settings.kitchenPrinter.dualKitchenCopies}
+            onValueChange={(dualKitchenCopies) => void updateKitchen({ dualKitchenCopies })}
+          />
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -372,6 +501,40 @@ export function NativePrinterScreen() {
             </Pressable>
           ))}
         </View>
+
+        <Text style={styles.sectionLabel}>Receipt layout</Text>
+        <Text style={styles.metaText}>Blank feed before cut (1–24). Lower saves paper.</Text>
+        <View style={styles.feedWrap}>
+          {[1, 2, 3, 4, 5, 6, 8, 10, 12, 16].map((n) => (
+            <Pressable
+              key={`b-feed-${n}`}
+              style={[
+                styles.feedChip,
+                settings.billingPrinter.postPrintFeedLines === n && styles.segmentBtnActive,
+              ]}
+              onPress={() => void updateBilling({ postPrintFeedLines: n })}
+            >
+              <Text style={styles.feedChipText}>{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.rowBetween}>
+          <Text style={styles.label}>Tear / cut guide</Text>
+          <Switch
+            value={settings.billingPrinter.showTearCutLine}
+            onValueChange={(showTearCutLine) => void updateBilling({ showTearCutLine })}
+          />
+        </View>
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.label}>Counter + customer copies</Text>
+            <Text style={styles.metaText}>Full bill twice with tear line between.</Text>
+          </View>
+          <Switch
+            value={settings.billingPrinter.dualBillingCopies}
+            onValueChange={(dualBillingCopies) => void updateBilling({ dualBillingCopies })}
+          />
+        </View>
       </View>
     </ScrollView>
   );
@@ -380,35 +543,100 @@ export function NativePrinterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: tokens.colors.mutedBackground,
+    backgroundColor: tokens.colors.background,
   },
   content: {
-    padding: 14,
-    gap: 12,
-    paddingBottom: 32,
+    padding: 16,
+    gap: 14,
+    paddingBottom: 36,
+    backgroundColor: tokens.colors.background,
   },
-  title: { fontSize: 30, fontWeight: "800", color: tokens.colors.foreground },
+  hero: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+  },
+  heroLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+  },
+  heroTextCol: {
+    flex: 1,
+    gap: 6,
+  },
+  title: { fontSize: 22, fontWeight: "800", color: tokens.colors.foreground, letterSpacing: -0.3 },
+  heroSubtitle: {
+    color: tokens.colors.mutedForeground,
+    lineHeight: 20,
+    fontSize: 14,
+  },
+  outletLine: {
+    color: tokens.colors.mutedForeground,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  callout: {
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.lg,
+    backgroundColor: tokens.colors.warningBackground,
+    padding: 14,
+    gap: 8,
+  },
+  calloutTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: tokens.colors.foreground,
+  },
+  calloutStep: {
+    fontSize: 13,
+    color: tokens.colors.mutedForeground,
+    lineHeight: 19,
+    paddingLeft: 2,
+  },
+  outlineBtn: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: tokens.colors.background,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  outlineBtnText: {
+    color: tokens.colors.warningForeground,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  pressedOpacity: { opacity: 0.88 },
+  btnDisabled: { opacity: 0.55 },
   text: { color: tokens.colors.mutedForeground, lineHeight: 20, fontSize: 14 },
-  metaText: { color: "#64748b", lineHeight: 18, fontSize: 13 },
-  warnText: { color: "#9a3412", lineHeight: 18, fontWeight: "600", fontSize: 13 },
+  metaText: { color: tokens.colors.mutedForeground, lineHeight: 18, fontSize: 13 },
+  warnText: { color: tokens.colors.warningForeground, lineHeight: 18, fontWeight: "600", fontSize: 13 },
   card: {
     marginTop: 2,
     borderWidth: 1,
-    borderColor: "#fde2cf",
+    borderColor: tokens.colors.border,
     borderRadius: 14,
-    backgroundColor: "#fff",
+    backgroundColor: tokens.colors.card,
     padding: 14,
     gap: 10,
-    shadowColor: "#f97316",
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    ...tokens.shadows.card,
   },
   cardTitle: {
     fontWeight: "800",
-    fontSize: 18,
+    fontSize: 17,
     color: tokens.colors.foreground,
+  },
+  cardDescription: {
+    fontSize: 13,
+    color: tokens.colors.mutedForeground,
+    lineHeight: 18,
+    marginTop: -2,
   },
   rowBetween: {
     flexDirection: "row",
@@ -421,17 +649,17 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    borderRadius: 10,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
     paddingHorizontal: 10,
     paddingVertical: 9,
-    backgroundColor: "#fffaf5",
+    backgroundColor: tokens.colors.mutedBackground,
     color: tokens.colors.foreground,
   },
   scanBtn: {
     marginTop: 6,
     backgroundColor: tokens.colors.primary,
-    borderRadius: 10,
+    borderRadius: tokens.radius.md,
     paddingVertical: 11,
     alignItems: "center",
     justifyContent: "center",
@@ -442,7 +670,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   scanText: {
-    color: "#fff",
+    color: tokens.colors.primaryForeground,
     fontWeight: "800",
     fontSize: 12,
   },
@@ -460,16 +688,16 @@ const styles = StyleSheet.create({
   segmentBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    borderRadius: 10,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
     paddingVertical: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: tokens.colors.background,
   },
   segmentBtnActive: {
     borderColor: tokens.colors.primary,
-    backgroundColor: "#ffedd5",
+    backgroundColor: tokens.colors.warningBackground,
   },
   segmentText: {
     fontWeight: "800",
@@ -478,16 +706,16 @@ const styles = StyleSheet.create({
   },
   advancedBtn: {
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    borderRadius: 10,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
     paddingHorizontal: 10,
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff7ed",
+    backgroundColor: tokens.colors.mutedBackground,
   },
   advancedText: {
-    color: "#9a3412",
+    color: tokens.colors.warningForeground,
     fontWeight: "700",
     fontSize: 12,
   },
@@ -496,10 +724,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    borderRadius: 10,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
     padding: 8,
-    backgroundColor: "#fffaf5",
+    backgroundColor: tokens.colors.mutedBackground,
   },
   deviceName: {
     fontWeight: "700",
@@ -512,14 +740,38 @@ const styles = StyleSheet.create({
   assignBtn: {
     borderWidth: 1,
     borderColor: tokens.colors.primary,
-    borderRadius: 10,
+    borderRadius: tokens.radius.md,
     paddingHorizontal: 10,
     paddingVertical: 9,
-    backgroundColor: "#fff7ed",
+    backgroundColor: tokens.colors.warningBackground,
   },
   assignText: {
     fontWeight: "800",
-    color: "#9a3412",
+    color: tokens.colors.warningForeground,
     fontSize: 12,
+  },
+  sectionLabel: {
+    marginTop: 4,
+    fontWeight: "800",
+    fontSize: 14,
+    color: tokens.colors.foreground,
+  },
+  feedWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  feedChip: {
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: tokens.colors.card,
+  },
+  feedChipText: {
+    fontWeight: "800",
+    fontSize: 13,
+    color: tokens.colors.foreground,
   },
 });

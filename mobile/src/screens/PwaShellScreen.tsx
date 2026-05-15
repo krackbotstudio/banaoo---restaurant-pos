@@ -1,5 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  AppState,
+  InteractionManager,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import * as Updates from "expo-updates";
@@ -24,6 +35,16 @@ interface BridgeMessage {
 }
 
 const OTA_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
+/** If `onLoadEnd` never fires (redirect quirks, blank doc), do not block the shell forever. */
+const PAGE_READY_FAILSAFE_MS = 22_000;
+
+const INJECT_BEFORE_LOAD = `(function(){window.__BANAOO_NATIVE_PRINTER_BRIDGE__=true;window.__BANAOO_NATIVE_APP__=true;})();true;`;
+const INJECT_AFTER_LOAD = `(function(){try{Object.defineProperty(navigator,'serial',{value:undefined,configurable:true});}catch(e){}})();true;`;
+
+/** Chrome-like UA so PWAs that sniff WebView do not block the shell (Android). */
+const ANDROID_WEBVIEW_UA =
+  "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/0.5";
 
 function versionToParts(version: string): number[] {
   return version
@@ -94,8 +115,13 @@ function asBillingItems(input: unknown): BillingItem[] {
 
 export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   const [reloadKey, setReloadKey] = useState(0);
-  const [loading, setLoading] = useState(true);
+  /** Defer mounting WebView until after first interactions to reduce cold-start ANR risk. */
+  const [mountWeb, setMountWeb] = useState(false);
+  /** Main document finished loading (per WebView instance / reloadKey). */
+  const [pageReady, setPageReady] = useState(false);
+  const [slowLoadHint, setSlowLoadHint] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const firstLoadDoneRef = useRef(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [forceUpdateRequired, setForceUpdateRequired] = useState(false);
   const [forceUpdateMessage, setForceUpdateMessage] = useState<string | null>(null);
@@ -156,6 +182,21 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (!cancelled) setMountWeb(true);
+    });
+    const fallback = setTimeout(() => {
+      if (!cancelled) setMountWeb(true);
+    }, 2000);
+    return () => {
+      cancelled = true;
+      task.cancel();
+      clearTimeout(fallback);
+    };
+  }, []);
+
+  useEffect(() => {
     const onUrl = ({ url: incomingUrl }: { url: string }) => {
       if (incomingUrl.toLowerCase().startsWith("banaoo://")) {
         setLoadError(null);
@@ -168,10 +209,28 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   }, []);
 
   useEffect(() => {
-    // Failsafe: some WebView navigations can keep firing load-start events.
-    const timer = setTimeout(() => setLoading(false), 12000);
-    return () => clearTimeout(timer);
+    firstLoadDoneRef.current = false;
+    setPageReady(false);
+    setSlowLoadHint(false);
   }, [reloadKey]);
+
+  useEffect(() => {
+    if (!mountWeb || pageReady || !WEBAPP_URL) {
+      return;
+    }
+    setSlowLoadHint(false);
+    const slowTimer = setTimeout(() => setSlowLoadHint(true), 8000);
+    return () => clearTimeout(slowTimer);
+  }, [mountWeb, pageReady, reloadKey]);
+
+  useEffect(() => {
+    if (!mountWeb || pageReady || loadError) return;
+    const t = setTimeout(() => {
+      setPageReady(true);
+      setSlowLoadHint(false);
+    }, PAGE_READY_FAILSAFE_MS);
+    return () => clearTimeout(t);
+  }, [mountWeb, pageReady, loadError, reloadKey]);
 
   useEffect(() => {
     void checkForOtaUpdate();
@@ -208,7 +267,8 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const payload = parsed.payload as Record<string, unknown>;
     const outletId = typeof payload.outletId === "string" ? payload.outletId : undefined;
     const settings = await loadEffectivePrinterSettings(outletId);
-    const requestedPaperWidth = payload.paperWidth === 80 ? 80 : payload.paperWidth === 58 ? 58 : undefined;
+    const requestedPaperWidth: 58 | 80 | undefined =
+      payload.paperWidth === 80 ? 80 : payload.paperWidth === 58 ? 58 : undefined;
 
     if (parsed.role === "kitchen") {
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
@@ -266,35 +326,58 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     );
   }
 
+  if (!mountWeb) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.startGate}>
+          <ActivityIndicator size="large" color={tokens.colors.primary} />
+          <Text style={styles.startGateText}>Starting…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <Modal visible={!pageReady && !loadError} transparent animationType="fade">
+        <View style={styles.loadModalRoot} pointerEvents="box-none">
+          <View style={styles.loadModalCard}>
+            <ActivityIndicator size="large" color={tokens.colors.primary} />
+            <Text style={styles.loadModalTitle}>Loading POS…</Text>
+            {slowLoadHint ? (
+              <Text style={styles.loadModalHint}>Taking longer than usual — check your connection.</Text>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
       {loadError ? (
         <View style={styles.errorStrip}>
           <Text style={styles.errorText}>{loadError}</Text>
-        </View>
-      ) : null}
-      {loading ? (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator />
-          <Text style={styles.loadingText}>Loading POS...</Text>
         </View>
       ) : null}
       <WebView
         key={`pwa-shell-${reloadKey}`}
         source={{ uri: url }}
         style={styles.webview}
-        injectedJavaScriptBeforeContentLoaded={`(function(){window.__BANAOO_NATIVE_PRINTER_BRIDGE__=true;window.__BANAOO_NATIVE_APP__=true;try{Object.defineProperty(navigator,'serial',{value:undefined,configurable:true});}catch(e){}})();true;`}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
-        onLoadProgress={({ nativeEvent }) => {
-          if (nativeEvent.progress >= 0.9) setLoading(false);
+        userAgent={Platform.OS === "android" ? ANDROID_WEBVIEW_UA : undefined}
+        injectedJavaScriptBeforeContentLoaded={INJECT_BEFORE_LOAD}
+        injectedJavaScript={INJECT_AFTER_LOAD}
+        onLoadStart={() => {}}
+        onLoadEnd={() => {
+          firstLoadDoneRef.current = true;
+          setPageReady(true);
+          setSlowLoadHint(false);
         }}
         onError={({ nativeEvent }) => {
-          setLoading(false);
+          firstLoadDoneRef.current = true;
+          setPageReady(true);
+          setSlowLoadHint(false);
           setLoadError(`WebView error: ${nativeEvent.description || "Failed to load POS."}`);
         }}
         onHttpError={({ nativeEvent }) => {
-          setLoading(false);
+          firstLoadDoneRef.current = true;
+          setPageReady(true);
+          setSlowLoadHint(false);
           setLoadError(`POS HTTP error: ${nativeEvent.statusCode}`);
         }}
         sharedCookiesEnabled
@@ -339,23 +422,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: tokens.colors.background,
   },
-  loadingOverlay: {
-    position: "absolute",
-    zIndex: 10,
-    top: 0,
-    left: 0,
-    right: 0,
-    padding: 8,
-    backgroundColor: tokens.colors.warningBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: tokens.colors.border,
-    flexDirection: "row",
+  startGate: {
+    flex: 1,
+    alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 16,
+    padding: 24,
   },
-  loadingText: {
-    color: tokens.colors.warningForeground,
+  startGateText: {
+    fontSize: 15,
     fontWeight: "600",
+    color: tokens.colors.mutedForeground,
+  },
+  loadModalRoot: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  loadModalCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    maxWidth: 280,
+  },
+  loadModalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: tokens.colors.mutedForeground,
+    textAlign: "center",
+  },
+  loadModalHint: {
+    fontSize: 13,
+    color: tokens.colors.mutedForeground,
+    textAlign: "center",
+    lineHeight: 18,
   },
   errorStrip: {
     paddingHorizontal: 10,

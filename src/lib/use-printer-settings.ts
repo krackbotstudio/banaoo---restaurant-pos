@@ -14,6 +14,14 @@ export interface PrinterConfig {
   printMode: PrintMode;    // "serial" = Web Serial COM port; "browser" = window.print() dialog
   lastTestedAt?: string;   // ISO timestamp, set when test print runs
   usbPortIndex: number | null; // index into navigator.serial.getPorts(); null = not assigned
+  /** ESC/POS line feeds before cut (1–24). Lower = less blank paper between jobs. */
+  postPrintFeedLines: number;
+  /** Print a dashed tear guide before final cut and between duplicate copies. */
+  showTearCutLine: boolean;
+  /** Kitchen: print second slip (Table copy for dine-in, Parcel copy for takeaway). */
+  dualKitchenCopies: boolean;
+  /** Billing: print Counter + Customer copies in one job. */
+  dualBillingCopies: boolean;
 }
 
 export interface OutletPrinterSettings {
@@ -31,6 +39,10 @@ const DEFAULT_PRINTER: PrinterConfig = {
   baudRate: 9600,
   printMode: "browser",
   usbPortIndex: null,
+  postPrintFeedLines: 4,
+  showTearCutLine: true,
+  dualKitchenCopies: false,
+  dualBillingCopies: false,
 };
 
 const DEFAULT_SETTINGS: OutletPrinterSettings = {
@@ -41,6 +53,12 @@ const DEFAULT_SETTINGS: OutletPrinterSettings = {
 
 function normalizePrinterConfig(raw?: Partial<PrinterConfig>): PrinterConfig {
   const merged: PrinterConfig = { ...DEFAULT_PRINTER, ...raw };
+  const feed = merged.postPrintFeedLines;
+  merged.postPrintFeedLines =
+    typeof feed === "number" && Number.isFinite(feed) ? Math.min(24, Math.max(1, Math.round(feed))) : DEFAULT_PRINTER.postPrintFeedLines;
+  merged.showTearCutLine = merged.showTearCutLine !== false;
+  merged.dualKitchenCopies = merged.dualKitchenCopies === true;
+  merged.dualBillingCopies = merged.dualBillingCopies === true;
 
   // Backward-compat: older builds stored usbPortIndex from Connected Printers
   // but left printMode as browser, so both jobs went through window.print().

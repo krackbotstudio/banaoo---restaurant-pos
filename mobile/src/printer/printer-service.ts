@@ -3,6 +3,7 @@ import {
   BillingReceiptPayload,
   buildBillingReceipt,
   buildKitchenSlip,
+  EscPosPrintOptions,
   KitchenSlipPayload,
 } from "./escpos";
 import { printViaBle } from "./bluetooth-ble-adapter";
@@ -21,6 +22,10 @@ export interface RolePrinterConfig {
   paperWidth: 58 | 80;
   fontSize: number;
   mode: PrinterMode;
+  postPrintFeedLines: number;
+  showTearCutLine: boolean;
+  dualKitchenCopies: boolean;
+  dualBillingCopies: boolean;
 }
 
 export interface MobilePrinterSettings {
@@ -79,6 +84,10 @@ export const DEFAULT_ROLE_PRINTER: RolePrinterConfig = {
   paperWidth: 58,
   fontSize: 12,
   mode: "silent",
+  postPrintFeedLines: 4,
+  showTearCutLine: true,
+  dualKitchenCopies: false,
+  dualBillingCopies: false,
 };
 
 export const DEFAULT_MOBILE_PRINTER_SETTINGS: MobilePrinterSettings = {
@@ -168,6 +177,15 @@ async function executePrint(
   };
 }
 
+function escPosOptionsFromRole(config: RolePrinterConfig): EscPosPrintOptions {
+  return {
+    postPrintFeedLines: config.postPrintFeedLines,
+    showTearCutLine: config.showTearCutLine,
+    dualKitchenCopies: config.dualKitchenCopies,
+    dualBillingCopies: config.dualBillingCopies,
+  };
+}
+
 export async function printKitchenSlip(
   settings: MobilePrinterSettings,
   data: KitchenSlipPayload
@@ -176,7 +194,8 @@ export async function printKitchenSlip(
   const payload = buildKitchenSlip(
     data,
     settings.kitchenPrinter.paperWidth,
-    settings.kitchenPrinter.fontSize
+    settings.kitchenPrinter.fontSize,
+    escPosOptionsFromRole(settings.kitchenPrinter)
   );
   return executePrint("kitchen", settings.kitchenPrinter, capability, payload);
 }
@@ -189,7 +208,8 @@ export async function printBillingReceipt(
   const payload = buildBillingReceipt(
     data,
     settings.billingPrinter.paperWidth,
-    settings.billingPrinter.fontSize
+    settings.billingPrinter.fontSize,
+    escPosOptionsFromRole(settings.billingPrinter)
   );
   return executePrint("billing", settings.billingPrinter, capability, payload);
 }

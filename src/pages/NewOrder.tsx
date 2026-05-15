@@ -996,6 +996,9 @@ export default function NewOrder() {
         kitchenPortIndex={printerSettings.kitchenPrinter.usbPortIndex}
         kitchenBaudRate={printerSettings.kitchenPrinter.baudRate}
         kitchenPrintMode={printerSettings.kitchenPrinter.printMode}
+        kitchenPostPrintFeedLines={printerSettings.kitchenPrinter.postPrintFeedLines}
+        kitchenShowTearCutLine={printerSettings.kitchenPrinter.showTearCutLine}
+        kitchenDualCopies={printerSettings.kitchenPrinter.dualKitchenCopies}
       />
 
       <VoicePOSOrder

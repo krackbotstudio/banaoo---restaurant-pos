@@ -22,6 +22,32 @@ This folder contains the separate React Native (Expo) mobile app.
    - from repo root: `npm run mobile:start`
    - or from this folder: `npm run start`
 
+## Android emulator (quick native testing)
+
+1. **Android Studio** → Device Manager → create/start a virtual device (AVD).
+2. **JDK 21** (Temurin) and **`EXPO_PUBLIC_*`** / `.env` as in [Setup](#setup) above.
+3. From **`mobile/`** run one of:
+   - **`npm.cmd run android`** — standard `expo run:android` (uses your current folder; may hit Windows path-length limits in deep folders).
+   - **`npm.cmd run android:emulator`** — runs **`scripts/run-android-emulator.ps1`**, which uses a short **`D:\_bnmob`** junction to the `mobile` folder (same workaround as release APK builds) then **`npx expo run:android`**. Prefer this if CMake/Ninja fails with *filename longer than 260 characters*.
+   - Or double-click **`run-android-emulator.cmd`** (forwards extra args, e.g. `run-android-emulator.cmd --device`).
+
+First run compiles a **debug** install and opens the app on the running emulator. Keep Metro running; use **`r`** in the terminal to reload.
+
+## Splash screen vs loading
+
+- **Native splash (Android)**: solid **`#ffffff`** only (no logo). `SplashScreen.hideAsync()` runs on first paint in [`App.tsx`](App.tsx). The launcher theme uses `android/app/src/main/res/drawable/splashscreen_logo.xml` as a same-color tile so the OS splash screen API does not show branded artwork.
+- **POS shell**: WebView mounts after `InteractionManager.runAfterInteractions` (with a 2s fallback) to reduce cold-start jank. A **`Modal`** shows “Loading POS…” until `onLoadEnd` so the spinner is not hidden behind the native WebView on Android.
+- **Expo Updates**: `AndroidManifest` uses **`EXPO_UPDATES_CHECK_ON_LAUNCH = NEVER`** so launch is not blocked by an EAS Update fetch; the app still checks from JS in [`PwaShellScreen.tsx`](src/screens/PwaShellScreen.tsx).
+
+## Launcher icon and splash image (Android adaptive safe zone)
+
+Android adaptive icons mask the foreground into a circle/squircle; artwork should sit inside the **~66% center safe zone** of a 1024×1024 image (see [Adaptive icons](https://developer.android.com/develop/ui/views/launch/icon_design_adaptive)).
+
+- Put your **full-bleed** logo in `assets/icon.png` (high resolution), then from **`mobile/`** run:
+  - **`npm.cmd run icons:generate`** — writes padded **`adaptive-icon.png`**, **`icon.png`**, and **`splash.png`** (white background, logo scaled to fit the safe zone).
+- Re-running on **already padded** `icon.png` will shrink the logo again; replace `icon.png` with your master artwork before each generate if you need to tweak.
+- Rebuild the native app (`expo prebuild` / EAS / local Gradle) so the new bitmaps are packaged.
+
 ## WebView-first architecture
 
 - The app now loads the full deployed POS PWA in a single WebView shell.
@@ -51,6 +77,7 @@ This folder contains the separate React Native (Expo) mobile app.
 3. Build production APK:
    - `npx eas-cli build --platform android --profile production --non-interactive`
 4. Download artifact from the EAS build URL shown in CLI output and install on Android.
+5. Local release (Windows): from `mobile/`, run `.\scripts\build-release-apk.ps1`. The release APK is written as **`banaoo-app-v<versionName>.apk`** (e.g. `banaoo-app-v0.5.apk`) under `android/app/build/outputs/apk/release/`, or `app-release.apk` if a custom name is not applied.
 
 ## Quick verification checklist
 

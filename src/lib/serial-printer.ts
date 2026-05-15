@@ -50,19 +50,28 @@ class EscPosDoc {
 // ── Paper width → character columns ─────────────────────────────────────────
 const cols = (pw: 58 | 80) => (pw === 58 ? 32 : 48);
 
-// ── Kitchen slip ──────────────────────────────────────────────────────────────
-export interface KitchenSlipData {
-  orderNumber: string;
-  orderType: "dine_in" | "takeaway";
-  tableNumber?: string;
-  items: { name: string; quantity: number }[];
-  createdAt: Date;
+/** Options for ESC/POS layout (thermal spacing, tear guide, duplicate copies). */
+export interface EscPosPrintOptions {
+  postPrintFeedLines?: number;
+  showTearCutLine?: boolean;
+  dualKitchenCopies?: boolean;
+  dualBillingCopies?: boolean;
 }
 
-export function buildKitchenSlip(data: KitchenSlipData, paperWidth: 58 | 80 = 58): Uint8Array {
-  const w = cols(paperWidth);
-  const d = new EscPosDoc().init();
+function clampPostPrintFeed(n: number | undefined, fallback = 4): number {
+  if (n == null || !Number.isFinite(n)) return fallback;
+  return Math.min(24, Math.max(1, Math.round(n)));
+}
 
+function appendTearCutLine(d: EscPosDoc, width: number) {
+  d.line("");
+  d.align("C").dashes(width);
+  d.align("C").bold(true).line("- - - CUT / TEAR - - -").bold(false);
+  d.align("C").dashes(width);
+  d.line("");
+}
+
+function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipData, w: number) {
   const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
@@ -86,8 +95,45 @@ export function buildKitchenSlip(data: KitchenSlipData, paperWidth: 58 | 80 = 58
   }
 
   d.dashes(w);
-  d.align("C").line("-- Kitchen Copy --");
-  d.feed(4).cut();
+}
+
+// ── Kitchen slip ──────────────────────────────────────────────────────────────
+export interface KitchenSlipData {
+  orderNumber: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: { name: string; quantity: number }[];
+  createdAt: Date;
+}
+
+export function buildKitchenSlip(
+  data: KitchenSlipData,
+  paperWidth: 58 | 80 = 58,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = cols(paperWidth);
+  const d = new EscPosDoc().init();
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const dual = options?.dualKitchenCopies === true;
+
+  if (!dual) {
+    writeKitchenSlipBody(d, data, w);
+    d.align("C").line("-- Kitchen Copy --");
+    if (showCut) appendTearCutLine(d, w);
+    d.feed(feed).cut();
+    return d.bytes();
+  }
+
+  writeKitchenSlipBody(d, data, w);
+  d.align("C").bold(true).line("* KITCHEN COPY *").bold(false);
+  if (showCut) appendTearCutLine(d, w);
+
+  writeKitchenSlipBody(d, data, w);
+  const secondLabel = data.orderType === "takeaway" ? "* PARCEL COPY *" : "* TABLE COPY *";
+  d.align("C").bold(true).line(secondLabel).bold(false);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
 
   return d.bytes();
 }
@@ -110,21 +156,15 @@ export interface BillingReceiptData {
   createdAt: Date;
 }
 
-export function buildBillingReceipt(data: BillingReceiptData, paperWidth: 58 | 80 = 58): Uint8Array {
-  const w = cols(paperWidth);
-  const fmt = (n: number) => "Rs." + n.toFixed(2);
-  const d = new EscPosDoc().init();
-
+function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptData, w: number, fmt: (n: number) => string) {
   const dateStr = new Intl.DateTimeFormat("en-IN", {
     day: "2-digit", month: "2-digit", year: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: true,
   }).format(data.createdAt);
 
-  // Header
   d.align("C").bold(true).line(data.outletName.slice(0, w)).bold(false);
   if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
 
-  // Order meta
   d.align("L").dashes(w);
   d.cols("Order #", data.orderNumber, w);
   d.cols("Date", dateStr, w);
@@ -133,7 +173,6 @@ export function buildBillingReceipt(data: BillingReceiptData, paperWidth: 58 | 8
     d.bold(true).cols("Table", data.tableNumber, w).bold(false);
   }
 
-  // Items
   d.dashes(w);
   d.bold(true).line("ITEM" + " ".repeat(w - 11) + "QTY  AMT").bold(false);
 
@@ -151,7 +190,6 @@ export function buildBillingReceipt(data: BillingReceiptData, paperWidth: 58 | 8
     }
   }
 
-  // Totals
   d.dashes(w);
   d.cols("Subtotal", fmt(data.subtotal), w);
   if (data.discountAmt > 0) {
@@ -164,11 +202,38 @@ export function buildBillingReceipt(data: BillingReceiptData, paperWidth: 58 | 8
   d.dashes(w);
   d.bold(true).size(false, true).cols("TOTAL", fmt(data.grandTotal), w).size(false, false).bold(false);
 
-  // Footer
   d.dashes(w);
   d.align("C").line("Thank you!").line("Visit us again soon");
   d.line("Powered by banaoo.in");
-  d.feed(4).cut();
+}
+
+export function buildBillingReceipt(
+  data: BillingReceiptData,
+  paperWidth: 58 | 80 = 58,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = cols(paperWidth);
+  const fmt = (n: number) => "Rs." + n.toFixed(2);
+  const d = new EscPosDoc().init();
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const dual = options?.dualBillingCopies === true;
+
+  if (!dual) {
+    writeBillingReceiptBody(d, data, w, fmt);
+    if (showCut) appendTearCutLine(d, w);
+    d.feed(feed).cut();
+    return d.bytes();
+  }
+
+  d.align("C").bold(true).line("*** COUNTER COPY ***").bold(false);
+  writeBillingReceiptBody(d, data, w, fmt);
+  if (showCut) appendTearCutLine(d, w);
+
+  d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
+  writeBillingReceiptBody(d, data, w, fmt);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
 
   return d.bytes();
 }

@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "mobile:start": "npm --prefix mobile run start",
     "mobile:android": "npm --prefix mobile run android",
+    "mobile:android:emulator": "npm --prefix mobile run android:emulator",
     "mobile:ios": "npm --prefix mobile run ios",
     "mobile:web": "npm --prefix mobile run web"
   },

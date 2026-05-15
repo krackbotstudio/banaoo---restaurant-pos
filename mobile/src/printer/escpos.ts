@@ -71,40 +71,28 @@ class EscPosDoc {
 
 const columns = (paperWidth: 58 | 80) => (paperWidth === 58 ? 32 : 48);
 
-export interface KitchenSlipPayload {
-  orderNumber: string;
-  orderType: "dine_in" | "takeaway";
-  tableNumber?: string;
-  items: Array<{ name: string; quantity: number }>;
-  createdAt: Date;
+/** ESC/POS layout options (matches web `serial-printer` behavior). */
+export interface EscPosPrintOptions {
+  postPrintFeedLines?: number;
+  showTearCutLine?: boolean;
+  dualKitchenCopies?: boolean;
+  dualBillingCopies?: boolean;
 }
 
-export interface BillingReceiptPayload {
-  orderNumber: string;
-  outletName: string;
-  gstNumber?: string | null;
-  orderType: "dine_in" | "takeaway";
-  tableNumber?: string;
-  items: Array<{ name: string; quantity: number; totalPrice: number; gstRate?: number }>;
-  subtotal: number;
-  discountAmt: number;
-  discountPercent?: number;
-  serviceTax: number;
-  serviceTaxPercent: number;
-  gstTotal: number;
-  grandTotal: number;
-  createdAt: Date;
+function clampPostPrintFeed(n: number | undefined, fallback = 4): number {
+  if (n == null || !Number.isFinite(n)) return fallback;
+  return Math.min(24, Math.max(1, Math.round(n)));
 }
 
-export function buildKitchenSlip(
-  data: KitchenSlipPayload,
-  paperWidth: 58 | 80 = 58,
-  fontSize = 12
-): Uint8Array {
-  const w = columns(paperWidth);
-  const d = new EscPosDoc().init();
-  const condensed = fontSize <= 11;
-  d.font(condensed);
+function appendTearCutLine(d: EscPosDoc, width: number) {
+  d.line("");
+  d.align("C").dashes(width);
+  d.align("C").bold(true).line("- - - CUT / TEAR - - -").bold(false);
+  d.align("C").dashes(width);
+  d.line("");
+}
+
+function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number) {
   const time = data.createdAt.toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -129,20 +117,10 @@ export function buildKitchenSlip(
     d.cols(name, qty, w);
   }
 
-  d.dashes(w).align("C").line("-- Kitchen Copy --").feed(4).cut();
-  return d.bytes();
+  d.dashes(w);
 }
 
-export function buildBillingReceipt(
-  data: BillingReceiptPayload,
-  paperWidth: 58 | 80 = 58,
-  fontSize = 12
-): Uint8Array {
-  const w = columns(paperWidth);
-  const d = new EscPosDoc().init();
-  const condensed = fontSize <= 11;
-  d.font(condensed);
-  const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
+function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptPayload, w: number, fmt: (n: number) => string) {
   const date = data.createdAt.toLocaleString("en-IN", {
     day: "2-digit",
     month: "2-digit",
@@ -185,6 +163,96 @@ export function buildBillingReceipt(
   if (data.serviceTax > 0) d.cols(`Service (${data.serviceTaxPercent}%)`, "+" + fmt(data.serviceTax), w);
   d.dashes(w);
   d.bold(true).size(false, true).cols("TOTAL", fmt(data.grandTotal), w).size(false, false).bold(false);
-  d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by banaoo.in").feed(4).cut();
+  d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by banaoo.in");
+}
+
+export interface KitchenSlipPayload {
+  orderNumber: string;  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: Array<{ name: string; quantity: number }>;
+  createdAt: Date;
+}
+
+export interface BillingReceiptPayload {
+  orderNumber: string;
+  outletName: string;
+  gstNumber?: string | null;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: Array<{ name: string; quantity: number; totalPrice: number; gstRate?: number }>;
+  subtotal: number;
+  discountAmt: number;
+  discountPercent?: number;
+  serviceTax: number;
+  serviceTaxPercent: number;
+  gstTotal: number;
+  grandTotal: number;
+  createdAt: Date;
+}
+
+export function buildKitchenSlip(
+  data: KitchenSlipPayload,
+  paperWidth: 58 | 80 = 58,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = columns(paperWidth);
+  const d = new EscPosDoc().init();
+  const condensed = fontSize <= 11;
+  d.font(condensed);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const dual = options?.dualKitchenCopies === true;
+
+  if (!dual) {
+    writeKitchenSlipBody(d, data, w);
+    d.align("C").line("-- Kitchen Copy --");
+    if (showCut) appendTearCutLine(d, w);
+    d.feed(feed).cut();
+    return d.bytes();
+  }
+
+  writeKitchenSlipBody(d, data, w);
+  d.align("C").bold(true).line("* KITCHEN COPY *").bold(false);
+  if (showCut) appendTearCutLine(d, w);
+
+  writeKitchenSlipBody(d, data, w);
+  const secondLabel = data.orderType === "takeaway" ? "* PARCEL COPY *" : "* TABLE COPY *";
+  d.align("C").bold(true).line(secondLabel).bold(false);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
+export function buildBillingReceipt(
+  data: BillingReceiptPayload,
+  paperWidth: 58 | 80 = 58,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = columns(paperWidth);
+  const d = new EscPosDoc().init();
+  const condensed = fontSize <= 11;
+  d.font(condensed);
+  const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const dual = options?.dualBillingCopies === true;
+
+  if (!dual) {
+    writeBillingReceiptBody(d, data, w, fmt);
+    if (showCut) appendTearCutLine(d, w);
+    d.feed(feed).cut();
+    return d.bytes();
+  }
+
+  d.align("C").bold(true).line("*** COUNTER COPY ***").bold(false);
+  writeBillingReceiptBody(d, data, w, fmt);
+  if (showCut) appendTearCutLine(d, w);
+
+  d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
+  writeBillingReceiptBody(d, data, w, fmt);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
   return d.bytes();
 }

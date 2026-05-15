@@ -76,6 +76,7 @@ function PortDetectionPanel({
   const [portNames, setPortNames] = useState<Record<number, string>>({});
   const [editingPort, setEditingPort] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [openingNativePrinters, setOpeningNativePrinters] = useState(false);
   const inNativeApp = isNativePrinterBridgeExpected();
   const supported = isWebSerialSupported() && !inNativeApp;
   const isMobile = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -208,14 +209,24 @@ function PortDetectionPanel({
               <Button
                 size="sm"
                 className="gap-2"
+                disabled={openingNativePrinters}
                 onClick={() => {
+                  setOpeningNativePrinters(true);
                   const opened = openNativePrinterSettings();
                   if (!opened) {
                     toast.error("Native printer settings bridge is unavailable. Please reopen the app.");
+                    setOpeningNativePrinters(false);
+                  } else {
+                    toast.success("Opening native printer settings…");
+                    window.setTimeout(() => setOpeningNativePrinters(false), 220);
                   }
                 }}
               >
-                <Bluetooth className="h-4 w-4" />
+                {openingNativePrinters ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Bluetooth className="h-4 w-4" />
+                )}
                 Open Native Printer Settings
               </Button>
             </div>
@@ -470,28 +481,41 @@ function PrinterCard({
       if (config.printMode === "serial" && config.usbPortIndex !== null) {
         try {
           const now = new Date();
+          const escOpts = {
+            postPrintFeedLines: config.postPrintFeedLines,
+            showTearCutLine: config.showTearCutLine,
+            ...(isKitchen ? { dualKitchenCopies: config.dualKitchenCopies } : { dualBillingCopies: config.dualBillingCopies }),
+          };
           const bytes = isKitchen
-            ? buildKitchenSlip({
-                orderNumber: "TEST",
-                orderType: "dine_in",
-                tableNumber: "1",
-                items: [{ name: "Test Item", quantity: 1 }],
-                createdAt: now,
-              }, config.paperWidth)
-            : buildBillingReceipt({
-                orderNumber: "TEST",
-                outletName: config.name || "My Restaurant",
-                orderType: "dine_in",
-                tableNumber: "1",
-                items: [{ name: "Test Item", quantity: 1, totalPrice: 100, gstRate: 5 }],
-                subtotal: 100,
-                discountAmt: 0,
-                serviceTax: 0,
-                serviceTaxPercent: 0,
-                gstTotal: 5,
-                grandTotal: 105,
-                createdAt: now,
-              }, config.paperWidth);
+            ? buildKitchenSlip(
+                {
+                  orderNumber: "TEST",
+                  orderType: "dine_in",
+                  tableNumber: "1",
+                  items: [{ name: "Test Item", quantity: 1 }],
+                  createdAt: now,
+                },
+                config.paperWidth,
+                escOpts
+              )
+            : buildBillingReceipt(
+                {
+                  orderNumber: "TEST",
+                  outletName: config.name || "My Restaurant",
+                  orderType: "dine_in",
+                  tableNumber: "1",
+                  items: [{ name: "Test Item", quantity: 1, totalPrice: 100, gstRate: 5 }],
+                  subtotal: 100,
+                  discountAmt: 0,
+                  serviceTax: 0,
+                  serviceTaxPercent: 0,
+                  gstTotal: 5,
+                  grandTotal: 105,
+                  createdAt: now,
+                },
+                config.paperWidth,
+                escOpts
+              );
           await printViaSerial(config.usbPortIndex, bytes, config.baudRate);
           toast.success("Test printed successfully");
           onUpdate({ lastTestedAt: new Date().toISOString() });
@@ -700,6 +724,68 @@ function PrinterCard({
               className="flex-1 h-2 accent-primary cursor-pointer"
             />
             <span className="text-xs text-muted-foreground w-6 text-right">16</span>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-semibold">Receipt layout (thermal)</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Used for ESC/POS serial printing. Fewer feed lines save paper between bills.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-sm">Blank feed before cut</Label>
+              <span className="text-sm font-semibold tabular-nums bg-muted px-2 py-0.5 rounded">
+                {config.postPrintFeedLines}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground w-5">1</span>
+              <input
+                type="range"
+                min={1}
+                max={24}
+                step={1}
+                value={config.postPrintFeedLines}
+                onChange={(e) => onUpdate({ postPrintFeedLines: Number(e.target.value) })}
+                className="flex-1 h-2 accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground w-6 text-right">24</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Tear / cut guide</Label>
+              <p className="text-xs text-muted-foreground">
+                Dashed line and “CUT / TEAR” before the cutter (and between duplicate copies).
+              </p>
+            </div>
+            <Switch
+              checked={config.showTearCutLine}
+              onCheckedChange={(checked) => onUpdate({ showTearCutLine: checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm">
+                {isKitchen ? "Two kitchen slips" : "Counter + customer copies"}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {isKitchen
+                  ? "Kitchen copy, then Table (dine-in) or Parcel (takeaway) copy in one print job."
+                  : "Prints the full bill twice with labels for counter and customer."}
+              </p>
+            </div>
+            <Switch
+              checked={isKitchen ? config.dualKitchenCopies : config.dualBillingCopies}
+              onCheckedChange={(checked) =>
+                isKitchen ? onUpdate({ dualKitchenCopies: checked }) : onUpdate({ dualBillingCopies: checked })
+              }
+            />
           </div>
         </div>
 

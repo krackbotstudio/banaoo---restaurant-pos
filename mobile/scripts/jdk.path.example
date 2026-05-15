@@ -1,0 +1,11 @@
+# Copy this file to jdk.path (same folder). Put exactly ONE line: the JDK root folder that contains bin\java.exe
+# (Android Studio's bundled runtime is usually named "jbr"; a standalone JDK is often jdk-21, jdk-17, etc.).
+#
+# In Android Studio: File -> Settings -> Build, Execution, Deployment -> Build Tools -> Gradle -> Gradle JDK
+# Pick "jbr-21" (or similar) -> click folder icon to see path, or use Help -> About -> Copy path.
+#
+# Example (your path will differ):
+# F:\Android\Android Studio\jbr
+#
+# If you only installed Java 26+, Gradle will fail ("Unsupported class file major version 70").
+# Install JDK 21 LTS and point jdk.path or JAVA_HOME to that folder (not jdk-26).

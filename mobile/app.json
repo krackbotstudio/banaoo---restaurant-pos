@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Banaoo POS",
+    "name": "Banaoo App",
     "slug": "banaoo-pos-mobile",
     "scheme": "banaoo",
-    "version": "1.0.0",
+    "version": "0.5",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/ff1f4b1f-181e-415c-a2db-2e70d060a4f2",
-      "checkAutomatically": "ON_LOAD",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "fallbackToCacheTimeout": 0
     },
     "orientation": "portrait",
@@ -17,9 +17,8 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#ffffff",
+      "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": true,
@@ -53,7 +52,14 @@
     },
     "owner": "krackbotstudio",
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "resizeMode": "contain"
+        }
+      ]
     ]
   }
 }

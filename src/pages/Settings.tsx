@@ -108,6 +108,7 @@ export default function Settings() {
   const [planMonths, setPlanMonths] = useState(1);
   const [payingPlan, setPayingPlan] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [openingNativePrinters, setOpeningNativePrinters] = useState(false);
 
   const BASE_PRICES: Record<string, number> = { starter: 999, professional: 2499 };
   const DISCOUNTS: Record<number, number> = { 1: 0, 3: 0.05, 6: 0.10, 12: 0.20 };
@@ -362,7 +363,7 @@ export default function Settings() {
           }}
           className="space-y-6"
         >
-          <div className="sm:hidden sticky top-14 z-40 bg-background py-2 border-b border-border shadow-sm">
+          <div className="sm:hidden sticky top-14 z-40 border-b border-border bg-background/95 py-3 px-3 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-background/85">
             <Select
               value={activeTab}
               onValueChange={(nextTab) => {
@@ -370,10 +371,10 @@ export default function Settings() {
                 if (nextTab === "outlets") void fetchOutletsList();
               }}
             >
-              <SelectTrigger className="h-10 bg-background">
+              <SelectTrigger className="h-11 min-h-[44px] w-full rounded-lg border-border bg-background text-left font-medium">
                 <SelectValue placeholder="Select settings section" />
               </SelectTrigger>
-              <SelectContent position="popper" sideOffset={6}>
+              <SelectContent position="popper" sideOffset={8} className="max-h-[min(70vh,420px)]">
                 <SelectItem value="profile">Profile</SelectItem>
                 <SelectItem value="outlets">Outlets</SelectItem>
                 <SelectItem value="branding">Branding</SelectItem>
@@ -384,24 +385,24 @@ export default function Settings() {
               </SelectContent>
             </Select>
           </div>
-          <TabsList className="hidden sm:grid sm:w-full sm:grid-cols-7">
-            <TabsTrigger value="profile" className="gap-1.5">
+          <TabsList className="hidden h-auto min-h-12 w-full gap-1.5 p-1.5 sm:grid sm:grid-cols-7">
+            <TabsTrigger value="profile" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>
             </TabsTrigger>
-            <TabsTrigger value="outlets" className="gap-1.5" onClick={fetchOutletsList}>
+            <TabsTrigger value="outlets" className="gap-1.5 px-2 py-2.5 sm:px-3" onClick={fetchOutletsList}>
               <Store className="h-4 w-4" />
               <span className="hidden sm:inline">Outlets</span>
             </TabsTrigger>
-            <TabsTrigger value="branding" className="gap-1.5">
+            <TabsTrigger value="branding" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <Palette className="h-4 w-4" />
               <span className="hidden sm:inline">Branding</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="gap-1.5">
+            <TabsTrigger value="subscription" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <CreditCard className="h-4 w-4" />
               <span className="hidden sm:inline">Subscription</span>
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-1.5 relative">
+            <TabsTrigger value="notifications" className="relative gap-1.5 px-2 py-2.5 sm:px-3">
               <Bell className="h-4 w-4" />
               <span className="hidden sm:inline">Notifications</span>
               {unreadCount > 0 && (
@@ -410,11 +411,11 @@ export default function Settings() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-1.5">
+            <TabsTrigger value="preferences" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Security</span>
             </TabsTrigger>
-            <TabsTrigger value="printers" className="gap-1.5">
+            <TabsTrigger value="printers" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <Printer className="h-4 w-4" />
               <span className="hidden sm:inline">Printers</span>
             </TabsTrigger>
@@ -1417,7 +1418,9 @@ export default function Settings() {
                 </div>
                 <Button
                   className="gap-2"
+                  disabled={openingNativePrinters}
                   onClick={() => {
+                    setOpeningNativePrinters(true);
                     const opened = openNativePrinterSettings();
                     if (!opened) {
                       toast.error(
@@ -1425,10 +1428,18 @@ export default function Settings() {
                           ? "Native printer settings are unavailable right now. Please reopen the app and try again."
                           : "Native printer settings can be opened only inside the Banaoo mobile app."
                       );
+                      setOpeningNativePrinters(false);
+                    } else {
+                      toast.success("Opening native printer settings…");
+                      window.setTimeout(() => setOpeningNativePrinters(false), 220);
                     }
                   }}
                 >
-                  <Bluetooth className="h-4 w-4" />
+                  {openingNativePrinters ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Bluetooth className="h-4 w-4" />
+                  )}
                   Open Native Printer Settings
                 </Button>
               </CardContent>

@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Local JDK for build-release-apk.ps1 (one line: path to Android Studio jbr)
+scripts/jdk.path
+
 # typescript
 *.tsbuildinfo
 

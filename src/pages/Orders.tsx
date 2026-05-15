@@ -477,27 +477,35 @@ export default function Orders() {
         return;
       }
       try {
-        const bytes = buildBillingReceipt({
-          orderNumber: selectedOrder.order_number,
-          outletName: currentOutlet?.name || "",
-          gstNumber: (currentOutlet as any)?.gst_number,
-          orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
-          tableNumber: selectedOrder.table_number || undefined,
-          items: orderItems.map((i) => ({
-            name: i.item_name,
-            quantity: i.quantity,
-            totalPrice: i.total_price,
-            gstRate: i.gst_rate || undefined,
-          })),
-          subtotal,
-          discountAmt,
-          discountPercent,
-          serviceTax,
-          serviceTaxPercent: tax,
-          gstTotal,
-          grandTotal,
-          createdAt: new Date(selectedOrder.created_at),
-        }, pw);
+        const bytes = buildBillingReceipt(
+          {
+            orderNumber: selectedOrder.order_number,
+            outletName: currentOutlet?.name || "",
+            gstNumber: (currentOutlet as any)?.gst_number,
+            orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
+            tableNumber: selectedOrder.table_number || undefined,
+            items: orderItems.map((i) => ({
+              name: i.item_name,
+              quantity: i.quantity,
+              totalPrice: i.total_price,
+              gstRate: i.gst_rate || undefined,
+            })),
+            subtotal,
+            discountAmt,
+            discountPercent,
+            serviceTax,
+            serviceTaxPercent: tax,
+            gstTotal,
+            grandTotal,
+            createdAt: new Date(selectedOrder.created_at),
+          },
+          pw,
+          {
+            postPrintFeedLines: printerSettings.billingPrinter.postPrintFeedLines,
+            showTearCutLine: printerSettings.billingPrinter.showTearCutLine,
+            dualBillingCopies: printerSettings.billingPrinter.dualBillingCopies,
+          }
+        );
         await printViaSerial(portIndex, bytes, printerSettings.billingPrinter.baudRate);
         toast.success("Bill printed");
         return;
