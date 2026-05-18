@@ -15,8 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import * as Updates from "expo-updates";
 import Constants from "expo-constants";
+import { APP_VERSION } from "../lib/app-version";
 import { API_URL, WEBAPP_URL } from "../lib/config";
-import { printBillingReceipt, printKitchenSlip } from "../printer/printer-service";
+import { printBillingReceipt, printKitchenCancelSlip, printKitchenSlip } from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
 import { tokens } from "../theme/tokens";
 
@@ -43,8 +44,7 @@ const INJECT_BEFORE_LOAD = `(function(){window.__BANAOO_NATIVE_PRINTER_BRIDGE__=
 const INJECT_AFTER_LOAD = `(function(){try{Object.defineProperty(navigator,'serial',{value:undefined,configurable:true});}catch(e){}})();true;`;
 
 /** Chrome-like UA so PWAs that sniff WebView do not block the shell (Android). */
-const ANDROID_WEBVIEW_UA =
-  "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/0.6";
+const ANDROID_WEBVIEW_UA = `Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/${APP_VERSION}`;
 
 function versionToParts(version: string): number[] {
   return version
@@ -279,13 +279,25 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       const runtimeSettings = requestedPaperWidth
         ? { ...settings, kitchenPrinter: { ...settings.kitchenPrinter, paperWidth: requestedPaperWidth } }
         : settings;
-      await printKitchenSlip(runtimeSettings, {
+      const slipData = {
         orderNumber,
         orderType: orderTypeRaw,
         tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
         items,
         createdAt,
-      });
+      };
+      const intent = payload.intent === "cancel" ? "cancel" : "order";
+      if (intent === "cancel") {
+        const cancelledAt =
+          typeof payload.cancelledAt === "string" ? new Date(payload.cancelledAt) : new Date();
+        await printKitchenCancelSlip(
+          runtimeSettings,
+          slipData,
+          Number.isNaN(cancelledAt.getTime()) ? new Date() : cancelledAt
+        );
+      } else {
+        await printKitchenSlip(runtimeSettings, slipData);
+      }
       return;
     }
 

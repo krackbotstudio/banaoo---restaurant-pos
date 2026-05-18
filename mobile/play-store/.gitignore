@@ -1,0 +1,6 @@
+# Never commit Play Console secrets
+service-account.json
+credentials.json
+*.jks
+*.keystore
+upload_certificate.pem

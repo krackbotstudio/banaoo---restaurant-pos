@@ -5,29 +5,45 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Loader2, ChefHat, CheckCircle, Timer, Volume2, VolumeX, Truck, Utensils, Package, MapPin, ChevronRight, Printer } from "lucide-react";
+import { Loader2, ChefHat, CheckCircle, Timer, Volume2, VolumeX, Truck, Utensils, Package, MapPin, Printer } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useNotificationSound } from "@/hooks/use-notification-sound";
+import {
+  readKitchenSoundEnabled,
+  useKitchenOrderSound,
+  writeKitchenSoundEnabled,
+} from "@/hooks/use-kitchen-order-sound";
 import { PlatformBadge } from "@/components/integrations";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
 
 type ItemStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
 
-const ITEM_STATUS_NEXT: Record<ItemStatus, ItemStatus | null> = {
-  pending:   "preparing",
-  preparing: "ready",
-  ready:     "completed",
-  completed: null,
-  cancelled: null,
-};
+/** One-tap kitchen flow: cooking → ready → clear (no per-item buttons). */
+function getOrderAdvanceAction(orderStatus: string): {
+  label: string;
+  nextStatus: string;
+  buttonClass: string;
+} | null {
+  if (orderStatus === "pending" || orderStatus === "preparing") {
+    return {
+      label: "Ready for pickup",
+      nextStatus: "ready",
+      buttonClass: "bg-green-600 hover:bg-green-700 text-white shadow-lg",
+    };
+  }
+  if (orderStatus === "ready") {
+    return {
+      label: "Clear from kitchen",
+      nextStatus: "completed",
+      buttonClass: "bg-muted-foreground/90 hover:bg-muted-foreground text-white",
+    };
+  }
+  return null;
+}
 
-const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
-  pending:   "bg-yellow-100 text-yellow-700 border-yellow-300",
-  preparing: "bg-blue-100 text-blue-700 border-blue-300",
-  ready:     "bg-green-100 text-green-700 border-green-300",
-  completed: "bg-muted text-muted-foreground border-border",
-  cancelled: "bg-red-100 text-red-500 border-red-200",
-};
+function isCookingStatus(status: string) {
+  return status === "pending" || status === "preparing";
+}
 
 interface OrderItem {
   id: string;
@@ -52,11 +68,11 @@ interface KitchenOrder {
 export default function Kitchen() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
   const { toast } = useToast();
-  const { playSound } = useNotificationSound();
+  const { playSound, unlockAudio } = useKitchenOrderSound();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [loading, setLoading] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [updatingItem, setUpdatingItem] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(() => readKitchenSoundEnabled());
+  const audioUnlockedRef = useRef(false);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -139,52 +155,76 @@ export default function Kitchen() {
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
   };
 
+  // Unlock ringtone after first tap anywhere on Kitchen (browser autoplay policy)
+  useEffect(() => {
+    const onFirstInteraction = () => {
+      if (audioUnlockedRef.current) return;
+      audioUnlockedRef.current = true;
+      void unlockAudio();
+    };
+    document.addEventListener("pointerdown", onFirstInteraction, { once: true });
+    return () => document.removeEventListener("pointerdown", onFirstInteraction);
+  }, [unlockAudio]);
+
+  const handleSoundToggle = async () => {
+    const next = !soundEnabled;
+    if (next) {
+      audioUnlockedRef.current = true;
+      await unlockAudio();
+    }
+    setSoundEnabled(next);
+    writeKitchenSoundEnabled(next);
+  };
+
   useEffect(() => {
     if (currentOutlet) {
       fetchOrders();
-      
-      // Subscribe to realtime updates
+
       const channel = supabase
-        .channel('kitchen-orders')
+        .channel(`kitchen-orders-${currentOutlet.id}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'orders',
-            filter: `outlet_id=eq.${currentOutlet.id}`
+            event: "INSERT",
+            schema: "public",
+            table: "orders",
+            filter: `outlet_id=eq.${currentOutlet.id}`,
           },
           (payload) => {
-            // Play sound and show toast for new orders
             if (soundEnabled) {
-              playSound();
+              void playSound();
             }
+            const row = payload.new as { order_number?: string };
             toast({
               title: "🔔 New Order!",
-              description: `Order #${payload.new.order_number} just came in`,
+              description: `Order #${row.order_number ?? "—"} just came in`,
             });
             fetchOrders();
           }
         )
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'orders',
-            filter: `outlet_id=eq.${currentOutlet.id}`
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `outlet_id=eq.${currentOutlet.id}`,
           },
           () => {
             fetchOrders();
           }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR") {
+            console.error("Kitchen realtime subscription error:", err);
+          }
+        });
 
       return () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [currentOutlet, soundEnabled, playSound]);
+  }, [currentOutlet, soundEnabled, playSound, toast]);
 
   // Tick every second so elapsed timers stay live
   useEffect(() => {
@@ -240,7 +280,11 @@ export default function Kitchen() {
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     setUpdatingOrder(orderId);
     // Also bulk-update all items to match
-    await supabase.from("order_items").update({ status: newStatus }).eq("order_id", orderId);
+    await supabase
+      .from("order_items")
+      .update({ status: newStatus })
+      .eq("order_id", orderId)
+      .neq("status", "cancelled");
     const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", orderId);
     if (error) {
       toast({ variant: "destructive", title: "Error", description: error.message });
@@ -248,30 +292,6 @@ export default function Kitchen() {
       fetchOrders();
     }
     setUpdatingOrder(null);
-  };
-
-  const updateItemStatus = async (orderId: string, itemId: string, newItemStatus: ItemStatus) => {
-    setUpdatingItem(itemId);
-    await supabase.from("order_items").update({ status: newItemStatus }).eq("id", itemId);
-
-    // Re-derive order status from all sibling items
-    const { data: items } = await supabase
-      .from("order_items")
-      .select("status")
-      .eq("order_id", orderId);
-
-    if (items && items.length > 0) {
-      const statuses = items.map((i: any) => i.status as ItemStatus);
-      let derivedOrderStatus: string;
-      if (statuses.every(s => s === "completed")) derivedOrderStatus = "completed";
-      else if (statuses.every(s => s === "ready" || s === "completed")) derivedOrderStatus = "ready";
-      else if (statuses.some(s => s === "preparing")) derivedOrderStatus = "preparing";
-      else derivedOrderStatus = "pending";
-      await supabase.from("orders").update({ status: derivedOrderStatus }).eq("id", orderId);
-    }
-
-    fetchOrders();
-    setUpdatingItem(null);
   };
 
   if (outletLoading) {
@@ -312,7 +332,8 @@ export default function Kitchen() {
             <div>
               <h1 className="font-display text-2xl font-bold">Kitchen Display</h1>
               <p className="text-sm text-muted-foreground">
-                {currentOutlet?.name ? `${currentOutlet.name} - ` : ""}Real-time order queue
+                {currentOutlet?.name ? `${currentOutlet.name} · ` : ""}
+                Tap <span className="font-medium text-foreground">Ready</span> when food is done
               </p>
             </div>
           </div>
@@ -322,8 +343,8 @@ export default function Kitchen() {
               variant={soundEnabled ? "secondary" : "outline"}
               size="icon"
               className="h-10 w-10"
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              title={soundEnabled ? "Mute notifications" : "Enable notifications"}
+              onClick={() => void handleSoundToggle()}
+              title={soundEnabled ? "Mute new-order ringtone" : "Enable new-order ringtone"}
             >
               {soundEnabled ? (
                 <Volume2 className="h-4 w-4 text-primary" />
@@ -338,15 +359,11 @@ export default function Kitchen() {
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-muted-foreground">Pending</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-muted-foreground">Preparing</span>
+            <span className="text-muted-foreground">Cooking</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-muted-foreground">Ready</span>
+            <span className="text-muted-foreground">Ready for pickup</span>
           </div>
         </div>
 
@@ -367,16 +384,15 @@ export default function Kitchen() {
               // `tick` is read here so React re-renders this row every second
               void tick;
               const { mins, secs } = getElapsed(order.created_at);
+              const advance = getOrderAdvanceAction(order.status);
+              const isUpdating = updatingOrder === order.id;
               return (
                 <Card
                   key={order.id}
-                  className={`overflow-hidden border-t-4 ${
-                    order.status === "pending"
-                      ? "border-t-yellow-500"
-                      : order.status === "preparing"
-                      ? "border-t-blue-500"
-                      : "border-t-green-500"
-                  }`}
+                  className={cn(
+                    "overflow-hidden border-t-4",
+                    isCookingStatus(order.status) ? "border-t-yellow-500" : "border-t-green-500"
+                  )}
                 >
                   <CardHeader className="pb-3">
                     {/* Top row: type label + timer */}
@@ -411,106 +427,59 @@ export default function Kitchen() {
                           </p>
                         )}
                       </div>
-                      <div className={`flex items-center gap-1 text-sm font-semibold shrink-0 tabular-nums ${getElapsedColor(mins)}`}>
-                        <Timer className="h-4 w-4" />
-                        {mins}m {String(secs).padStart(2, "0")}s
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 text-muted-foreground"
+                          title="Print kitchen slip"
+                          onClick={() => printKitchenSlip(order)}
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        <div className={`flex items-center gap-1 text-sm font-semibold tabular-nums ${getElapsedColor(mins)}`}>
+                          <Timer className="h-4 w-4" />
+                          {mins}m {String(secs).padStart(2, "0")}s
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Order Items with per-item status */}
-                    <div className="space-y-2">
-                      {order.order_items.map((item) => {
-                        const itemStatus = (item.status ?? "pending") as ItemStatus;
-                        const nextItemStatus = ITEM_STATUS_NEXT[itemStatus];
-                        const isUpdating = updatingItem === item.id;
-                        return (
-                          <div key={item.id} className="rounded-lg border border-border/60 bg-muted/20 p-2.5 space-y-1.5">
-                            {/* Item name + qty */}
-                            <div className="flex items-start gap-2">
-                              <span className="font-bold text-primary shrink-0">{item.quantity}×</span>
-                              <div className="flex-1 min-w-0">
-                                <span className="font-medium">{item.item_name}</span>
-                                {item.notes && (
-                                  <p className="text-xs text-muted-foreground">{item.notes}</p>
-                                )}
-                              </div>
-                            </div>
-                            {/* Status badge + advance button */}
-                            <div className="flex items-center gap-2">
-                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border capitalize ${ITEM_STATUS_STYLE[itemStatus]}`}>
-                                {itemStatus}
-                              </span>
-                              {nextItemStatus && itemStatus !== "completed" && (
-                                <button
-                                  disabled={isUpdating}
-                                  onClick={() => updateItemStatus(order.id, item.id, nextItemStatus)}
-                                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors disabled:opacity-50 ml-auto text-white ${
-                                    nextItemStatus === "preparing" ? "bg-blue-500 hover:bg-blue-600" :
-                                    nextItemStatus === "ready"     ? "bg-green-500 hover:bg-green-600" :
-                                                                     "bg-gray-500 hover:bg-gray-600"
-                                  }`}
-                                >
-                                  {isUpdating
-                                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                                    : <span className="flex items-center gap-0.5">
-                                        {nextItemStatus === "preparing" ? "Start" : nextItemStatus === "ready" ? "Mark Ready" : "Done"}
-                                        <ChevronRight className="h-3 w-3" />
-                                      </span>
-                                  }
-                                </button>
+                    <div className="space-y-0 divide-y divide-border/40">
+                      {order.order_items
+                        .filter((item) => item.status !== "cancelled")
+                        .map((item) => (
+                          <div key={item.id} className="flex items-start gap-2 py-2 first:pt-0 last:pb-0">
+                            <span className="font-bold text-lg text-primary shrink-0">{item.quantity}×</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-base leading-snug">{item.item_name}</span>
+                              {item.notes && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{item.notes}</p>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
+                        ))}
                     </div>
 
-                    {/* Order-level action button */}
-                    <div className="pt-1 border-t border-border/40 space-y-2">
-                      {order.status === "pending" && (
-                        <Button
-                          className="w-full bg-blue-500 hover:bg-blue-600"
-                          disabled={updatingOrder === order.id}
-                          onClick={() => updateOrderStatus(order.id, "preparing")}
-                        >
-                          {updatingOrder === order.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                          Start All — Preparing
-                        </Button>
-                      )}
-                      {order.status === "preparing" && (
-                        <Button
-                          className="w-full bg-green-500 hover:bg-green-600"
-                          disabled={updatingOrder === order.id}
-                          onClick={() => updateOrderStatus(order.id, "ready")}
-                        >
-                          {updatingOrder === order.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                          Mark All Ready
-                        </Button>
-                      )}
-                      {order.status === "ready" && (
-                        <Button
-                          className="w-full"
-                          variant="outline"
-                          disabled={updatingOrder === order.id}
-                          onClick={() => updateOrderStatus(order.id, "completed")}
-                        >
-                          {updatingOrder === order.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                          Complete All
-                        </Button>
-                      )}
-
-                      {/* Print Kitchen Slip */}
+                    {advance && (
                       <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full gap-2 text-muted-foreground border-dashed"
-                        onClick={() => printKitchenSlip(order)}
+                        type="button"
+                        className={cn(
+                          "w-full h-14 text-base font-bold rounded-xl",
+                          advance.buttonClass
+                        )}
+                        disabled={isUpdating}
+                        onClick={() => updateOrderStatus(order.id, advance.nextStatus)}
                       >
-                        <Printer className="h-3.5 w-3.5" />
-                        Print Kitchen Slip
+                        {isUpdating ? (
+                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                        ) : advance.nextStatus === "ready" ? (
+                          <CheckCircle className="h-5 w-5 mr-2" />
+                        ) : null}
+                        {advance.label}
                       </Button>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               );

@@ -43,6 +43,12 @@ export default function Privacy() {
                 keep you logged in and remember your preferences. We also use analytics cookies (see Section 7)
                 to understand how the product is used.
               </p>
+              <p className="text-muted-foreground">
+                <strong className="text-foreground">Banaoo Android app:</strong> Our mobile app loads the same
+                banaoo.io POS in a secure in-app browser and may request Bluetooth permissions so you can pair
+                nearby thermal printers. We do not use Bluetooth or location to track where you are; printer
+                pairing is optional and controlled from the app settings.
+              </p>
             </section>
 
             <section className="space-y-3">

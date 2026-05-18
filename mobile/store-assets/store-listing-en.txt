@@ -1,0 +1,29 @@
+# Google Play — Main store listing (English)
+
+Short title (max 30 chars):
+Banaoo Restaurant POS
+
+Full title (max 50 chars):
+Banaoo — Restaurant POS & Kitchen
+
+Short description (max 80 chars):
+POS, kitchen display, orders & Bluetooth printing for Indian restaurants.
+
+Full description (max 4000 chars):
+Banaoo is the all-in-one restaurant POS and management app built for Indian food businesses.
+
+Run service from one app on your Android device:
+• Take and manage dine-in, takeaway, and delivery orders
+• Kitchen display workflow — see and update order status in real time
+• Staff-friendly interface matching the Banaoo web POS
+• Bluetooth thermal printing for kitchen tickets and customer bills
+• Multi-outlet support for growing brands
+• Secure sign-in with your Banaoo account
+
+The mobile app wraps the same Banaoo POS you use on the web, so your team gets a consistent experience with native Bluetooth printer support for ESC/POS devices.
+
+Requires an active Banaoo subscription. Sign up at https://banaoo.in
+
+Support: support@banaoo.in
+Privacy: https://banaoo.in/privacy
+Terms: https://banaoo.in/terms

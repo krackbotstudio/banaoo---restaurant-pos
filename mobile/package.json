@@ -10,7 +10,9 @@
     "eas:whoami": "eas whoami",
     "eas:login": "eas login",
     "build:apk": "eas build --platform android --profile preview",
-    "build:apk:production": "eas build --platform android --profile production",
+    "build:apk:production": "eas build --platform android --profile preview",
+    "build:aab": "eas build --platform android --profile production",
+    "submit:play": "eas submit --platform android --profile production --latest",
     "android:emulator": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-android-emulator.ps1",
     "icons:generate": "node ./scripts/build-adaptive-assets.cjs"
   },

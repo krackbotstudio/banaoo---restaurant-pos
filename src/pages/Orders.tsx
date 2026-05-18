@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
+import { printKitchenCancelSlip } from "@/lib/print-kitchen";
 
 interface Order {
   id: string;
@@ -403,7 +404,27 @@ export default function Orders() {
       setOrders((prev) =>
         prev.map((o) => o.id === selectedOrder.id ? { ...o, status: newStatus } : o)
       );
-      if (newStatus === "paid") {
+      if (newStatus === "cancelled") {
+        const cancelItems = orderItems
+          .filter((i) => i.status !== "completed")
+          .map((i) => ({ name: i.item_name, quantity: i.quantity }));
+        if (cancelItems.length > 0) {
+          void printKitchenCancelSlip(printerSettings, {
+            outletId: currentOutlet?.id,
+            orderNumber: selectedOrder.order_number,
+            orderType: selectedOrder.order_type === "takeaway" ? "takeaway" : "dine_in",
+            tableNumber: selectedOrder.table_number ?? undefined,
+            items: cancelItems,
+            createdAt: new Date(selectedOrder.created_at),
+            cancelledAt: new Date(),
+          }).then((result) => {
+            if (!result.ok) {
+              toast.error("Kitchen cancel slip failed", { description: result.message });
+            }
+          });
+        }
+        toast({ title: "Order cancelled", description: "Kitchen void slip sent" });
+      } else if (newStatus === "paid") {
         toast({
           title: "✅ Order Paid!",
           description: `Table ${selectedOrder.table_number || ""} is now free for new orders.`,

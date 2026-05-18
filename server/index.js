@@ -600,8 +600,9 @@ app.get('/auth/supabase-token', (req, res) => {
 const ANDROID_APK_CANDIDATES = [
   path.join(__dirname, 'downloads/banaoo-latest.apk'),
   path.join(__dirname, '../public/downloads/banaoo-latest.apk'),
+  path.join(__dirname, '../public/downloads/banaoo-app-V.0.07.apk'),
+  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-V.0.07.apk'),
   path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.6.apk'),
-  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.5.apk'),
   path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/app-release.apk'),
 ];
 
@@ -652,7 +653,7 @@ app.get('/api/mobile-app/apk', (req, res) => {
     return res.status(404).json({ error: 'Android APK is not available yet' });
   }
   res.setHeader('Cache-Control', 'public, max-age=300');
-  res.download(apkPath, 'banaoo-app.apk');
+  res.download(apkPath, 'banaoo-app-V.0.07.apk');
 });
 
 function parseBooleanEnv(value, fallback = false) {

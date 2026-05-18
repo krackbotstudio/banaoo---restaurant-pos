@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { TrialBanner } from "@/components/TrialBanner";
 import { useAuth } from "@/lib/auth";
@@ -20,7 +21,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { permissions, loading: permissionsLoading } = useStaffPermissions();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
-  const mobileHeaderTitle = location.pathname === "/orders/new" ? "New Order" : "";
+  const isNewOrderPage = location.pathname === "/orders/new";
+  const mobileHeaderTitle = isNewOrderPage ? "New Order" : "";
 
   const isStaff = profile && profile.role !== "owner";
 
@@ -148,7 +150,14 @@ export function AppLayout({ children }: AppLayoutProps) {
             </header>
 
             {/* Scrollable page content — only this area scrolls */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden pb-32 lg:pb-0 w-full min-w-0">
+            <main
+              className={cn(
+                "flex-1 overflow-x-hidden w-full min-w-0",
+                isNewOrderPage
+                  ? "flex flex-col min-h-0 overflow-hidden pb-32 lg:pb-0"
+                  : "overflow-y-auto pb-32 lg:pb-0"
+              )}
+            >
               {children}
             </main>
           </SidebarInset>

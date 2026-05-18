@@ -46,6 +46,9 @@ export interface NativeKitchenPrintPayload {
   tableNumber?: string;
   items: Array<{ name: string; quantity: number }>;
   createdAt: string;
+  /** "cancel" prints a void / do-not-prepare slip for the kitchen. */
+  intent?: "order" | "cancel";
+  cancelledAt?: string;
 }
 
 export interface NativeBillingPrintPayload {
@@ -81,7 +84,11 @@ function postToNative(role: "kitchen" | "billing", payload: NativeKitchenPrintPa
 }
 
 export function postNativeKitchenPrint(payload: NativeKitchenPrintPayload): boolean {
-  return postToNative("kitchen", payload);
+  return postToNative("kitchen", { ...payload, intent: payload.intent ?? "order" });
+}
+
+export function postNativeKitchenCancelPrint(payload: NativeKitchenPrintPayload): boolean {
+  return postToNative("kitchen", { ...payload, intent: "cancel" });
 }
 
 export function postNativeBillingPrint(payload: NativeBillingPrintPayload): boolean {

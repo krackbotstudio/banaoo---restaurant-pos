@@ -30,8 +30,15 @@ if (-not $apk) {
 if ($apk) {
   $webApkDir = Join-Path (Split-Path $MobileRoot -Parent) "public\downloads"
   New-Item -ItemType Directory -Force -Path $webApkDir | Out-Null
+  $versionedName = "banaoo-app-V.0.07.apk"
+  $versionedApk = Join-Path $webApkDir $versionedName
   $webApk = Join-Path $webApkDir "banaoo-latest.apk"
+  Copy-Item -Force $apk.FullName $versionedApk
   Copy-Item -Force $apk.FullName $webApk
+  $serverDl = Join-Path (Split-Path $MobileRoot -Parent) "server\downloads"
+  New-Item -ItemType Directory -Force -Path $serverDl | Out-Null
+  Copy-Item -Force $apk.FullName (Join-Path $serverDl "banaoo-latest.apk")
   Write-Host "`nAPK: $($apk.FullName)" -ForegroundColor Green
-  Write-Host "Web download: $webApk" -ForegroundColor Green
+  Write-Host "Versioned: $versionedApk" -ForegroundColor Green
+  Write-Host "Web download (latest): $webApk" -ForegroundColor Green
 }

@@ -17,13 +17,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
-import { OrderTopBar } from "@/components/order/OrderTopBar";
+import { OrderTypeStep } from "@/components/order/OrderTypeStep";
+import { OrderFlowBar } from "@/components/order/OrderFlowBar";
 import { CategoryTabs } from "@/components/order/CategoryTabs";
 import { MenuItemCard } from "@/components/order/MenuItemCard";
 import { CartSummaryBar } from "@/components/order/CartSummaryBar";
 import { CartDrawer } from "@/components/order/CartDrawer";
 import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
 import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { printKitchenOrderSlip } from "@/lib/print-kitchen";
+import { toast as sonnerToast } from "sonner";
 
 interface Category {
   id: string;
@@ -416,7 +419,7 @@ function VoicePOSOrder({
 // ── Main NewOrder Page ─────────────────────────────────────────────────────────
 export default function NewOrder() {
   const { user } = useAuth();
-  const { currentOutlet, outlets, setCurrentOutlet, loading: outletLoading } = useOutlet();
+  const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -439,6 +442,42 @@ export default function NewOrder() {
   const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
+  type FlowStep = "type" | "menu" | "review";
+  const [flowStep, setFlowStep] = useState<FlowStep>(addToOrderId ? "menu" : "type");
+
+  const fireKitchenPrint = useCallback(
+    async (input: {
+      orderNumber: string;
+      orderType: "dine_in" | "takeaway";
+      tableNumber?: string;
+      items: { name: string; quantity: number }[];
+      createdAt: Date;
+    }) => {
+      const result = await printKitchenOrderSlip(printerSettings, {
+        outletId: currentOutlet?.id,
+        ...input,
+      });
+      if (!result.ok) {
+        sonnerToast.error("Kitchen print failed", { description: result.message });
+      }
+    },
+    [printerSettings, currentOutlet?.id]
+  );
+
+  const goToReview = () => {
+    if (cart.length === 0) {
+      toast({ variant: "destructive", title: "Cart is empty" });
+      return;
+    }
+    setFlowStep("review");
+    setCartDrawerOpen(true);
+  };
+
+  const handleChangeOrderType = () => {
+    if (cart.length > 0 && !window.confirm("Change order type? This will clear the cart.")) return;
+    clearCart();
+    setFlowStep("type");
+  };
 
   useEffect(() => {
     if (currentOutlet) {
@@ -521,6 +560,11 @@ export default function NewOrder() {
   const handlePlaceOrder = async () => {
     if (!currentOutlet) return;
 
+    if (!addToOrderId && flowStep !== "review") {
+      goToReview();
+      return;
+    }
+
     if (cart.length === 0) {
       toast({ variant: "destructive", title: "Cart is empty" });
       return;
@@ -586,7 +630,12 @@ export default function NewOrder() {
           .update({ total: newTotal, subtotal: newTotal, status: derivedStatus })
           .eq("id", addToOrderId);
 
-        // Show kitchen slip popup for the newly added items
+        const kitchenItems = cart.map((item) => ({
+          name: item.menuItem.name,
+          quantity: item.quantity,
+        }));
+        const slipCreatedAt = new Date();
+
         setLastOrderData({
           outletId: currentOutlet?.id,
           orderNumber: orderMeta?.order_number ?? addToOrderId,
@@ -601,11 +650,18 @@ export default function NewOrder() {
           })),
           subtotal: cartTotal,
           total: cartTotal,
-          createdAt: new Date(),
+          createdAt: slipCreatedAt,
         });
         setCart([]);
         setCartDrawerOpen(false);
         setSuccessDialogOpen(true);
+        void fireKitchenPrint({
+          orderNumber: orderMeta?.order_number ?? addToOrderId,
+          orderType: addToType,
+          tableNumber: addToTable || undefined,
+          items: kitchenItems,
+          createdAt: slipCreatedAt,
+        });
       } catch (error: any) {
         toast({ variant: "destructive", title: "Error", description: error.message });
       }
@@ -676,6 +732,14 @@ export default function NewOrder() {
       setSuccessDialogOpen(true);
       setCart([]);
       setTableNumber("");
+      setFlowStep("type");
+      void fireKitchenPrint({
+        orderNumber: receiptData.orderNumber,
+        orderType: receiptData.orderType,
+        tableNumber: receiptData.tableNumber,
+        items: receiptData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+        createdAt: receiptData.createdAt,
+      });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     }
@@ -695,6 +759,7 @@ export default function NewOrder() {
     if (result.order_type === "dine_in" && result.table_number) {
       setTableNumber(result.table_number);
     }
+    if (!addToOrderId) setFlowStep("menu");
     setCart((prev) => {
       const next = [...prev];
       for (const ri of result.items) {
@@ -741,15 +806,29 @@ export default function NewOrder() {
     );
   }
 
-  const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name }));
+  if (!addToOrderId && flowStep === "type") {
+    return (
+      <AppLayout>
+        <OrderTypeStep
+          outletId={currentOutlet?.id || ""}
+          outletName={currentOutlet?.name || ""}
+          orderType={orderType}
+          onOrderTypeChange={setOrderType}
+          tableNumber={tableNumber}
+          onTableChange={setTableNumber}
+          onContinue={() => setFlowStep("menu")}
+        />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       {/* Two-column layout on desktop, single column on mobile */}
-      <div className="lg:flex lg:h-[calc(100vh-0px)]">
+      <div className="flex flex-col flex-1 min-h-0 lg:overflow-hidden lg:flex-row">
 
         {/* ── Left: scrollable menu area ── */}
-        <div className="flex-1 min-w-0 overflow-y-auto pb-32 lg:pb-6">
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto pb-32 lg:pb-4">
           {/* Add-items mode banner */}
           {addToOrderId && (
             <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border-b border-primary/20 text-sm font-medium text-primary">
@@ -764,20 +843,14 @@ export default function NewOrder() {
               </button>
             </div>
           )}
-          <OrderTopBar
-            outlets={outletOptions}
-            selectedOutlet={currentOutlet?.id || ""}
-            onOutletChange={(id) => {
-              const outlet = outlets.find((o) => o.id === id);
-              if (outlet) setCurrentOutlet(outlet);
-            }}
-            orderType={orderType}
-            onOrderTypeChange={setOrderType}
-            tableNumber={tableNumber}
-            onTableChange={setTableNumber}
-            onClearCart={clearCart}
-            hasItems={cart.length > 0}
-          />
+          {!addToOrderId && (
+            <OrderFlowBar
+              flowStep={flowStep === "review" ? "review" : "menu"}
+              orderType={orderType}
+              tableNumber={tableNumber}
+              onChangeType={handleChangeOrderType}
+            />
+          )}
 
           <CategoryTabs
             categories={categories}
@@ -836,7 +909,7 @@ export default function NewOrder() {
         </div>
 
         {/* ── Right: desktop cart sidebar ── */}
-        <div className="hidden lg:flex flex-col w-[360px] shrink-0 border-l border-border/50 bg-card sticky top-0 h-screen overflow-hidden">
+        <div className="hidden lg:flex flex-col w-[360px] shrink-0 border-l border-border/50 bg-card h-full min-h-0 overflow-hidden">
           {/* Sidebar header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
             <div className="flex items-center gap-2">
@@ -887,7 +960,7 @@ export default function NewOrder() {
           </div>
 
           {/* Cart items (scrollable) */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
                 <div className="w-16 h-16 rounded-full bg-muted/30 flex items-center justify-center">
@@ -940,20 +1013,30 @@ export default function NewOrder() {
             )}
           </div>
 
-          {/* Sidebar footer: total + place order */}
-          <div className="border-t border-border/50 p-4 bg-card shrink-0 space-y-3">
+          {/* Sidebar footer: total + place order — always visible */}
+          <div className="border-t border-border/50 p-4 pb-5 bg-card shrink-0 space-y-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-sm">Total</span>
               <span className="text-2xl font-bold text-primary">₹{cartTotal}</span>
             </div>
-            <Button
-              className="w-full h-12 text-base font-semibold gradient-primary glow-primary rounded-xl"
-              disabled={cart.length === 0}
-              onClick={handlePlaceOrder}
-            >
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              {addToOrderId ? `Add to Order · ₹${cartTotal}` : `Place Order · ₹${cartTotal}`}
-            </Button>
+            {addToOrderId || flowStep === "review" ? (
+              <Button
+                className="w-full h-12 text-base font-semibold gradient-primary glow-primary rounded-xl"
+                disabled={cart.length === 0}
+                onClick={handlePlaceOrder}
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                {addToOrderId ? `Add to Order · ₹${cartTotal}` : `Place Order · ₹${cartTotal}`}
+              </Button>
+            ) : (
+              <Button
+                className="w-full h-12 text-base font-semibold gradient-primary glow-primary rounded-xl"
+                disabled={cart.length === 0}
+                onClick={goToReview}
+              >
+                Review order · ₹{cartTotal}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -964,7 +1047,18 @@ export default function NewOrder() {
           <CartSummaryBar
             itemCount={cartItemsCount}
             total={cartTotal}
-            onViewCart={() => setCartDrawerOpen(true)}
+            actionLabel={
+              addToOrderId
+                ? undefined
+                : flowStep === "review"
+                  ? "Review & place"
+                  : "Review order"
+            }
+            onViewCart={
+              addToOrderId || flowStep === "review"
+                ? () => setCartDrawerOpen(true)
+                : goToReview
+            }
             className="bottom-[68px]"
           />
         </div>
@@ -990,15 +1084,6 @@ export default function NewOrder() {
         onOpenChange={setSuccessDialogOpen}
         orderData={lastOrderData}
         onNewOrder={handleNewOrder}
-        autoPrintKitchen={printerSettings.kitchenPrinter.autoPrint}
-        kitchenFontSize={printerSettings.kitchenPrinter.fontSize}
-        kitchenPaperWidth={printerSettings.kitchenPrinter.paperWidth}
-        kitchenPortIndex={printerSettings.kitchenPrinter.usbPortIndex}
-        kitchenBaudRate={printerSettings.kitchenPrinter.baudRate}
-        kitchenPrintMode={printerSettings.kitchenPrinter.printMode}
-        kitchenPostPrintFeedLines={printerSettings.kitchenPrinter.postPrintFeedLines}
-        kitchenShowTearCutLine={printerSettings.kitchenPrinter.showTearCutLine}
-        kitchenDualCopies={printerSettings.kitchenPrinter.dualKitchenCopies}
       />
 
       <VoicePOSOrder

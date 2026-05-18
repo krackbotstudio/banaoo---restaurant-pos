@@ -68,16 +68,24 @@ Android adaptive icons mask the foreground into a circle/squircle; artwork shoul
 - Kitchen and billing print commands can be routed from PWA to native BLE bridge.
 - Google auth return via deep link triggers shell reload to restore web session state.
 
-## Build and install (APK)
+## Build and install
 
-1. From `mobile/`, ensure dependencies are installed:
-   - `npm install`
-2. Ensure EAS project is linked:
-   - `npx eas-cli init --force`
-3. Build production APK:
-   - `npx eas-cli build --platform android --profile production --non-interactive`
-4. Download artifact from the EAS build URL shown in CLI output and install on Android.
-5. Local release (Windows): from `mobile/`, run `.\scripts\build-release-apk.ps1`. The release APK is written as **`banaoo-app-v<versionName>.apk`** (e.g. `banaoo-app-v0.5.apk`) under `android/app/build/outputs/apk/release/`, or `app-release.apk` if a custom name is not applied.
+### Google Play Store (AAB)
+
+See **[App playstore deploy.md](./App%20playstore%20deploy.md)** for the full checklist, store assets, and Play Console steps.
+
+- Build signed bundle: `build-play-store.cmd` or `npm run build:aab`
+- Submit to Play: `npm run submit:play` (requires `play-store/service-account.json`)
+
+### Sideload / website APK (local Windows)
+
+1. `npm install`
+2. Run `.\scripts\build-release-apk.ps1`
+3. Output: `android/app/build/outputs/apk/release/banaoo-app-v<version>.apk` (e.g. `banaoo-app-v0.6.apk`)
+
+### Internal EAS APK (preview)
+
+- `npm run build:apk` — preview profile, APK for testers
 
 ## Quick verification checklist
 

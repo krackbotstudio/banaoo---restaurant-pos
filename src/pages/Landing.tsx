@@ -282,7 +282,7 @@ export default function Landing() {
 
       const anchor = document.createElement("a");
       anchor.href = resolvedUrl;
-      anchor.download = "banaoo-app.apk";
+      anchor.download = "banaoo-app-V.0.07.apk";
       anchor.rel = "noopener";
       document.body.appendChild(anchor);
       anchor.click();

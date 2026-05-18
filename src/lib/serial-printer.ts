@@ -138,6 +138,58 @@ export function buildKitchenSlip(
   return d.bytes();
 }
 
+export interface KitchenCancelSlipData {
+  orderNumber: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: { name: string; quantity: number }[];
+  createdAt: Date;
+  cancelledAt?: Date;
+}
+
+export function buildKitchenCancelSlip(
+  data: KitchenCancelSlipData,
+  paperWidth: 58 | 80 = 58,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = cols(paperWidth);
+  const d = new EscPosDoc().init();
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const placedTime = data.createdAt.toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+  const cancelTime = (data.cancelledAt ?? new Date()).toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+  const typeLabel = data.orderType === "dine_in"
+    ? (data.tableNumber ? `Table T${data.tableNumber}` : "Dine In")
+    : "TAKEAWAY";
+
+  d.align("C").bold(true).size(true, true).line("CANCELLED").size(false, false).bold(false);
+  d.align("C").bold(true).line("DO NOT PREPARE").bold(false);
+  d.dashes(w);
+  d.cols("Order #", data.orderNumber, w);
+  d.cols("Was", typeLabel, w);
+  d.cols("Placed", placedTime, w);
+  d.cols("Cancelled", cancelTime, w);
+  d.dashes(w);
+  d.bold(true).line("CANCELLED ITEMS:").bold(false);
+
+  for (const item of data.items) {
+    const qty = `x${item.quantity}`;
+    const maxName = w - qty.length - 4;
+    const name = item.name.length > maxName ? item.name.slice(0, maxName - 1) + "." : item.name;
+    d.line(`X ${name}${" ".repeat(Math.max(1, w - name.length - qty.length - 2))}${qty}`);
+  }
+
+  d.dashes(w);
+  d.align("C").bold(true).line("*** VOID ***").bold(false);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
 // ── Billing receipt ───────────────────────────────────────────────────────────
 export interface BillingReceiptData {
   orderNumber: string;

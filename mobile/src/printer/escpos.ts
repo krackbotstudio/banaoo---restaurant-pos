@@ -120,6 +120,41 @@ function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number)
   d.dashes(w);
 }
 
+function writeKitchenCancelSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number, cancelledAt: Date) {
+  const placedTime = data.createdAt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const cancelTime = cancelledAt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const typeLabel =
+    data.orderType === "dine_in" ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In") : "TAKEAWAY";
+
+  d.align("C").bold(true).size(true, true).line("CANCELLED").size(false, false).bold(false);
+  d.align("C").bold(true).line("DO NOT PREPARE").bold(false);
+  d.dashes(w);
+  d.cols("Order #", data.orderNumber, w);
+  d.cols("Was", typeLabel, w);
+  d.cols("Placed", placedTime, w);
+  d.cols("Cancelled", cancelTime, w);
+  d.dashes(w);
+  d.bold(true).line("CANCELLED ITEMS:").bold(false);
+
+  for (const item of data.items) {
+    const qty = `x${item.quantity}`;
+    const max = w - qty.length - 4;
+    const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
+    d.line(`X ${name}${" ".repeat(Math.max(1, w - name.length - qty.length - 2))}${qty}`);
+  }
+
+  d.dashes(w);
+  d.align("C").bold(true).line("*** VOID ***").bold(false);
+}
+
 function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptPayload, w: number, fmt: (n: number) => string) {
   const date = data.createdAt.toLocaleString("en-IN", {
     day: "2-digit",
@@ -219,6 +254,27 @@ export function buildKitchenSlip(
   writeKitchenSlipBody(d, data, w);
   const secondLabel = data.orderType === "takeaway" ? "* PARCEL COPY *" : "* TABLE COPY *";
   d.align("C").bold(true).line(secondLabel).bold(false);
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
+export function buildKitchenCancelSlip(
+  data: KitchenSlipPayload,
+  paperWidth: 58 | 80 = 58,
+  fontSize = 12,
+  options?: EscPosPrintOptions,
+  cancelledAt?: Date
+): Uint8Array {
+  const w = columns(paperWidth);
+  const d = new EscPosDoc().init();
+  const condensed = fontSize <= 11;
+  d.font(condensed);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const when = cancelledAt ?? new Date();
+
+  writeKitchenCancelSlipBody(d, data, w, when);
   if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();

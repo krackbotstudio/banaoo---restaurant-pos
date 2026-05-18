@@ -7,6 +7,7 @@ interface CartSummaryBarProps {
   total: number;
   onViewCart: () => void;
   className?: string;
+  actionLabel?: string;
 }
 
 export function CartSummaryBar({
@@ -14,6 +15,7 @@ export function CartSummaryBar({
   total,
   onViewCart,
   className,
+  actionLabel,
 }: CartSummaryBarProps) {
   if (itemCount === 0) return null;
 
@@ -40,7 +42,7 @@ export function CartSummaryBar({
                 {itemCount}
               </span>
             </div>
-            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            <span>{actionLabel ?? `${itemCount} item${itemCount !== 1 ? "s" : ""}`}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold">₹{total}</span>

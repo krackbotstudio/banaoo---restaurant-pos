@@ -11,7 +11,5 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Pass-through fetch – no offline caching (keeps things simple)
-self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
-});
+// No fetch handler — avoids "Failed to fetch" on navigations when offline.
+// The app requires network; install/activate hooks are enough for PWA installability.

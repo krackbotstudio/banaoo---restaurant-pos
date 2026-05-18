@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import {
   BillingReceiptPayload,
   buildBillingReceipt,
+  buildKitchenCancelSlip,
   buildKitchenSlip,
   EscPosPrintOptions,
   KitchenSlipPayload,
@@ -196,6 +197,22 @@ export async function printKitchenSlip(
     settings.kitchenPrinter.paperWidth,
     settings.kitchenPrinter.fontSize,
     escPosOptionsFromRole(settings.kitchenPrinter)
+  );
+  return executePrint("kitchen", settings.kitchenPrinter, capability, payload);
+}
+
+export async function printKitchenCancelSlip(
+  settings: MobilePrinterSettings,
+  data: KitchenSlipPayload,
+  cancelledAt?: Date
+): Promise<PrintResult> {
+  const capability = getPrintCapability();
+  const payload = buildKitchenCancelSlip(
+    data,
+    settings.kitchenPrinter.paperWidth,
+    settings.kitchenPrinter.fontSize,
+    escPosOptionsFromRole(settings.kitchenPrinter),
+    cancelledAt
   );
   return executePrint("kitchen", settings.kitchenPrinter, capability, payload);
 }
