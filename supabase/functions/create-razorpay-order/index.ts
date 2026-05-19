@@ -8,8 +8,8 @@ const corsHeaders = {
 
 // Base prices in rupees per month
 const BASE_PRICES: Record<string, number> = {
-  starter: 999,
-  professional: 2499,
+  starter: 499,
+  professional: 699,
 };
 
 // Discount by duration

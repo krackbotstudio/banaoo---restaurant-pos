@@ -21,7 +21,7 @@ export function FeatureGate({
   className,
 }: FeatureGateProps) {
   const navigate = useNavigate();
-  const { canAccess, getUpgradeMessage } = useFeatureGating();
+  const { canAccess, getUpgradeMessage, isAddonFeature } = useFeatureGating();
 
   if (canAccess(feature)) {
     return <>{children}</>;
@@ -51,10 +51,18 @@ export function FeatureGate({
         <p className="text-muted-foreground text-sm mb-4">
           {getUpgradeMessage(feature)}
         </p>
-        <Button onClick={() => navigate("/pricing")} className="gap-2">
-          <Sparkles className="h-4 w-4" />
-          Upgrade Plan
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          {isAddonFeature(feature) && (
+            <Button variant="outline" onClick={() => navigate("/addons")} className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Buy add-on
+            </Button>
+          )}
+          <Button onClick={() => navigate("/pricing")} className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            {isAddonFeature(feature) ? "View plans" : "Upgrade Plan"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -92,7 +100,7 @@ export function LimitIndicator({
   label,
 }: LimitIndicatorProps) {
   const navigate = useNavigate();
-  const { getLimit, isWithinLimit, getUpgradeMessage } = useFeatureGating();
+  const { getLimit, isWithinLimit, getUpgradeMessage, isAddonFeature } = useFeatureGating();
   const limit = getLimit(feature);
   const withinLimit = isWithinLimit(feature, currentCount);
 
@@ -116,9 +124,9 @@ export function LimitIndicator({
           variant="link"
           size="sm"
           className="h-auto p-0 text-xs"
-          onClick={() => navigate("/pricing")}
+          onClick={() => navigate(isAddonFeature(feature) ? "/addons" : "/pricing")}
         >
-          Upgrade
+          {isAddonFeature(feature) ? "Add capacity" : "Upgrade"}
         </Button>
       )}
     </div>

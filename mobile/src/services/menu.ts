@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase";
 import { resolveGstRate } from "../lib/gst";
+import { isItemEffectivelyAvailable } from "../lib/menu-availability";
 
 export interface MenuCategoryRow {
   id: string;
@@ -14,6 +15,8 @@ export interface MenuItemRow {
   base_price: number;
   is_veg: boolean;
   is_available: boolean;
+  schedule_enabled?: boolean;
+  availability_schedule?: unknown;
   category_id: string | null;
   gst_category: string | null;
 }
@@ -49,12 +52,11 @@ export async function fetchMenuCategories(outletId: string): Promise<MenuCategor
 export async function fetchMenuItems(outletId: string): Promise<MenuItemRow[]> {
   const { data, error } = await supabase
     .from("menu_items")
-    .select("id, name, description, base_price, is_veg, is_available, category_id, gst_category")
+    .select("id, name, description, base_price, is_veg, is_available, category_id, gst_category, schedule_enabled, availability_schedule")
     .eq("outlet_id", outletId)
-    .eq("is_available", true)
     .order("name");
   if (error) throw error;
-  return (data ?? []) as MenuItemRow[];
+  return ((data ?? []) as MenuItemRow[]).filter(isItemEffectivelyAvailable);
 }
 
 export async function placeNewOrder(input: PlaceOrderInput): Promise<{ id: string; orderNumber: string }> {

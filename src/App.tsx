@@ -26,6 +26,7 @@ const NewOrder = lazy(() => import("./pages/NewOrder"));
 const Kitchen = lazy(() => import("./pages/Kitchen"));
 const Staff = lazy(() => import("./pages/Staff"));
 const About = lazy(() => import("./pages/About"));
+const Pricing = lazy(() => import("./pages/Pricing"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Refund = lazy(() => import("./pages/Refund"));
@@ -44,6 +45,8 @@ const MenuViewer = lazy(() => import("./pages/tools/MenuViewer"));
 const SavedMenuViewer = lazy(() => import("./pages/tools/SavedMenuViewer"));
 const MyMenus = lazy(() => import("./pages/tools/MyMenus"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Addons = lazy(() => import("./pages/Addons"));
+const Inventory = lazy(() => import("./pages/Inventory"));
 const Integrations = lazy(() => import("./pages/Integrations"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const OrderHistory = lazy(() => import("./pages/OrderHistory"));
@@ -81,6 +84,7 @@ const App = () => (
                   <Route path="/" element={<Landing />} />
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/about" element={<About />} />
+                  <Route path="/pricing" element={<Pricing />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/refund" element={<Refund />} />
@@ -139,6 +143,8 @@ const App = () => (
                   <Route path="/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
                   <Route path="/my-menus" element={<ProtectedRoute><MyMenus /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="/addons" element={<ProtectedRoute><Addons /></ProtectedRoute>} />
+                  <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
                   <Route path="/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
                   <Route path="/order-history" element={<ProtectedRoute><OrderHistory /></ProtectedRoute>} />
                   <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />

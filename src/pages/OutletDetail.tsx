@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Link2, Copy, ExternalLink, Navigation, Receipt, Percent } from "lucide-react";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
+import { isSelfServiceMode, type OutletOperationMode } from "@/lib/outlet-operation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { OrderingQRCode } from "@/components/customer/OrderingQRCode";
+import { FeatureGate } from "@/components/FeatureGate";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -93,12 +103,14 @@ interface Outlet {
   longitude?: number | null;
   gst_number?: string | null;
   gst_categories?: Record<string, number> | null;
+  operation_mode?: string | null;
 }
 
 export default function OutletDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { currentOutlet, setCurrentOutlet } = useOutlet();
   const { toast } = useToast();
   const [outlet, setOutlet] = useState<Outlet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +130,7 @@ export default function OutletDetail() {
   const [geoLocating, setGeoLocating] = useState(false);
   const [editGstNumber, setEditGstNumber] = useState("");
   const [gstRates, setGstRates] = useState<Record<string, string>>({});
+  const [editOperationMode, setEditOperationMode] = useState<OutletOperationMode>("standard");
 
   useEffect(() => {
     if (user && id) {
@@ -155,6 +168,9 @@ export default function OutletDetail() {
       rateStrings[c.key] = saved[c.key] !== undefined ? String(saved[c.key]) : String(c.defaultRate);
     });
     setGstRates(rateStrings);
+    setEditOperationMode(
+      data.operation_mode === "self_service" ? "self_service" : "standard"
+    );
     setLoading(false);
   };
 
@@ -181,6 +197,7 @@ export default function OutletDetail() {
         gst_categories: Object.fromEntries(
           GST_CATEGORIES.map(c => [c.key, parseFloat(gstRates[c.key] ?? "0") || 0])
         ),
+        operation_mode: editOperationMode,
       })
       .eq("id", id);
 
@@ -192,6 +209,17 @@ export default function OutletDetail() {
       toast({ title: "Success!", description: "Outlet updated" });
       setIsEditDialogOpen(false);
       fetchOutlet();
+      if (currentOutlet?.id === id && outlet) {
+        setCurrentOutlet({
+          ...currentOutlet,
+          name: editName.trim(),
+          operation_mode: editOperationMode,
+          gst_number: editGstNumber.trim().toUpperCase() || null,
+          gst_categories: Object.fromEntries(
+            GST_CATEGORIES.map((c) => [c.key, parseFloat(gstRates[c.key] ?? "0") || 0])
+          ),
+        });
+      }
     }
   };
 
@@ -414,6 +442,24 @@ export default function OutletDetail() {
                     <p className="text-xs text-muted-foreground">Tap on the map or drag the pin to set location</p>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <Label>Operation mode</Label>
+                  <Select
+                    value={editOperationMode}
+                    onValueChange={(v) => setEditOperationMode(v as OutletOperationMode)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard (table service)</SelectItem>
+                      <SelectItem value="self_service">Self service (billing counter)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Self service prints a kitchen bill and customer token when orders are placed at the counter.
+                  </p>
+                </div>
                 <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <span className="text-sm font-medium">Active Status</span>
                   <Switch checked={editIsActive} onCheckedChange={setEditIsActive} />
@@ -480,6 +526,23 @@ export default function OutletDetail() {
               </Card>
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-base">Operation mode</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="font-medium">
+                    {isSelfServiceMode(outlet.operation_mode)
+                      ? "Self service (billing counter)"
+                      : "Standard (table service)"}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {isSelfServiceMode(outlet.operation_mode)
+                      ? "New orders print kitchen bill + customer token. Online orders show platform label on kitchen slips."
+                      : "Table flow with kitchen slips and full bills at payment."}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Receipt className="h-4 w-4 text-muted-foreground" />
                     GST Number
@@ -522,6 +585,7 @@ export default function OutletDetail() {
             </div>
 
             {/* Online Ordering Link */}
+            <FeatureGate feature="customerOrdering" showUpgradePrompt>
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -583,6 +647,7 @@ export default function OutletDetail() {
                 )}
               </CardContent>
             </Card>
+            </FeatureGate>
 
             {/* Quick Actions */}
             <Card>

@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed } from "lucide-react";
+import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed, Package } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -93,6 +93,20 @@ export function AppLayout({ children }: AppLayoutProps) {
               {/* Always visible quick navigation */}
               <div className="flex items-center gap-1 md:gap-2">
                 <NotificationCenter />
+                {!isStaff && (
+                  <Button
+                    asChild
+                    size="sm"
+                    variant={isActive("/addons") ? "secondary" : "outline"}
+                    className="h-8 md:h-9 border-border hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-colors shrink-0"
+                    title="Add-ons"
+                  >
+                    <Link to="/addons">
+                      <Package className="h-4 w-4 sm:mr-1.5 shrink-0" />
+                      <span className="hidden sm:inline">Add-ons</span>
+                    </Link>
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="icon"

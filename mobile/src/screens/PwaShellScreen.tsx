@@ -17,7 +17,13 @@ import * as Updates from "expo-updates";
 import Constants from "expo-constants";
 import { APP_VERSION } from "../lib/app-version";
 import { API_URL, WEBAPP_URL } from "../lib/config";
-import { printBillingReceipt, printKitchenCancelSlip, printKitchenSlip } from "../printer/printer-service";
+import {
+  applyRuntimePaperFromPayload,
+  printBillingReceipt,
+  printCustomerTokenSlip,
+  printKitchenCancelSlip,
+  printKitchenSlip,
+} from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
 import { tokens } from "../theme/tokens";
 
@@ -25,7 +31,7 @@ interface PwaShellScreenProps {
   onOpenPrinters: () => void;
 }
 
-type BridgeRole = "kitchen" | "billing";
+type BridgeRole = "kitchen" | "billing" | "customer_token";
 type KitchenItem = { name: string; quantity: number };
 type BillingItem = { name: string; quantity: number; totalPrice: number; gstRate?: number };
 
@@ -77,7 +83,7 @@ function isValidMessage(data: unknown): data is BridgeMessage {
   if (candidate.type === "banaoo-native-open-printers") return true;
   return (
     candidate.type === "banaoo-native-print" &&
-    (candidate.role === "kitchen" || candidate.role === "billing") &&
+    (candidate.role === "kitchen" || candidate.role === "billing" || candidate.role === "customer_token") &&
     !!candidate.payload &&
     typeof candidate.payload === "object"
   );
@@ -266,38 +272,58 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
 
     const payload = parsed.payload as Record<string, unknown>;
     const outletId = typeof payload.outletId === "string" ? payload.outletId : undefined;
-    const settings = await loadEffectivePrinterSettings(outletId);
-    const requestedPaperWidth: 58 | 80 | undefined =
-      payload.paperWidth === 80 ? 80 : payload.paperWidth === 58 ? 58 : undefined;
+    let settings = await loadEffectivePrinterSettings(outletId);
 
     if (parsed.role === "kitchen") {
+      settings = applyRuntimePaperFromPayload(settings, "kitchen", payload);
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asKitchenItems(payload.items);
       if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) return;
-      const runtimeSettings = requestedPaperWidth
-        ? { ...settings, kitchenPrinter: { ...settings.kitchenPrinter, paperWidth: requestedPaperWidth } }
-        : settings;
       const slipData = {
         orderNumber,
         orderType: orderTypeRaw,
         tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
         items,
         createdAt,
+        source: typeof payload.source === "string" ? payload.source.slice(0, 40) : undefined,
+        selfServiceMode: payload.selfServiceMode === true,
       };
       const intent = payload.intent === "cancel" ? "cancel" : "order";
       if (intent === "cancel") {
         const cancelledAt =
           typeof payload.cancelledAt === "string" ? new Date(payload.cancelledAt) : new Date();
         await printKitchenCancelSlip(
-          runtimeSettings,
+          settings,
           slipData,
           Number.isNaN(cancelledAt.getTime()) ? new Date() : cancelledAt
         );
       } else {
-        await printKitchenSlip(runtimeSettings, slipData);
+        await printKitchenSlip(settings, slipData);
       }
+      return;
+    }
+
+    if (parsed.role === "customer_token") {
+      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+      const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
+      const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
+      const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
+      const items = asKitchenItems(payload.items);
+      const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
+      const total = typeof payload.total === "number" ? payload.total : 0;
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) return;
+      await printCustomerTokenSlip(settings, {
+        orderNumber,
+        outletName,
+        orderType: orderTypeRaw,
+        tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+        items,
+        total,
+        createdAt,
+        source: typeof payload.source === "string" ? payload.source.slice(0, 40) : undefined,
+      });
       return;
     }
 
@@ -308,10 +334,8 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
     if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) return;
 
-    const runtimeSettings = requestedPaperWidth
-      ? { ...settings, billingPrinter: { ...settings.billingPrinter, paperWidth: requestedPaperWidth } }
-      : settings;
-    await printBillingReceipt(runtimeSettings, {
+    settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+    await printBillingReceipt(settings, {
       orderNumber,
       outletName,
       gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,

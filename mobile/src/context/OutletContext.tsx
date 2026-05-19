@@ -10,6 +10,7 @@ export interface Outlet {
   name: string;
   gst_number?: string | null;
   gst_categories?: Record<string, number> | null;
+  operation_mode?: string | null;
 }
 
 interface OutletContextType {
@@ -44,14 +45,14 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
       if (profile.role === "owner") {
         const { data } = await supabase
           .from("outlets")
-          .select("id, name, gst_number, gst_categories")
+          .select("id, name, gst_number, gst_categories, operation_mode")
           .eq("owner_id", user.id)
           .order("created_at", { ascending: false });
         rows = (data ?? []) as Outlet[];
       } else {
         const { data } = await supabase
           .from("staff_outlet_assignments")
-          .select("outlet_id, outlets(id, name, gst_number, gst_categories)")
+          .select("outlet_id, outlets(id, name, gst_number, gst_categories, operation_mode)")
           .eq("user_id", user.id);
         rows =
           data?.map((item: any) => item.outlets).filter(Boolean).map((item: any) => ({

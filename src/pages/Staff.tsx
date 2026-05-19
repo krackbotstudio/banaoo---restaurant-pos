@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useFeatureGating } from "@/hooks/use-feature-gating";
+import { LimitIndicator } from "@/components/FeatureGate";
 
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -231,6 +234,8 @@ function StaffCard({
 export default function Staff() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isWithinLimit, usage, getUpgradeMessage } = useFeatureGating();
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -281,6 +286,15 @@ export default function Staff() {
   // ── Dialog helpers ─────────────────────────────────────────────────────────
 
   const openAdd = () => {
+    if (!isWithinLimit("staffAccounts", usage.staff)) {
+      toast({
+        variant: "destructive",
+        title: "Staff limit reached",
+        description: getUpgradeMessage("staffAccounts"),
+      });
+      navigate("/addons");
+      return;
+    }
     setEditingId(null);
     setForm({
       ...EMPTY_FORM,
@@ -349,9 +363,19 @@ export default function Staff() {
       return;
     }
 
+    const isNew = !editingId;
+    if (isNew && !isWithinLimit("staffAccounts", usage.staff)) {
+      toast({
+        variant: "destructive",
+        title: "Staff limit reached",
+        description: getUpgradeMessage("staffAccounts"),
+      });
+      navigate("/addons");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const isNew = !editingId;
       let staffId = editingId;
 
       // For new staff: generate login credentials
@@ -503,6 +527,7 @@ export default function Staff() {
               <p className="text-sm text-muted-foreground">
                 {activeStaff.length} active · {inactiveStaff.length} inactive
               </p>
+              <LimitIndicator feature="staffAccounts" currentCount={usage.staff} label="Staff seats" />
             </div>
           </div>
           <Button className="gradient-primary glow-primary h-10" onClick={openAdd}>

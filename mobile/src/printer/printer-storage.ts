@@ -2,6 +2,7 @@ import { storage } from "../lib/storage";
 import {
   DEFAULT_MOBILE_PRINTER_SETTINGS,
   MobilePrinterSettings,
+  normalizeRolePrinter,
 } from "./printer-service";
 
 export const MOBILE_PRINTER_GLOBAL_KEY = "mobile_printer_settings_global";
@@ -11,7 +12,7 @@ export function printerStorageKey(outletId: string | null | undefined): string {
 }
 
 function mergeStored(stored: Partial<MobilePrinterSettings> | null | undefined): MobilePrinterSettings {
-  return {
+  const merged: MobilePrinterSettings = {
     ...DEFAULT_MOBILE_PRINTER_SETTINGS,
     ...stored,
     kitchenPrinter: {
@@ -22,6 +23,11 @@ function mergeStored(stored: Partial<MobilePrinterSettings> | null | undefined):
       ...DEFAULT_MOBILE_PRINTER_SETTINGS.billingPrinter,
       ...stored?.billingPrinter,
     },
+  };
+  return {
+    ...merged,
+    kitchenPrinter: normalizeRolePrinter(merged.kitchenPrinter),
+    billingPrinter: normalizeRolePrinter(merged.billingPrinter),
   };
 }
 

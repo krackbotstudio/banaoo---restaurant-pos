@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlatformConfigModal } from "@/components/integrations/PlatformConfigModal";
 import { OrderingQRCode } from "@/components/customer/OrderingQRCode";
 import { FeatureGate } from "@/components/FeatureGate";
+import type { FeatureKey } from "@/hooks/use-feature-gating";
 
 interface PlatformIntegration {
   id: string;
@@ -32,6 +33,12 @@ interface Platform {
   logo: string;
   color: string;
   available: boolean;
+}
+
+function platformFeatureKey(platformId: string): FeatureKey | null {
+  if (platformId === "swiggy") return "swiggyIntegration";
+  if (platformId === "zomato") return "zomatoIntegration";
+  return null;
 }
 
 const PLATFORMS: Platform[] = [
@@ -310,9 +317,8 @@ export default function Integrations() {
           </CardContent>
         </Card>
 
-        {/* ── Platform Integrations (feature gated) ── */}
-        <FeatureGate feature="platformIntegrations" showUpgradePrompt>
-          <div className="space-y-6">
+        {/* ── Platform Integrations (per-platform add-ons) ── */}
+        <div className="space-y-6">
             {/* Info Banner */}
             <Card className="border-primary/30 bg-primary/5">
               <CardContent className="p-4 flex items-start gap-3">
@@ -332,8 +338,9 @@ export default function Integrations() {
               {PLATFORMS.map((platform) => {
                 const integration = getIntegrationStatus(platform.id);
                 const isConnected = integration?.is_active && integration?.status === "connected";
+                const featureKey = platformFeatureKey(platform.id);
 
-                return (
+                const card = (
                   <Card
                     key={platform.id}
                     className={`relative overflow-hidden transition-all duration-300 ${
@@ -422,6 +429,16 @@ export default function Integrations() {
                     </CardContent>
                   </Card>
                 );
+
+                if (!featureKey || !platform.available) {
+                  return <div key={platform.id}>{card}</div>;
+                }
+
+                return (
+                  <FeatureGate key={platform.id} feature={featureKey} showUpgradePrompt>
+                    {card}
+                  </FeatureGate>
+                );
               })}
             </div>
 
@@ -439,8 +456,7 @@ export default function Integrations() {
                 </p>
               </CardContent>
             </Card>
-          </div>
-        </FeatureGate>
+        </div>
       </div>
 
       {selectedPlatform && (

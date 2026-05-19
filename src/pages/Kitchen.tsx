@@ -15,10 +15,13 @@ import {
 } from "@/hooks/use-kitchen-order-sound";
 import { PlatformBadge } from "@/components/integrations";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
+import { isSelfServiceMode, isOnlineOrderSource } from "@/lib/outlet-operation";
+import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { printKitchenOrderSlip } from "@/lib/print-kitchen";
 
 type ItemStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
 
-/** One-tap kitchen flow: cooking → ready → clear (no per-item buttons). */
+/** One-tap kitchen flow: cooking → done (leaves kitchen display). */
 function getOrderAdvanceAction(orderStatus: string): {
   label: string;
   nextStatus: string;
@@ -27,22 +30,11 @@ function getOrderAdvanceAction(orderStatus: string): {
   if (orderStatus === "pending" || orderStatus === "preparing") {
     return {
       label: "Ready for pickup",
-      nextStatus: "ready",
+      nextStatus: "completed",
       buttonClass: "bg-green-600 hover:bg-green-700 text-white shadow-lg",
     };
   }
-  if (orderStatus === "ready") {
-    return {
-      label: "Clear from kitchen",
-      nextStatus: "completed",
-      buttonClass: "bg-muted-foreground/90 hover:bg-muted-foreground text-white",
-    };
-  }
   return null;
-}
-
-function isCookingStatus(status: string) {
-  return status === "pending" || status === "preparing";
 }
 
 interface OrderItem {
@@ -67,6 +59,8 @@ interface KitchenOrder {
 
 export default function Kitchen() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
+  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
+  const selfService = isSelfServiceMode(currentOutlet?.operation_mode);
   const { toast } = useToast();
   const { playSound, unlockAudio } = useKitchenOrderSound();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
@@ -87,6 +81,8 @@ export default function Kitchen() {
         .filter((i) => i.status !== "cancelled")
         .map((i) => ({ name: i.item_name, quantity: i.quantity })),
       createdAt: new Date(order.created_at).toISOString(),
+      source: order.source,
+      selfServiceMode: selfService,
     });
     if (postedToNative) {
       toast({ title: "Kitchen slip sent to native printer bridge" });
@@ -190,16 +186,54 @@ export default function Kitchen() {
             table: "orders",
             filter: `outlet_id=eq.${currentOutlet.id}`,
           },
-          (payload) => {
+          async (payload) => {
             if (soundEnabled) {
               void playSound();
             }
-            const row = payload.new as { order_number?: string };
+            const row = payload.new as {
+              id?: string;
+              order_number?: string;
+              source?: string;
+              order_type?: string;
+              table_number?: string | null;
+              created_at?: string;
+              total?: number;
+            };
             toast({
               title: "🔔 New Order!",
               description: `Order #${row.order_number ?? "—"} just came in`,
             });
             fetchOrders();
+
+            if (
+              selfService &&
+              isOnlineOrderSource(row.source) &&
+              printerSettings.kitchenPrinter.autoPrint &&
+              row.id &&
+              row.order_number &&
+              row.created_at
+            ) {
+              const { data: items } = await supabase
+                .from("order_items")
+                .select("item_name, quantity, status")
+                .eq("order_id", row.id);
+              const activeItems = (items || []).filter((i) => i.status !== "cancelled");
+              if (activeItems.length > 0) {
+                void printKitchenOrderSlip(printerSettings, {
+                  outletId: currentOutlet?.id,
+                  orderNumber: row.order_number,
+                  orderType: row.order_type === "dine_in" ? "dine_in" : "takeaway",
+                  tableNumber: row.table_number || undefined,
+                  items: activeItems.map((i) => ({
+                    name: i.item_name,
+                    quantity: i.quantity,
+                  })),
+                  createdAt: new Date(row.created_at),
+                  source: row.source,
+                  selfServiceMode: true,
+                });
+              }
+            }
           }
         )
         .on(
@@ -224,7 +258,7 @@ export default function Kitchen() {
         supabase.removeChannel(channel);
       };
     }
-  }, [currentOutlet, soundEnabled, playSound, toast]);
+  }, [currentOutlet, soundEnabled, playSound, toast, selfService, printerSettings]);
 
   // Tick every second so elapsed timers stay live
   useEffect(() => {
@@ -255,7 +289,7 @@ export default function Kitchen() {
         )
       `)
       .eq("outlet_id", currentOutlet.id)
-      .in("status", ["pending", "preparing", "ready"])
+      .in("status", ["pending", "preparing"])
       .order("created_at", { ascending: true });
 
     if (!error && data) {
@@ -333,7 +367,7 @@ export default function Kitchen() {
               <h1 className="font-display text-2xl font-bold">Kitchen Display</h1>
               <p className="text-sm text-muted-foreground">
                 {currentOutlet?.name ? `${currentOutlet.name} · ` : ""}
-                Tap <span className="font-medium text-foreground">Ready</span> when food is done
+                Tap <span className="font-medium text-foreground">Ready for pickup</span> once — order leaves the kitchen
               </p>
             </div>
           </div>
@@ -356,14 +390,12 @@ export default function Kitchen() {
         </div>
 
         {/* Status Legend */}
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-muted-foreground">Cooking</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-muted-foreground">Ready for pickup</span>
+            <div className="w-3 h-3 rounded-full bg-yellow-500 shrink-0" />
+            <span className="text-muted-foreground">
+              Cooking — one tap on <span className="font-medium text-foreground">Ready for pickup</span> clears the card
+            </span>
           </div>
         </div>
 
@@ -391,7 +423,7 @@ export default function Kitchen() {
                   key={order.id}
                   className={cn(
                     "overflow-hidden border-t-4",
-                    isCookingStatus(order.status) ? "border-t-yellow-500" : "border-t-green-500"
+                    "border-t-yellow-500"
                   )}
                 >
                   <CardHeader className="pb-3">
@@ -474,9 +506,9 @@ export default function Kitchen() {
                       >
                         {isUpdating ? (
                           <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                        ) : advance.nextStatus === "ready" ? (
+                        ) : (
                           <CheckCircle className="h-5 w-5 mr-2" />
-                        ) : null}
+                        )}
                         {advance.label}
                       </Button>
                     )}

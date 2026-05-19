@@ -16,6 +16,12 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { sendSubscriptionConfirmation } from './email.js';
+import {
+  buildEntitlementsPayload,
+  calcAddonAmount,
+  normalizeAddonQuantity,
+  assertWithinOutletLimit,
+} from './entitlements.js';
 
 dotenv.config();
 
@@ -761,6 +767,7 @@ app.post('/api/outlets', async (req, res) => {
     return res.status(400).json({ error: 'Outlet name is required' });
   }
   try {
+    await assertWithinOutletLimit(req.user.id);
     const { rows } = await pool.query(
       `INSERT INTO public.outlets (owner_id, name, address, phone)
        VALUES ($1, $2, $3, $4)
@@ -769,6 +776,9 @@ app.post('/api/outlets', async (req, res) => {
     );
     res.status(201).json({ outlet: rows[0] });
   } catch (err) {
+    if (err.code === 'OUTLET_LIMIT') {
+      return res.status(err.status || 403).json({ error: err.message, code: err.code });
+    }
     console.error('POST /api/outlets:', err);
     res.status(500).json({ error: err.message });
   }
@@ -881,14 +891,22 @@ app.get('/api/subscription', async (req, res) => {
   }
   
   try {
-    const { rows } = await pool.query(
-      "SELECT * FROM public.subscriptions WHERE user_id = $1 AND status IN ('active', 'trialing', 'past_due') ORDER BY created_at DESC LIMIT 1",
-      [req.user.id]
-    );
-    console.log('Subscription found:', rows[0] ? 'Yes' : 'No');
-    res.json(rows[0] || null);
+    const payload = await buildEntitlementsPayload(req.user.id);
+    console.log('Subscription found:', payload.subscription ? 'Yes' : 'No');
+    res.json(payload);
   } catch (err) {
     console.error('Subscription fetch error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/entitlements', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const payload = await buildEntitlementsPayload(req.user.id);
+    res.json(payload);
+  } catch (err) {
+    console.error('GET /api/entitlements:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1113,8 +1131,8 @@ app.post('/auth/logout', (req, res) => {
 // --- Payment Routes ---
 
 const BASE_PRICES = {
-  starter: 999,
-  professional: 2499,
+  starter: 499,
+  professional: 699,
 };
 
 const DISCOUNTS = {
@@ -1225,6 +1243,115 @@ app.post('/api/payments/verify-payment', async (req, res) => {
 
     res.json({ success: true, expires_at: expiresAt });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/payments/create-addon-order', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  const { addon_type, quantity = 1, period_months = 1 } = req.body || {};
+
+  try {
+    const KEY_ID = process.env.RAZORPAY_KEY_ID;
+    const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+    if (!KEY_ID || !KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay credentials not configured' });
+    }
+
+    const qty = normalizeAddonQuantity(addon_type, quantity);
+    const months = Number(period_months) || 1;
+    const amountRupees = calcAddonAmount(addon_type, qty, months);
+    const amountPaise = amountRupees * 100;
+
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString('base64')}`,
+      },
+      body: JSON.stringify({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt: `addon_${req.user.id.slice(0, 8)}_${Date.now()}`,
+        notes: {
+          user_id: req.user.id,
+          addon_type,
+          quantity: String(qty),
+          period_months: String(months),
+          kind: 'addon',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      return res.status(502).json({ error: `Razorpay: ${err}` });
+    }
+
+    const order = await response.json();
+    res.json({
+      order_id: order.id,
+      amount: amountPaise,
+      amount_rupees: amountRupees,
+      currency: 'INR',
+      key_id: KEY_ID,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/payments/verify-addon-payment', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+    addon_type,
+    quantity = 1,
+    period_months = 1,
+  } = req.body || {};
+
+  try {
+    const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', KEY_SECRET)
+      .update(body)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed' });
+    }
+
+    const qty = normalizeAddonQuantity(addon_type, quantity);
+    const months = Number(period_months) || 1;
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + months);
+
+    await pool.query(
+      `INSERT INTO public.subscription_addons
+       (user_id, addon_type, quantity, status, period_months, expires_at, razorpay_order_id, razorpay_payment_id)
+       VALUES ($1, $2, $3, 'active', $4, $5, $6, $7)
+       ON CONFLICT (razorpay_order_id) WHERE razorpay_order_id IS NOT NULL DO UPDATE SET
+         status = 'active',
+         expires_at = EXCLUDED.expires_at,
+         razorpay_payment_id = EXCLUDED.razorpay_payment_id`,
+      [
+        req.user.id,
+        addon_type,
+        qty,
+        months,
+        expiresAt,
+        razorpay_order_id,
+        razorpay_payment_id,
+      ]
+    );
+
+    const payload = await buildEntitlementsPayload(req.user.id);
+    res.json({ success: true, expires_at: expiresAt, ...payload });
+  } catch (err) {
+    console.error('verify-addon-payment:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1625,9 +1752,10 @@ app.post('/api/support-chat', async (req, res) => {
 - Analytics & Reports - Track sales, orders, and performance
 
 **Pricing Plans:**
-- Starter: ₹999/month (1 outlet, 5 staff members, basic analytics, email support)
-- Professional: ₹2,499/month (3 outlets, unlimited staff, advanced analytics, priority support) - Most Popular
-- Enterprise: Custom pricing (unlimited outlets, dedicated account manager, 24/7 phone support, custom integrations)
+- Launcher: ₹499/month (1 outlet, up to 5 staff, order/menu/KDS/analytics/table management, email support; no mobile app)
+- Growth: ₹699/month (Most Popular — same as Launcher plus mobile app access and priority support)
+- Expand: Custom pricing (unlimited outlets, flexible staff, custom integrations, multi-branch management, dedicated support)
+- Add-ons on Launcher/Growth: extra outlet ₹300/month, extra staff ₹150/month per account
 
 All plans include a 14-day free trial with no credit card required.
 

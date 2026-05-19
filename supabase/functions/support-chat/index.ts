@@ -18,9 +18,10 @@ const systemPrompt = `You are the banaoo.in support assistant. banaoo.in is a re
 - Analytics & Reports - Track sales, orders, and performance
 
 **Pricing Plans:**
-- Starter: ₹999/month (1 outlet, 5 staff members, basic analytics, email support)
-- Professional: ₹2,499/month (3 outlets, unlimited staff, advanced analytics, priority support) - Most Popular
-- Enterprise: Custom pricing (unlimited outlets, dedicated account manager, 24/7 phone support, custom integrations)
+- Launcher: ₹499/month (1 outlet, up to 5 staff, order/menu/KDS/analytics/table management, email support; no mobile app)
+- Growth: ₹699/month (Most Popular — same as Launcher plus mobile app access and priority support)
+- Expand: Custom pricing (unlimited outlets, flexible staff, custom integrations, multi-branch management, dedicated support)
+- Add-ons on Launcher/Growth: extra outlet ₹300/month, extra staff ₹150/month per account
 
 All plans include a 14-day free trial with no credit card required.
 

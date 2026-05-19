@@ -41,19 +41,40 @@ export function isNativePrinterBridgeExpected(): boolean {
 export interface NativeKitchenPrintPayload {
   outletId?: string | null;
   paperWidth?: 58 | 80;
+  paperWidthMm?: number;
+  paperColumns?: number;
   orderNumber: string;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
   items: Array<{ name: string; quantity: number }>;
   createdAt: string;
+  source?: string;
+  selfServiceMode?: boolean;
   /** "cancel" prints a void / do-not-prepare slip for the kitchen. */
   intent?: "order" | "cancel";
   cancelledAt?: string;
 }
 
+export interface NativeCustomerTokenPrintPayload {
+  outletId?: string | null;
+  paperWidth?: 58 | 80;
+  paperWidthMm?: number;
+  paperColumns?: number;
+  orderNumber: string;
+  outletName: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: Array<{ name: string; quantity: number }>;
+  total: number;
+  createdAt: string;
+  source?: string;
+}
+
 export interface NativeBillingPrintPayload {
   outletId?: string | null;
   paperWidth?: 58 | 80;
+  paperWidthMm?: number;
+  paperColumns?: number;
   orderNumber: string;
   outletName: string;
   gstNumber?: string | null;
@@ -70,7 +91,10 @@ export interface NativeBillingPrintPayload {
   createdAt: string;
 }
 
-function postToNative(role: "kitchen" | "billing", payload: NativeKitchenPrintPayload | NativeBillingPrintPayload): boolean {
+function postToNative(
+  role: "kitchen" | "billing" | "customer_token",
+  payload: NativeKitchenPrintPayload | NativeBillingPrintPayload | NativeCustomerTokenPrintPayload
+): boolean {
   const host = getReactNativeHost();
   if (!host) return false;
   host.postMessage(
@@ -93,6 +117,10 @@ export function postNativeKitchenCancelPrint(payload: NativeKitchenPrintPayload)
 
 export function postNativeBillingPrint(payload: NativeBillingPrintPayload): boolean {
   return postToNative("billing", payload);
+}
+
+export function postNativeCustomerTokenPrint(payload: NativeCustomerTokenPrintPayload): boolean {
+  return postToNative("customer_token", payload);
 }
 
 export function openNativePrinterSettings(): boolean {

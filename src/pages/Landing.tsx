@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API_URL } from "@/lib/api-url";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { PricingComparison } from "@/components/landing/PricingComparison";
 import {
   UtensilsCrossed,
   LayoutDashboard,
@@ -549,6 +550,13 @@ export default function Landing() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" className="py-20 scroll-mt-20">
+        <div className="container">
+          <PricingComparison />
         </div>
       </section>
 

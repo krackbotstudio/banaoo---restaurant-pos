@@ -227,6 +227,7 @@ export type Database = {
       }
       menu_items: {
         Row: {
+          availability_schedule: Json | null
           base_price: number
           category_id: string | null
           created_at: string
@@ -238,9 +239,11 @@ export type Database = {
           name: string
           outlet_id: string
           prep_time_mins: number | null
+          schedule_enabled: boolean
           updated_at: string
         }
         Insert: {
+          availability_schedule?: Json | null
           base_price: number
           category_id?: string | null
           created_at?: string
@@ -252,9 +255,11 @@ export type Database = {
           name: string
           outlet_id: string
           prep_time_mins?: number | null
+          schedule_enabled?: boolean
           updated_at?: string
         }
         Update: {
+          availability_schedule?: Json | null
           base_price?: number
           category_id?: string | null
           created_at?: string
@@ -266,6 +271,7 @@ export type Database = {
           name?: string
           outlet_id?: string
           prep_time_mins?: number | null
+          schedule_enabled?: boolean
           updated_at?: string
         }
         Relationships: [

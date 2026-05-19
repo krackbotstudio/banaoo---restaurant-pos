@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
  * Used when a staff member's page_permissions is NULL (not yet customised).
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
-  manager:  ["dashboard", "menu", "orders", "order-history", "customers", "analytics", "kitchen"],
+  manager:  ["dashboard", "menu", "orders", "order-history", "customers", "analytics", "inventory", "kitchen"],
   chef:     ["orders", "kitchen", "menu"],
   waiter:   ["orders", "menu"],
   cashier:  ["orders", "order-history", "customers", "menu"],
@@ -26,6 +26,7 @@ export const ALL_MODULES = [
   { key: "order-history",label: "Order History" },
   { key: "customers",    label: "Customers" },
   { key: "analytics",    label: "Analytics" },
+  { key: "inventory",    label: "Inventory" },
   { key: "kitchen",      label: "Kitchen" },
   { key: "staff",        label: "Staff" },
   { key: "integrations", label: "Integrations" },

@@ -493,9 +493,8 @@ export default function MenuPage({ outlet }: { outlet: Outlet }) {
           .order("sort_order"),
         supabase
           .from("menu_items")
-          .select("id, name, description, base_price, image_url, is_veg, is_available, category_id, prep_time_mins, is_special, special_label, offer_label, offer_price")
-          .eq("outlet_id", outlet.id)
-          .eq("is_available", true),
+          .select("id, name, description, base_price, image_url, is_veg, is_available, category_id, prep_time_mins, is_special, special_label, offer_label, offer_price, schedule_enabled, availability_schedule")
+          .eq("outlet_id", outlet.id),
       ]);
       setCategories(cats ?? []);
       setItems(menuItems ?? []);

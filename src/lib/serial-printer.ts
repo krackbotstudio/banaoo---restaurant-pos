@@ -1,6 +1,8 @@
 // ESC/POS thermal printer support via Web Serial API.
 // Users grant port permission once; after that prints are silent (no dialog).
 
+import type { PrintLayout } from "@/lib/paper-width";
+
 // ── ESC/POS command constants ────────────────────────────────────────────────
 const ESC = 0x1B;
 const GS  = 0x1D;
@@ -19,6 +21,12 @@ class EscPosDoc {
   }
 
   bold(on: boolean) { this.b.push(ESC, 0x45, on ? 1 : 0); return this; }
+
+  /** Font B (condensed) when true — fits more columns visually */
+  font(condensed: boolean) {
+    this.b.push(ESC, 0x4d, condensed ? 1 : 0);
+    return this;
+  }
 
   // dh = double height, dw = double width
   size(dh: boolean, dw: boolean) {
@@ -47,8 +55,11 @@ class EscPosDoc {
   bytes()      { return new Uint8Array(this.b); }
 }
 
-// ── Paper width → character columns ─────────────────────────────────────────
-const cols = (pw: 58 | 80) => (pw === 58 ? 32 : 48);
+function beginDoc(fontSize = 12): EscPosDoc {
+  const d = new EscPosDoc().init();
+  d.font(fontSize <= 11);
+  return d;
+}
 
 /** Options for ESC/POS layout (thermal spacing, tear guide, duplicate copies). */
 export interface EscPosPrintOptions {
@@ -71,6 +82,17 @@ function appendTearCutLine(d: EscPosDoc, width: number) {
   d.line("");
 }
 
+function formatSourceBanner(source?: string): string | null {
+  if (!source || source === "pos") return null;
+  const map: Record<string, string> = {
+    zomato: "ZOMATO ORDER",
+    swiggy: "SWIGGY ORDER",
+    customer_app: "ONLINE ORDER",
+    online: "ONLINE ORDER",
+  };
+  return map[source] ?? `${source.replace(/_/g, " ").toUpperCase()} ORDER`;
+}
+
 function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipData, w: number) {
   const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", hour12: true,
@@ -79,7 +101,14 @@ function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipData, w: number) {
     ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In")
     : "TAKEAWAY";
 
-  d.align("C").bold(true).size(true, true).line("KITCHEN").size(false, false).bold(false);
+  const sourceBanner = formatSourceBanner(data.source);
+  if (sourceBanner) {
+    d.align("C").bold(true).size(true, true).line(`*** ${sourceBanner} ***`).size(false, false).bold(false);
+    d.line("");
+  }
+
+  const header = data.selfServiceMode ? "KITCHEN BILL" : "KITCHEN";
+  d.align("C").bold(true).size(true, true).line(header).size(false, false).bold(false);
   d.align("L").dashes(w);
   d.cols("Order #", data.orderNumber, w);
   d.cols("Time", timeStr, w);
@@ -104,22 +133,57 @@ export interface KitchenSlipData {
   tableNumber?: string;
   items: { name: string; quantity: number }[];
   createdAt: Date;
+  source?: string;
+  selfServiceMode?: boolean;
+  customerName?: string;
+}
+
+/** Calibration slip — ruler lines at common column counts to pick the best fit. */
+export function buildCalibrationSlip(
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = layout.columns;
+  const d = beginDoc(fontSize);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+
+  d.align("C").bold(true).line("PAPER CALIBRATION").bold(false);
+  d.align("C").line(`${layout.paperWidthMm}mm · ${w} cols · ${fontSize}pt`);
+  d.dashes(w);
+  d.line("Full width for YOUR setting:");
+  d.line("=".repeat(w));
+  d.dashes(w);
+  d.bold(true).line("Compare these lines to paper edge:").bold(false);
+  for (const n of [32, 40, 48, 54]) {
+    const label = `${n} cols`;
+    const bar = "=".repeat(Math.min(n, w));
+    d.line(`${label}: ${bar}`);
+  }
+  d.dashes(w);
+  d.align("C").line("Use the longest line that");
+  d.align("C").line("fits without wrapping");
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
 }
 
 export function buildKitchenSlip(
   data: KitchenSlipData,
-  paperWidth: 58 | 80 = 58,
+  layout: PrintLayout,
+  fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = cols(paperWidth);
-  const d = new EscPosDoc().init();
+  const w = layout.columns;
+  const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
-  const dual = options?.dualKitchenCopies === true;
+  const dual = !data.selfServiceMode && options?.dualKitchenCopies === true;
 
   if (!dual) {
     writeKitchenSlipBody(d, data, w);
-    d.align("C").line("-- Kitchen Copy --");
+    d.align("C").line(data.selfServiceMode ? "-- Kitchen Bill --" : "-- Kitchen Copy --");
     if (showCut) appendTearCutLine(d, w);
     d.feed(feed).cut();
     return d.bytes();
@@ -138,6 +202,68 @@ export function buildKitchenSlip(
   return d.bytes();
 }
 
+// ── Customer token (self-service counter) ─────────────────────────────────────
+export interface CustomerTokenSlipData {
+  orderNumber: string;
+  outletName?: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: { name: string; quantity: number }[];
+  total: number;
+  createdAt: Date;
+  source?: string;
+}
+
+export function buildCustomerTokenSlip(
+  data: CustomerTokenSlipData,
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const w = layout.columns;
+  const d = beginDoc(fontSize);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+  const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
+  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+
+  const sourceBanner = formatSourceBanner(data.source);
+  if (sourceBanner) {
+    d.align("C").bold(true).line(`*** ${sourceBanner} ***`).bold(false);
+  }
+
+  d.align("C").bold(true).size(true, true).line("CUSTOMER TOKEN").size(false, false).bold(false);
+  if (data.outletName) d.align("C").line(data.outletName.slice(0, w));
+  d.align("C").line("Please wait for your order");
+  d.dashes(w);
+  d.cols("Order #", data.orderNumber, w);
+  d.cols("Time", timeStr, w);
+  const typeLabel =
+    data.orderType === "dine_in"
+      ? data.tableNumber
+        ? `Table T${data.tableNumber}`
+        : "Counter"
+      : "Takeaway";
+  d.cols("Type", typeLabel, w);
+  d.dashes(w);
+  d.bold(true).line("ITEM" + " ".repeat(w - 7) + "QTY").bold(false);
+  for (const item of data.items) {
+    const qty = `x${item.quantity}`;
+    const maxName = w - qty.length - 1;
+    const name = item.name.length > maxName ? item.name.slice(0, maxName - 1) + "." : item.name;
+    d.cols(name, qty, w);
+  }
+  d.dashes(w);
+  d.bold(true).size(false, true).cols("TOTAL", fmt(data.total), w).size(false, false).bold(false);
+  d.dashes(w);
+  d.align("C").line("Show this token at pickup");
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
 export interface KitchenCancelSlipData {
   orderNumber: string;
   orderType: "dine_in" | "takeaway";
@@ -149,11 +275,12 @@ export interface KitchenCancelSlipData {
 
 export function buildKitchenCancelSlip(
   data: KitchenCancelSlipData,
-  paperWidth: 58 | 80 = 58,
+  layout: PrintLayout,
+  fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = cols(paperWidth);
-  const d = new EscPosDoc().init();
+  const w = layout.columns;
+  const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
   const placedTime = data.createdAt.toLocaleTimeString("en-IN", {
@@ -261,12 +388,13 @@ function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptData, w: numb
 
 export function buildBillingReceipt(
   data: BillingReceiptData,
-  paperWidth: 58 | 80 = 58,
+  layout: PrintLayout,
+  fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = cols(paperWidth);
+  const w = layout.columns;
   const fmt = (n: number) => "Rs." + n.toFixed(2);
-  const d = new EscPosDoc().init();
+  const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
   const dual = options?.dualBillingCopies === true;

@@ -12,6 +12,7 @@ import {
   postNativeKitchenCancelPrint,
 } from "@/lib/native-print-bridge";
 import type { OutletPrinterSettings } from "@/lib/use-printer-settings";
+import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
 
 export type KitchenPrintResult = { ok: true } | { ok: false; message: string };
 
@@ -22,29 +23,31 @@ export interface KitchenOrderPrintInput {
   tableNumber?: string;
   items: { name: string; quantity: number }[];
   createdAt: Date;
+  source?: string;
+  selfServiceMode?: boolean;
 }
 
 export interface KitchenCancelPrintInput extends KitchenOrderPrintInput {
   cancelledAt?: Date;
 }
 
-function escPosOptions(settings: OutletPrinterSettings) {
+function escPosOptions(settings: OutletPrinterSettings, selfServiceMode?: boolean) {
   const k = settings.kitchenPrinter;
   return {
     postPrintFeedLines: k.postPrintFeedLines,
     showTearCutLine: k.showTearCutLine,
-    dualKitchenCopies: k.dualKitchenCopies,
+    dualKitchenCopies: selfServiceMode ? false : k.dualKitchenCopies,
   };
 }
 
 function printKitchenBrowser(
   orderData: KitchenOrderPrintInput,
   fontSize: number,
-  paperWidth: 58 | 80,
+  paperWidthMm: number,
   title: string
 ): KitchenPrintResult {
   const pt = fontSize;
-  const pw = paperWidth;
+  const pw = paperWidthMm;
   const printWindow = window.open("", "_blank", "width=220,height=600");
   if (!printWindow) {
     return { ok: false, message: "Allow popups to print from the browser" };
@@ -127,7 +130,8 @@ async function printKitchenSerial(
     return { ok: false, message: "No serial port assigned for kitchen printer" };
   }
   try {
-    const bytes = build(slipData, k.paperWidth, escPosOptions(settings));
+    const { layout, fontSize } = getPrintLayoutFromConfig(k);
+    const bytes = build(slipData, layout, fontSize, escPosOptions(settings, slipData.selfServiceMode));
     await printViaSerial(k.usbPortIndex, bytes, k.baudRate);
     return { ok: true };
   } catch (err) {
@@ -146,16 +150,21 @@ export async function printKitchenOrderSlip(
     tableNumber: input.tableNumber,
     items: input.items,
     createdAt: input.createdAt,
+    source: input.source,
+    selfServiceMode: input.selfServiceMode,
   };
 
   const posted = postNativeKitchenPrint({
     outletId: input.outletId,
-    paperWidth: settings.kitchenPrinter.paperWidth,
+    paperWidth: legacyPaperWidthMm(settings.kitchenPrinter.paperWidthMm),
+    paperWidthMm: settings.kitchenPrinter.paperWidthMm,
     orderNumber: input.orderNumber,
     orderType: input.orderType,
     tableNumber: input.tableNumber,
     items: input.items,
     createdAt: input.createdAt.toISOString(),
+    source: input.source,
+    selfServiceMode: input.selfServiceMode,
   });
   if (posted) return { ok: true };
 
@@ -164,12 +173,26 @@ export async function printKitchenOrderSlip(
   }
 
   const k = settings.kitchenPrinter;
-  const useSerial = k.printMode === "serial" || k.usbPortIndex !== null;
+
+  if (k.transport === "network") {
+    return {
+      ok: false,
+      message:
+        "Wi‑Fi/LAN printing must be configured in the Banaoo Android app (Settings → Printers → Native printer settings).",
+    };
+  }
+
+  const useSerial =
+    k.transport === "usb" ||
+    k.transport === "bluetooth" ||
+    k.printMode === "serial" ||
+    k.usbPortIndex !== null;
   if (useSerial) {
     return printKitchenSerial(settings, slipData, buildKitchenSlip);
   }
 
-  return printKitchenBrowser(input, k.fontSize, k.paperWidth, "** KITCHEN ORDER **");
+  const title = input.selfServiceMode ? "** KITCHEN BILL **" : "** KITCHEN ORDER **";
+  return printKitchenBrowser(input, k.fontSize, k.paperWidthMm, title);
 }
 
 export async function printKitchenCancelSlip(
@@ -187,7 +210,8 @@ export async function printKitchenCancelSlip(
 
   const posted = postNativeKitchenCancelPrint({
     outletId: input.outletId,
-    paperWidth: settings.kitchenPrinter.paperWidth,
+    paperWidth: legacyPaperWidthMm(settings.kitchenPrinter.paperWidthMm),
+    paperWidthMm: settings.kitchenPrinter.paperWidthMm,
     orderNumber: input.orderNumber,
     orderType: input.orderType,
     tableNumber: input.tableNumber,
@@ -202,7 +226,20 @@ export async function printKitchenCancelSlip(
   }
 
   const k = settings.kitchenPrinter;
-  const useSerial = k.printMode === "serial" || k.usbPortIndex !== null;
+
+  if (k.transport === "network") {
+    return {
+      ok: false,
+      message:
+        "Wi‑Fi/LAN printing must be configured in the Banaoo Android app (Settings → Printers → Native printer settings).",
+    };
+  }
+
+  const useSerial =
+    k.transport === "usb" ||
+    k.transport === "bluetooth" ||
+    k.printMode === "serial" ||
+    k.usbPortIndex !== null;
   if (useSerial) {
     return printKitchenSerial(settings, slipData, buildKitchenCancelSlip);
   }
@@ -210,7 +247,7 @@ export async function printKitchenCancelSlip(
   return printKitchenBrowser(
     input,
     k.fontSize,
-    k.paperWidth,
+    k.paperWidthMm,
     "** CANCELLED — DO NOT PREPARE **"
   );
 }

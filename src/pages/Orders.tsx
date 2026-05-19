@@ -16,6 +16,7 @@ import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
+import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
 import { printKitchenCancelSlip } from "@/lib/print-kitchen";
 
@@ -441,8 +442,9 @@ export default function Orders() {
     setPrintingBill(true);
     try {
 
-    const pw = printerSettings.billingPrinter.paperWidth;
-    const pt = printerSettings.billingPrinter.fontSize;
+    const billingCfg = printerSettings.billingPrinter;
+    const { layout, fontSize: pt } = getPrintLayoutFromConfig(billingCfg);
+    const pwMm = layout.paperWidthMm;
     const fmt = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
     const subtotal = selectedOrder.total;
     const discountAmt = discountType === "percent"
@@ -458,7 +460,9 @@ export default function Orders() {
 
     const postedToNative = postNativeBillingPrint({
       outletId: currentOutlet?.id,
-      paperWidth: pw,
+      paperWidth: legacyPaperWidthMm(pwMm),
+      paperWidthMm: pwMm,
+      paperColumns: layout.columns,
       orderNumber: selectedOrder.order_number,
       outletName: currentOutlet?.name || "",
       gstNumber: (currentOutlet as any)?.gst_number,
@@ -520,11 +524,12 @@ export default function Orders() {
             grandTotal,
             createdAt: new Date(selectedOrder.created_at),
           },
-          pw,
+          layout,
+          pt,
           {
-            postPrintFeedLines: printerSettings.billingPrinter.postPrintFeedLines,
-            showTearCutLine: printerSettings.billingPrinter.showTearCutLine,
-            dualBillingCopies: printerSettings.billingPrinter.dualBillingCopies,
+            postPrintFeedLines: billingCfg.postPrintFeedLines,
+            showTearCutLine: billingCfg.showTearCutLine,
+            dualBillingCopies: billingCfg.dualBillingCopies,
           }
         );
         await printViaSerial(portIndex, bytes, printerSettings.billingPrinter.baudRate);
@@ -572,8 +577,8 @@ export default function Orders() {
   <meta name="color-scheme" content="light"/>
   <title>Bill #${selectedOrder.order_number}</title>
   <style>
-    @page { size: ${pw}mm auto; margin: 0; }
-    html, body { margin:0; padding:3mm 2mm; width:${pw}mm; background:#fff; color:#000;
+    @page { size: ${pwMm}mm auto; margin: 0; }
+    html, body { margin:0; padding:3mm 2mm; width:${pwMm}mm; background:#fff; color:#000;
       font-family:'Courier New',Courier,monospace; font-size:${pt}pt; }
     * { color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     table { border-collapse:collapse; width:100%; }

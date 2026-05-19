@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, QrCode } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -32,6 +32,8 @@ const tools = [
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, loading } = useAuth();
+  const location = useLocation();
+  const pricingHref = location.pathname === "/" ? "/#pricing" : "/pricing";
 
   // Brand name typing animation
   const [typedBrand, setTypedBrand] = useState("banaoo");
@@ -104,6 +106,9 @@ export function Navbar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <Link to={pricingHref} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            Pricing
+          </Link>
           <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             About
           </Link>
@@ -167,6 +172,13 @@ export function Navbar() {
               ))}
             </div>
 
+            <Link
+              to={pricingHref}
+              className="text-sm font-medium py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Pricing
+            </Link>
             <Link 
               to="/about" 
               className="text-sm font-medium py-2"

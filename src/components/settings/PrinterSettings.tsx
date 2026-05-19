@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutlet } from "@/lib/outlet-context";
-import { usePrinterSettings, PrinterConfig } from "@/lib/use-printer-settings";
+import { usePrinterSettings, PrinterConfig, type PrinterTransport } from "@/lib/use-printer-settings";
+import { PRINTER_TRANSPORT_LABELS, DEFAULT_NETWORK_PORT } from "@/lib/printer-types";
 import {
   isWebSerialSupported,
   requestAndGetPortIndex,
@@ -8,9 +9,13 @@ import {
   GrantedPort,
   buildKitchenSlip,
   buildBillingReceipt,
+  buildCalibrationSlip,
   printViaSerial,
   testPortConnection,
 } from "@/lib/serial-printer";
+import { getPrintLayoutFromConfig } from "@/lib/paper-width";
+import { suggestProfileForPort, profileToConfigPatch } from "@/lib/printer-profiles";
+import { PaperLayoutControls } from "@/components/settings/PaperLayoutControls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +46,8 @@ import {
   RefreshCw,
   AlertCircle,
   Zap,
+  Wifi,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
@@ -473,10 +480,42 @@ function PrinterCard({
   isKitchen,
 }: PrinterCardProps) {
   const [testing, setTesting] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
+  const { layout, fontSize } = getPrintLayoutFromConfig(config);
+
+  const handleCalibrationPrint = async () => {
+    if (config.transport === "network") {
+      toast.info("Calibration print: use Native printer settings in the Banaoo Android app.");
+      return;
+    }
+    if (config.printMode !== "serial" || config.usbPortIndex === null) {
+      toast.warning("Assign a serial port and use Serial print mode for calibration slips.");
+      return;
+    }
+    setCalibrating(true);
+    try {
+      const bytes = buildCalibrationSlip(layout, fontSize, {
+        postPrintFeedLines: config.postPrintFeedLines,
+        showTearCutLine: config.showTearCutLine,
+      });
+      await printViaSerial(config.usbPortIndex, bytes, config.baudRate);
+      toast.success("Calibration slip sent — pick the column count that fits your paper");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Calibration print failed: ${msg}`);
+    } finally {
+      setCalibrating(false);
+    }
+  };
 
   const handleTestPrint = async () => {
     setTesting(true);
     try {
+      if (config.transport === "network") {
+        toast.info("Wi‑Fi/LAN test print: use the Banaoo Android app → Settings → Printers → Native printer settings.");
+        return;
+      }
+
       // Serial path — silent print (only when serial mode and port assigned)
       if (config.printMode === "serial" && config.usbPortIndex !== null) {
         try {
@@ -495,7 +534,8 @@ function PrinterCard({
                   items: [{ name: "Test Item", quantity: 1 }],
                   createdAt: now,
                 },
-                config.paperWidth,
+                layout,
+                fontSize,
                 escOpts
               )
             : buildBillingReceipt(
@@ -513,7 +553,8 @@ function PrinterCard({
                   grandTotal: 105,
                   createdAt: now,
                 },
-                config.paperWidth,
+                layout,
+                fontSize,
                 escOpts
               );
           await printViaSerial(config.usbPortIndex, bytes, config.baudRate);
@@ -527,8 +568,8 @@ function PrinterCard({
       }
 
       // Browser fallback
-      const pt = config.fontSize;
-      const pw = config.paperWidth;
+      const pt = fontSize;
+      const pw = layout.paperWidthMm;
       const win = window.open("", "_blank", "width=220,height=450");
       if (!win) { toast.warning("Allow popups to use the test print feature"); return; }
       win.document.write(`<!DOCTYPE html>
@@ -545,7 +586,7 @@ function PrinterCard({
   <div class="c" style="font-weight:bold;font-size:${pt + 2}pt">** TEST PRINT **</div>
   <div class="dash"></div>
   <div>${title}</div>
-  <div style="font-size:${pt - 1}pt">${config.name || "Unnamed"} · ${pw}mm · ${pt}pt</div>
+  <div style="font-size:${pt - 1}pt">${config.name || "Unnamed"} · ${pw}mm · ${layout.columns} cols · ${pt}pt</div>
   <div class="dash"></div>
   <div class="c" style="font-size:${pt - 1}pt">— Print OK —</div>
   <div style="height:10mm"></div>
@@ -566,11 +607,18 @@ function PrinterCard({
             <CardTitle className="flex items-center gap-2 text-base">{icon}{title}</CardTitle>
             <CardDescription className="mt-1">{description}</CardDescription>
           </div>
-          {assignedPort ? (
+          {config.transport === "network" ? (
+            <Badge className="gap-1 shrink-0" variant="outline">
+              <Wifi className="h-3 w-3" />
+              Wi‑Fi / LAN
+            </Badge>
+          ) : assignedPort ? (
             <Badge className="bg-green-600 hover:bg-green-600 gap-1 shrink-0">
               <CheckCircle2 className="h-3 w-3" />
               {assignedPort.isBluetooth ? "Bluetooth" : "USB"} Connected
             </Badge>
+          ) : config.transport === "browser" ? (
+            <Badge variant="secondary" className="shrink-0">Browser dialog</Badge>
           ) : (
             <Badge variant="secondary" className="shrink-0">Not Assigned</Badge>
           )}
@@ -587,7 +635,76 @@ function PrinterCard({
           />
         </div>
 
-        {/* Print mode — most important setting */}
+        {/* Connection type */}
+        <div className="space-y-2">
+          <Label>Connection</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { id: "bluetooth" as PrinterTransport, icon: Bluetooth },
+                { id: "usb" as PrinterTransport, icon: Usb },
+                { id: "network" as PrinterTransport, icon: Wifi },
+                { id: "browser" as PrinterTransport, icon: Globe },
+              ] as const
+            ).map(({ id, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() =>
+                  onUpdate({
+                    transport: id,
+                    connectionType: id === "bluetooth" ? "bluetooth" : id === "usb" ? "usb" : "none",
+                    printMode: id === "browser" ? "browser" : "serial",
+                    ...(id === "network" ? { usbPortIndex: null } : {}),
+                  })
+                }
+                className={`flex items-center gap-2 rounded-lg border p-2.5 text-left text-sm transition-colors ${
+                  config.transport === id
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0 text-primary" />
+                <span className="font-medium leading-tight">{PRINTER_TRANSPORT_LABELS[id]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {config.transport === "network" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3 dark:border-amber-800 dark:bg-amber-950/20">
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              Wi‑Fi/LAN uses the printer IP on your shop network (port 9100). Configure and test in the{" "}
+              <strong>Banaoo Android app</strong> — mobile browsers cannot send raw network prints.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Printer IP address</Label>
+                <Input
+                  placeholder="192.168.1.105"
+                  value={config.networkHost}
+                  onChange={(e) => onUpdate({ networkHost: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Port</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={config.networkPort}
+                  onChange={(e) =>
+                    onUpdate({ networkPort: Number(e.target.value) || DEFAULT_NETWORK_PORT })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(config.transport === "usb" || config.transport === "bluetooth") && (
+        <>
+        {/* Print method — USB / Bluetooth */}
         <div className="space-y-2">
           <Label>Print Method</Label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -666,42 +783,44 @@ function PrinterCard({
             </ol>
           </div>
         )}
+        </>
+        )}
+
+        {config.transport === "browser" && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-1 dark:border-blue-800 dark:bg-blue-950/20">
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Browser print dialog</p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              Test print opens a dialog — choose your installed printer each time (or let Chrome remember it).
+            </p>
+          </div>
+        )}
 
         <Separator />
 
-        {/* Paper width + baud rate (baud only for serial mode) */}
-        <div className={`grid gap-3 ${config.printMode === "serial" ? "grid-cols-2" : "grid-cols-1 max-w-[200px]"}`}>
-          <div className="space-y-2">
-            <Label>Paper Width</Label>
+        <PaperLayoutControls
+          config={config}
+          onUpdate={onUpdate}
+          onCalibrationPrint={handleCalibrationPrint}
+          calibrationDisabled={calibrating || testing}
+        />
+
+        {config.printMode === "serial" && config.transport !== "network" && (
+          <div className="space-y-2 max-w-[200px]">
+            <Label>Baud Rate</Label>
             <Select
-              value={String(config.paperWidth)}
-              onValueChange={(v) => onUpdate({ paperWidth: Number(v) as 58 | 80 })}
+              value={String(config.baudRate)}
+              onValueChange={(v) => onUpdate({ baudRate: Number(v) as 9600 | 19200 | 38400 | 115200 })}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="58">58mm (standard)</SelectItem>
-                <SelectItem value="80">80mm (wide)</SelectItem>
+                <SelectItem value="9600">9600 (default)</SelectItem>
+                <SelectItem value="19200">19200</SelectItem>
+                <SelectItem value="38400">38400</SelectItem>
+                <SelectItem value="115200">115200</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          {config.printMode === "serial" && (
-            <div className="space-y-2">
-              <Label>Baud Rate</Label>
-              <Select
-                value={String(config.baudRate)}
-                onValueChange={(v) => onUpdate({ baudRate: Number(v) as 9600 | 19200 | 38400 | 115200 })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="9600">9600 (default)</SelectItem>
-                  <SelectItem value="19200">19200</SelectItem>
-                  <SelectItem value="38400">38400</SelectItem>
-                  <SelectItem value="115200">115200</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
+        )}
 
         <Separator />
 
@@ -830,9 +949,15 @@ export function PrinterSettings() {
   const kitchenPort = ports.find((p) => p.index === settings.kitchenPrinter.usbPortIndex) ?? null;
   const billingPort = ports.find((p) => p.index === settings.billingPrinter.usbPortIndex) ?? null;
 
+  const showPortPanel =
+    settings.kitchenPrinter.transport === "usb" ||
+    settings.kitchenPrinter.transport === "bluetooth" ||
+    settings.billingPrinter.transport === "usb" ||
+    settings.billingPrinter.transport === "bluetooth";
+
   return (
     <div className="space-y-6">
-      {/* Step 1: Detect & assign */}
+      {showPortPanel && (
       <PortDetectionPanel
         kitchenPortIndex={settings.kitchenPrinter.usbPortIndex}
         billingPortIndex={settings.billingPrinter.usbPortIndex}
@@ -842,27 +967,44 @@ export function PrinterSettings() {
         billingPrinterName={settings.billingPrinter.name}
         onAssignKitchen={(idx) => {
           const assignedPort = idx === null ? null : ports.find((p) => p.index === idx) ?? null;
-          updateKitchen({
+          const patch: Partial<PrinterConfig> = {
             usbPortIndex: idx,
             ...(idx !== null ? {
               printMode: "serial",
               connectionType: assignedPort?.isBluetooth ? "bluetooth" : "usb",
             } : {}),
-          });
+          };
+          if (assignedPort) {
+            const profile = suggestProfileForPort(assignedPort);
+            if (profile) {
+              Object.assign(patch, profileToConfigPatch(profile));
+              toast.message(`Kitchen: suggested ${profile.paperWidthMm}mm · ${profile.paperColumns} cols (${profile.label})`);
+            }
+          }
+          updateKitchen(patch);
           getGrantedPorts().then(setPorts).catch(() => {});
         }}
         onAssignBilling={(idx) => {
           const assignedPort = idx === null ? null : ports.find((p) => p.index === idx) ?? null;
-          updateBilling({
+          const patch: Partial<PrinterConfig> = {
             usbPortIndex: idx,
             ...(idx !== null ? {
               printMode: "serial",
               connectionType: assignedPort?.isBluetooth ? "bluetooth" : "usb",
             } : {}),
-          });
+          };
+          if (assignedPort) {
+            const profile = suggestProfileForPort(assignedPort);
+            if (profile) {
+              Object.assign(patch, profileToConfigPatch(profile));
+              toast.message(`Billing: suggested ${profile.paperWidthMm}mm · ${profile.paperColumns} cols (${profile.label})`);
+            }
+          }
+          updateBilling(patch);
           getGrantedPorts().then(setPorts).catch(() => {});
         }}
       />
+      )}
 
       {/* Step 2: Per-printer settings */}
       <PrinterCard

@@ -33,7 +33,9 @@
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
       ],
       "blockedPermissions": [
         "ACCESS_BACKGROUND_LOCATION",

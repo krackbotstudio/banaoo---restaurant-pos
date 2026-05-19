@@ -7,9 +7,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, Check, X, ChefHat } from "lucide-react";
+import { Printer, Check, X, ChefHat, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { printKitchenOrderSlip, openKitchenPrinterSettingsIfNeeded } from "@/lib/print-kitchen";
+import { printSelfServiceOrderSlips } from "@/lib/print-self-service";
 import { usePrinterSettings } from "@/lib/use-printer-settings";
 
 interface KitchenItem {
@@ -34,6 +35,9 @@ interface OrderSuccessDialogProps {
   onOpenChange: (open: boolean) => void;
   orderData: OrderData | null;
   onNewOrder: () => void;
+  selfService?: boolean;
+  outletId?: string;
+  outletName?: string;
 }
 
 export function OrderSuccessDialog({
@@ -41,11 +45,37 @@ export function OrderSuccessDialog({
   onOpenChange,
   orderData,
   onNewOrder,
+  selfService = false,
+  outletId,
+  outletName,
 }: OrderSuccessDialogProps) {
-  const { settings: printerSettings } = usePrinterSettings(orderData?.outletId);
+  const { settings: printerSettings } = usePrinterSettings(orderData?.outletId ?? outletId);
 
   const handleReprint = async () => {
     if (!orderData) return;
+
+    if (selfService) {
+      const result = await printSelfServiceOrderSlips(printerSettings, {
+        outletId: orderData.outletId ?? outletId,
+        outletName: orderData.outletName || outletName || "",
+        orderNumber: orderData.orderNumber,
+        orderType: orderData.orderType,
+        tableNumber: orderData.tableNumber,
+        items: orderData.items,
+        createdAt: orderData.createdAt,
+        total: orderData.total,
+        source: "pos",
+        selfServiceMode: true,
+      });
+      if (result.ok) {
+        toast.success("Kitchen bill and customer token sent to printer");
+      } else {
+        toast.error("Print failed", { description: result.message });
+        openKitchenPrinterSettingsIfNeeded();
+      }
+      return;
+    }
+
     const result = await printKitchenOrderSlip(printerSettings, {
       outletId: orderData.outletId,
       orderNumber: orderData.orderNumber,
@@ -69,9 +99,11 @@ export function OrderSuccessDialog({
 
   if (!orderData) return null;
 
-  const typeLabel = orderData.orderType === "dine_in"
-    ? (orderData.tableNumber ? `Table T${orderData.tableNumber}` : "Dine In")
-    : "Takeaway";
+  const typeLabel = selfService
+    ? "Self Service"
+    : orderData.orderType === "dine_in"
+      ? (orderData.tableNumber ? `Table T${orderData.tableNumber}` : "Dine In")
+      : "Takeaway";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,15 +114,25 @@ export function OrderSuccessDialog({
           </div>
           <DialogTitle className="text-center text-xl">Order Placed!</DialogTitle>
           <DialogDescription className="text-center text-sm">
-            #{orderData.orderNumber} · {typeLabel} · kitchen slip printed
+            #{orderData.orderNumber} · {typeLabel}
+            {selfService
+              ? " · kitchen bill + customer token printed"
+              : " · kitchen slip printed"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 flex flex-col gap-1.5">
           <div className="flex items-center gap-2 mb-1">
-            <ChefHat className="h-4 w-4 text-muted-foreground" />
+            {selfService ? (
+              <>
+                <ChefHat className="h-4 w-4 text-muted-foreground" />
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+              </>
+            ) : (
+              <ChefHat className="h-4 w-4 text-muted-foreground" />
+            )}
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Kitchen Copy
+              {selfService ? "Kitchen bill + Customer token" : "Kitchen Copy"}
             </span>
           </div>
 
@@ -104,6 +146,9 @@ export function OrderSuccessDialog({
               </div>
             ))}
           </div>
+          {selfService ? (
+            <p className="text-sm font-bold text-right pt-1">Total: ₹{orderData.total.toLocaleString("en-IN")}</p>
+          ) : null}
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2 mt-1">

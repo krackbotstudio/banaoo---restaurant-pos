@@ -76,7 +76,7 @@ export default function Affiliate() {
     {
       question: "How much can I earn?",
       answer:
-        "You earn 10% of every subscription payment your referrals make. For example, if a restaurant pays ₹999/month, you earn ₹99.90 every month they stay subscribed. There's no cap on earnings!",
+        "You earn 10% of every subscription payment your referrals make. For example, if a restaurant pays ₹699/month on Growth, you earn ₹69.90 every month they stay subscribed. There's no cap on earnings!",
     },
     {
       question: "When do I get paid?",

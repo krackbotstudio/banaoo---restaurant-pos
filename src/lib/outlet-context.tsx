@@ -7,6 +7,7 @@ interface Outlet {
   name: string;
   gst_number?: string | null;
   gst_categories?: Record<string, number> | null;
+  operation_mode?: string | null;
 }
 
 interface OutletContextType {
@@ -50,7 +51,7 @@ export function OutletProvider({ children }: { children: ReactNode }) {
         // Owners can see all their outlets
         const { data: ownerOutlets } = await supabase
           .from("outlets")
-          .select("id, name, gst_number, gst_categories")
+          .select("id, name, gst_number, gst_categories, operation_mode")
           .eq("owner_id", user!.id)
           .order("created_at", { ascending: false });
         data = ownerOutlets || [];
@@ -58,7 +59,7 @@ export function OutletProvider({ children }: { children: ReactNode }) {
         // Staff members see outlets they're assigned to
         const { data: assignments } = await supabase
           .from("staff_outlet_assignments")
-          .select("outlet_id, outlets(id, name, gst_number, gst_categories)")
+          .select("outlet_id, outlets(id, name, gst_number, gst_categories, operation_mode)")
           .eq("user_id", user!.id);
         
         if (assignments) {

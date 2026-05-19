@@ -29,6 +29,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw } from "lucide-react";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { MenuImportDialog } from "@/components/MenuImportDialog";
+import { AvailabilityScheduleSection } from "@/components/menu/AvailabilityScheduleSection";
+import {
+  buildSchedulePayload,
+  emptySchedule,
+  getItemAvailabilityLabel,
+  parseAvailabilitySchedule,
+  type AvailabilitySchedule,
+} from "@/lib/menu-availability";
 
 interface Category {
   id: string;
@@ -43,6 +51,8 @@ interface MenuItem {
   base_price: number;
   is_veg: boolean;
   is_available: boolean;
+  schedule_enabled: boolean;
+  availability_schedule: AvailabilitySchedule | null;
   category_id: string | null;
   outlet_id: string;
   image_url: string | null;
@@ -92,6 +102,8 @@ export default function Menu() {
   const [itemHasOffer, setItemHasOffer] = useState(false);
   const [itemOfferLabel, setItemOfferLabel] = useState("");
   const [itemOfferPrice, setItemOfferPrice] = useState("");
+  const [itemScheduleEnabled, setItemScheduleEnabled] = useState(false);
+  const [itemSchedule, setItemSchedule] = useState<AvailabilitySchedule>(emptySchedule());
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,6 +168,8 @@ export default function Menu() {
     setItemHasOffer(false);
     setItemOfferLabel("");
     setItemOfferPrice("");
+    setItemScheduleEnabled(false);
+    setItemSchedule(emptySchedule());
   };
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,6 +306,7 @@ export default function Menu() {
     special_label: itemSpecialLabel,
     offer_label: itemHasOffer && itemOfferLabel.trim() ? itemOfferLabel.trim() : null,
     offer_price: itemHasOffer && itemOfferPrice ? parseFloat(itemOfferPrice) : null,
+    ...buildSchedulePayload(itemScheduleEnabled, itemSchedule),
   });
 
   const handleCreateItem = async (e: React.FormEvent) => {
@@ -311,6 +326,7 @@ export default function Menu() {
     const { error } = await supabase.from("menu_items").insert({
       ...buildItemPayload(),
       outlet_id: currentOutlet!.id,
+      is_available: itemIsAvailable,
     });
     setIsSubmitting(false);
 
@@ -344,6 +360,10 @@ export default function Menu() {
     setItemHasOffer(!!(item.offer_label || item.offer_price));
     setItemOfferLabel(item.offer_label || "");
     setItemOfferPrice(item.offer_price?.toString() || "");
+    setItemScheduleEnabled(item.schedule_enabled ?? false);
+    setItemSchedule(
+      parseAvailabilitySchedule(item.availability_schedule) ?? emptySchedule()
+    );
     setIsEditDialogOpen(true);
   };
 
@@ -743,6 +763,16 @@ export default function Menu() {
                     </div>
                     <Switch checked={itemIsVeg} onCheckedChange={setItemIsVeg} />
                   </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Available</span>
+                    <Switch checked={itemIsAvailable} onCheckedChange={setItemIsAvailable} />
+                  </div>
+                  <AvailabilityScheduleSection
+                    scheduleEnabled={itemScheduleEnabled}
+                    onScheduleEnabledChange={setItemScheduleEnabled}
+                    schedule={itemSchedule}
+                    onScheduleChange={setItemSchedule}
+                  />
                   <SpecialsOfferSection />
                   <Button type="submit" className="w-full h-11 gradient-primary" disabled={isSubmitting || uploadingImage || fetchingImages}>
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Item"}
@@ -840,11 +870,20 @@ export default function Menu() {
                           {item.name}
                         </CardTitle>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        item.is_available ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
-                      }`}>
-                        {item.is_available ? "Available" : "Unavailable"}
-                      </span>
+                      {(() => {
+                        const avail = getItemAvailabilityLabel(item);
+                        const badgeClass =
+                          avail.variant === "available"
+                            ? "bg-accent/20 text-accent"
+                            : avail.variant === "scheduled-off"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                              : "bg-muted text-muted-foreground";
+                        return (
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium max-w-[140px] truncate ${badgeClass}`} title={avail.label}>
+                            {avail.label}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -955,6 +994,12 @@ export default function Menu() {
                 <span className="text-sm font-medium">Available</span>
                 <Switch checked={itemIsAvailable} onCheckedChange={setItemIsAvailable} />
               </div>
+              <AvailabilityScheduleSection
+                scheduleEnabled={itemScheduleEnabled}
+                onScheduleEnabledChange={setItemScheduleEnabled}
+                schedule={itemSchedule}
+                onScheduleChange={setItemSchedule}
+              />
               <SpecialsOfferSection />
               <div className="flex gap-2">
                 <Button type="button" variant="destructive" size="sm" onClick={handleDeleteItem} className="h-11">

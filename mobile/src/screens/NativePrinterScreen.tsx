@@ -12,7 +12,15 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getPrintCapability, PrinterTransport } from "../printer/printer-service";
+import {
+  getPrintCapability,
+  PrinterTransport,
+  printCalibrationSlip,
+  testBillingPrint,
+  testKitchenPrint,
+} from "../printer/printer-service";
+import { PaperLayoutSection } from "../printer/PaperLayoutSection";
+import { testNetworkConnection } from "../printer/network-tcp-adapter";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
 import { useOutlet } from "../context/OutletContext";
 import { DiscoveredPrinter, scanBluetoothPrinters } from "../printer/bluetooth-ble-adapter";
@@ -47,6 +55,9 @@ export function NativePrinterScreen() {
   const [scanMessage, setScanMessage] = useState<string>("");
   const [showKitchenAdvanced, setShowKitchenAdvanced] = useState(false);
   const [showBillingAdvanced, setShowBillingAdvanced] = useState(false);
+  const [testingKitchen, setTestingKitchen] = useState(false);
+  const [testingBilling, setTestingBilling] = useState(false);
+  const [testMessage, setTestMessage] = useState("");
 
   const scanBleDevices = async () => {
     setScanning(true);
@@ -87,12 +98,9 @@ export function NativePrinterScreen() {
   const setBillingTransport = (transport: PrinterTransport) => {
     void updateBilling({ transport });
   };
-  const setKitchenPaperWidth = (paperWidth: 58 | 80) => {
-    void updateKitchen({ paperWidth });
-  };
-  const setBillingPaperWidth = (paperWidth: 58 | 80) => {
-    void updateBilling({ paperWidth });
-  };
+  const [calibratingKitchen, setCalibratingKitchen] = useState(false);
+  const [calibratingBilling, setCalibratingBilling] = useState(false);
+
   const setKitchenFontSize = (fontSize: number) => {
     void updateKitchen({ fontSize });
   };
@@ -100,8 +108,92 @@ export function NativePrinterScreen() {
     void updateBilling({ fontSize });
   };
 
-  const showKitchenBleFields = settings.kitchenPrinter.transport !== "bluetooth-classic";
-  const showBillingBleFields = settings.billingPrinter.transport !== "bluetooth-classic";
+  const showKitchenBleFields = settings.kitchenPrinter.transport === "bluetooth-ble";
+  const showBillingBleFields = settings.billingPrinter.transport === "bluetooth-ble";
+  const showKitchenNetwork = settings.kitchenPrinter.transport === "network";
+  const showBillingNetwork = settings.billingPrinter.transport === "network";
+
+  const runKitchenCalibration = async () => {
+    setCalibratingKitchen(true);
+    setTestMessage("");
+    try {
+      const k = settings.kitchenPrinter;
+      if (!k.enabled) {
+        setTestMessage("Enable kitchen printer first.");
+        return;
+      }
+      const result = await printCalibrationSlip("kitchen", settings);
+      setTestMessage(result.ok ? "Calibration slip sent." : result.message);
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCalibratingKitchen(false);
+    }
+  };
+
+  const runBillingCalibration = async () => {
+    setCalibratingBilling(true);
+    setTestMessage("");
+    try {
+      const b = settings.billingPrinter;
+      if (!b.enabled) {
+        setTestMessage("Enable billing printer first.");
+        return;
+      }
+      const result = await printCalibrationSlip("billing", settings);
+      setTestMessage(result.ok ? "Calibration slip sent." : result.message);
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCalibratingBilling(false);
+    }
+  };
+
+  const runKitchenTest = async () => {
+    setTestingKitchen(true);
+    setTestMessage("");
+    try {
+      const k = settings.kitchenPrinter;
+      if (!k.enabled) {
+        setTestMessage("Enable kitchen printer first.");
+        return;
+      }
+      if (k.transport === "network") {
+        await testNetworkConnection(k.networkHost || k.connectionId, k.networkPort || 9100);
+        setTestMessage("Network test sent to kitchen printer.");
+        return;
+      }
+      const result = await testKitchenPrint(settings);
+      setTestMessage(result.ok ? result.message : result.message);
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTestingKitchen(false);
+    }
+  };
+
+  const runBillingTest = async () => {
+    setTestingBilling(true);
+    setTestMessage("");
+    try {
+      const b = settings.billingPrinter;
+      if (!b.enabled) {
+        setTestMessage("Enable billing printer first.");
+        return;
+      }
+      if (b.transport === "network") {
+        await testNetworkConnection(b.networkHost || b.connectionId, b.networkPort || 9100);
+        setTestMessage("Network test sent to billing printer.");
+        return;
+      }
+      const result = await testBillingPrint(settings);
+      setTestMessage(result.ok ? result.message : result.message);
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTestingBilling(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -123,9 +215,9 @@ export function NativePrinterScreen() {
 
       <View style={styles.callout}>
         <Text style={styles.calloutTitle}>Mobile quick setup</Text>
-        <Text style={styles.calloutStep}>1. Pair printers in system Bluetooth first.</Text>
-        <Text style={styles.calloutStep}>2. Load paired Classic or scan BLE, then tap Kitchen or Billing on each device.</Text>
-        <Text style={styles.calloutStep}>3. Use different devices for each role when you can.</Text>
+        <Text style={styles.calloutStep}>1. Bluetooth: pair in system settings, then assign Kitchen / Billing.</Text>
+        <Text style={styles.calloutStep}>2. Wi‑Fi/LAN: enter printer IP (port 9100) on the same shop network.</Text>
+        <Text style={styles.calloutStep}>3. Use different devices for kitchen and billing when you can.</Text>
         <Pressable
           style={({ pressed }) => [styles.outlineBtn, pressed && styles.pressedOpacity]}
           onPress={() => void openSystemBluetoothSettings()}
@@ -143,6 +235,9 @@ export function NativePrinterScreen() {
         <Text style={styles.metaText}>Platform: {capability.platform}</Text>
         <Text style={styles.metaText}>
           Silent Bluetooth: {capability.supportsSilentBluetooth ? "Supported" : "Not supported"}
+        </Text>
+        <Text style={styles.metaText}>
+          Wi‑Fi/LAN (TCP): {capability.supportsSilentNetwork ? "Supported" : "Not supported"}
         </Text>
         <Text style={styles.metaText}>
           Dialog fallback: {capability.supportsDialogFallback ? "Supported" : "Not supported"}
@@ -282,27 +377,54 @@ export function NativePrinterScreen() {
           value={settings.kitchenPrinter.name}
           onChangeText={(name) => updateKitchen({ name })}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Device id / MAC / alias"
-          value={settings.kitchenPrinter.connectionId}
-          onChangeText={(connectionId) => updateKitchen({ connectionId })}
-        />
-        <Text style={styles.label}>Transport</Text>
+        <Text style={styles.label}>Connection</Text>
         <View style={styles.segmentRow}>
           <Pressable
             style={[styles.segmentBtn, settings.kitchenPrinter.transport === "bluetooth-classic" && styles.segmentBtnActive]}
             onPress={() => setKitchenTransport("bluetooth-classic")}
           >
-            <Text style={styles.segmentText}>Classic (SPP)</Text>
+            <Text style={styles.segmentText}>Bluetooth</Text>
           </Pressable>
           <Pressable
-            style={[styles.segmentBtn, settings.kitchenPrinter.transport !== "bluetooth-classic" && styles.segmentBtnActive]}
+            style={[styles.segmentBtn, settings.kitchenPrinter.transport === "network" && styles.segmentBtnActive]}
+            onPress={() => setKitchenTransport("network")}
+          >
+            <Text style={styles.segmentText}>Wi‑Fi/LAN</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, settings.kitchenPrinter.transport === "bluetooth-ble" && styles.segmentBtnActive]}
             onPress={() => setKitchenTransport("bluetooth-ble")}
           >
             <Text style={styles.segmentText}>BLE</Text>
           </Pressable>
         </View>
+        {showKitchenNetwork ? (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Printer IP (e.g. 192.168.1.105)"
+              value={settings.kitchenPrinter.networkHost}
+              onChangeText={(networkHost) => updateKitchen({ networkHost, connectionId: networkHost })}
+              autoCapitalize="none"
+              keyboardType="decimal-pad"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Port (default 9100)"
+              value={String(settings.kitchenPrinter.networkPort || 9100)}
+              onChangeText={(text) => updateKitchen({ networkPort: Number(text) || 9100 })}
+              keyboardType="number-pad"
+            />
+            <Text style={styles.metaText}>Printer and tablet must be on the same shop Wi‑Fi or LAN.</Text>
+          </>
+        ) : (
+          <TextInput
+            style={styles.input}
+            placeholder="Device id / MAC / alias"
+            value={settings.kitchenPrinter.connectionId}
+            onChangeText={(connectionId) => updateKitchen({ connectionId })}
+          />
+        )}
         {showKitchenBleFields ? (
           <>
           <Pressable style={styles.advancedBtn} onPress={() => setShowKitchenAdvanced((prev) => !prev)}>
@@ -329,9 +451,9 @@ export function NativePrinterScreen() {
             </>
           ) : null}
           </>
-        ) : (
-          <Text style={styles.metaText}>Classic transport uses the paired device address; no BLE UUIDs required.</Text>
-        )}
+        ) : !showKitchenNetwork ? (
+          <Text style={styles.metaText}>Classic Bluetooth uses the paired device address from the list above.</Text>
+        ) : null}
         <View style={styles.rowBetween}>
           <Text style={styles.label}>Silent Mode</Text>
           <Switch
@@ -339,21 +461,12 @@ export function NativePrinterScreen() {
             onValueChange={(silent) => updateKitchen({ mode: silent ? "silent" : "dialog" })}
           />
         </View>
-        <Text style={styles.label}>Paper Width</Text>
-        <View style={styles.segmentRow}>
-          <Pressable
-            style={[styles.segmentBtn, settings.kitchenPrinter.paperWidth === 58 && styles.segmentBtnActive]}
-            onPress={() => setKitchenPaperWidth(58)}
-          >
-            <Text style={styles.segmentText}>58mm</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.segmentBtn, settings.kitchenPrinter.paperWidth === 80 && styles.segmentBtnActive]}
-            onPress={() => setKitchenPaperWidth(80)}
-          >
-            <Text style={styles.segmentText}>80mm</Text>
-          </Pressable>
-        </View>
+        <PaperLayoutSection
+          config={settings.kitchenPrinter}
+          onUpdate={(patch) => void updateKitchen(patch)}
+          onCalibration={() => void runKitchenCalibration()}
+          calibrationDisabled={calibratingKitchen || testingKitchen}
+        />
         <Text style={styles.label}>Font Size</Text>
         <View style={styles.segmentRow}>
           {[10, 12, 14].map((size) => (
@@ -400,6 +513,20 @@ export function NativePrinterScreen() {
             onValueChange={(dualKitchenCopies) => void updateKitchen({ dualKitchenCopies })}
           />
         </View>
+        <Pressable
+          style={({ pressed }) => [styles.testBtn, testingKitchen && styles.btnDisabled, pressed && !testingKitchen && styles.pressedOpacity]}
+          onPress={() => void runKitchenTest()}
+          disabled={testingKitchen}
+          accessibilityRole="button"
+          accessibilityLabel="Test kitchen printer"
+          android_ripple={ripple}
+        >
+          {testingKitchen ? (
+            <ActivityIndicator color={tokens.colors.primaryForeground} />
+          ) : (
+            <Text style={styles.testBtnText}>Test kitchen print</Text>
+          )}
+        </Pressable>
       </View>
 
       <View style={styles.card}>
@@ -417,27 +544,54 @@ export function NativePrinterScreen() {
           value={settings.billingPrinter.name}
           onChangeText={(name) => updateBilling({ name })}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Device id / MAC / alias"
-          value={settings.billingPrinter.connectionId}
-          onChangeText={(connectionId) => updateBilling({ connectionId })}
-        />
-        <Text style={styles.label}>Transport</Text>
+        <Text style={styles.label}>Connection</Text>
         <View style={styles.segmentRow}>
           <Pressable
             style={[styles.segmentBtn, settings.billingPrinter.transport === "bluetooth-classic" && styles.segmentBtnActive]}
             onPress={() => setBillingTransport("bluetooth-classic")}
           >
-            <Text style={styles.segmentText}>Classic (SPP)</Text>
+            <Text style={styles.segmentText}>Bluetooth</Text>
           </Pressable>
           <Pressable
-            style={[styles.segmentBtn, settings.billingPrinter.transport !== "bluetooth-classic" && styles.segmentBtnActive]}
+            style={[styles.segmentBtn, settings.billingPrinter.transport === "network" && styles.segmentBtnActive]}
+            onPress={() => setBillingTransport("network")}
+          >
+            <Text style={styles.segmentText}>Wi‑Fi/LAN</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, settings.billingPrinter.transport === "bluetooth-ble" && styles.segmentBtnActive]}
             onPress={() => setBillingTransport("bluetooth-ble")}
           >
             <Text style={styles.segmentText}>BLE</Text>
           </Pressable>
         </View>
+        {showBillingNetwork ? (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Printer IP (e.g. 192.168.1.105)"
+              value={settings.billingPrinter.networkHost}
+              onChangeText={(networkHost) => updateBilling({ networkHost, connectionId: networkHost })}
+              autoCapitalize="none"
+              keyboardType="decimal-pad"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Port (default 9100)"
+              value={String(settings.billingPrinter.networkPort || 9100)}
+              onChangeText={(text) => updateBilling({ networkPort: Number(text) || 9100 })}
+              keyboardType="number-pad"
+            />
+            <Text style={styles.metaText}>Printer and tablet must be on the same shop Wi‑Fi or LAN.</Text>
+          </>
+        ) : (
+          <TextInput
+            style={styles.input}
+            placeholder="Device id / MAC / alias"
+            value={settings.billingPrinter.connectionId}
+            onChangeText={(connectionId) => updateBilling({ connectionId })}
+          />
+        )}
         {showBillingBleFields ? (
           <>
           <Pressable style={styles.advancedBtn} onPress={() => setShowBillingAdvanced((prev) => !prev)}>
@@ -464,9 +618,9 @@ export function NativePrinterScreen() {
             </>
           ) : null}
           </>
-        ) : (
-          <Text style={styles.metaText}>Classic transport uses the paired device address; no BLE UUIDs required.</Text>
-        )}
+        ) : !showBillingNetwork ? (
+          <Text style={styles.metaText}>Classic Bluetooth uses the paired device address from the list above.</Text>
+        ) : null}
         <View style={styles.rowBetween}>
           <Text style={styles.label}>Silent Mode</Text>
           <Switch
@@ -474,21 +628,12 @@ export function NativePrinterScreen() {
             onValueChange={(silent) => updateBilling({ mode: silent ? "silent" : "dialog" })}
           />
         </View>
-        <Text style={styles.label}>Paper Width</Text>
-        <View style={styles.segmentRow}>
-          <Pressable
-            style={[styles.segmentBtn, settings.billingPrinter.paperWidth === 58 && styles.segmentBtnActive]}
-            onPress={() => setBillingPaperWidth(58)}
-          >
-            <Text style={styles.segmentText}>58mm</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.segmentBtn, settings.billingPrinter.paperWidth === 80 && styles.segmentBtnActive]}
-            onPress={() => setBillingPaperWidth(80)}
-          >
-            <Text style={styles.segmentText}>80mm</Text>
-          </Pressable>
-        </View>
+        <PaperLayoutSection
+          config={settings.billingPrinter}
+          onUpdate={(patch) => void updateBilling(patch)}
+          onCalibration={() => void runBillingCalibration()}
+          calibrationDisabled={calibratingBilling || testingBilling}
+        />
         <Text style={styles.label}>Font Size</Text>
         <View style={styles.segmentRow}>
           {[10, 12, 14].map((size) => (
@@ -535,7 +680,26 @@ export function NativePrinterScreen() {
             onValueChange={(dualBillingCopies) => void updateBilling({ dualBillingCopies })}
           />
         </View>
+        <Pressable
+          style={({ pressed }) => [styles.testBtn, testingBilling && styles.btnDisabled, pressed && !testingBilling && styles.pressedOpacity]}
+          onPress={() => void runBillingTest()}
+          disabled={testingBilling}
+          accessibilityRole="button"
+          accessibilityLabel="Test billing printer"
+          android_ripple={ripple}
+        >
+          {testingBilling ? (
+            <ActivityIndicator color={tokens.colors.primaryForeground} />
+          ) : (
+            <Text style={styles.testBtnText}>Test billing print</Text>
+          )}
+        </Pressable>
       </View>
+      {testMessage ? (
+        <View style={styles.testBanner}>
+          <Text style={styles.testBannerText}>{testMessage}</Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -773,5 +937,32 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 13,
     color: tokens.colors.foreground,
+  },
+  testBtn: {
+    marginTop: 8,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  testBtnText: {
+    color: tokens.colors.primaryForeground,
+    fontWeight: "800",
+    fontSize: 14,
+  },
+  testBanner: {
+    borderWidth: 1,
+    borderColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.warningBackground,
+    padding: 12,
+  },
+  testBannerText: {
+    color: tokens.colors.foreground,
+    fontWeight: "600",
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

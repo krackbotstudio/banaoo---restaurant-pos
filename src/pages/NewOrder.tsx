@@ -9,9 +9,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { isItemEffectivelyAvailable } from "@/lib/menu-availability";
 import {
   Loader2, Search, ShoppingCart, UtensilsCrossed,
-  Mic, MicOff, Sparkles, CheckCircle2, AlertCircle, X, Utensils, Package,
+  Mic, MicOff, Sparkles, CheckCircle2, AlertCircle, X, Utensils, Package, Store,
   Minus, Plus, Trash2, PlusCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ import { CartDrawer } from "@/components/order/CartDrawer";
 import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
 import { usePrinterSettings } from "@/lib/use-printer-settings";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
+import { printSelfServiceOrderSlips } from "@/lib/print-self-service";
+import { isSelfServiceMode } from "@/lib/outlet-operation";
 import { toast as sonnerToast } from "sonner";
 
 interface Category {
@@ -433,7 +436,10 @@ export default function NewOrder() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(addToOrderId ? addToType : "dine_in");
+  const selfService = isSelfServiceMode(currentOutlet?.operation_mode);
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(
+    addToOrderId ? addToType : selfService ? "takeaway" : "dine_in"
+  );
   const [tableNumber, setTableNumber] = useState(addToOrderId ? addToTable : "");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
@@ -443,25 +449,49 @@ export default function NewOrder() {
   const [searchQuery, setSearchQuery] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
   type FlowStep = "type" | "menu" | "review";
-  const [flowStep, setFlowStep] = useState<FlowStep>(addToOrderId ? "menu" : "type");
+  const [flowStep, setFlowStep] = useState<FlowStep>(
+    addToOrderId ? "menu" : selfService ? "menu" : "type"
+  );
 
-  const fireKitchenPrint = useCallback(
+  const fireOrderPrint = useCallback(
     async (input: {
       orderNumber: string;
       orderType: "dine_in" | "takeaway";
       tableNumber?: string;
       items: { name: string; quantity: number }[];
       createdAt: Date;
+      total: number;
+      source?: string;
     }) => {
+      if (selfService) {
+        const result = await printSelfServiceOrderSlips(printerSettings, {
+          outletId: currentOutlet?.id,
+          outletName: currentOutlet?.name,
+          source: input.source ?? "pos",
+          selfServiceMode: true,
+          ...input,
+        });
+        if (!result.ok) {
+          sonnerToast.error("Print failed", { description: result.message });
+        } else if (!result.kitchenOk || !result.tokenOk) {
+          sonnerToast.warning("Partial print", { description: result.message });
+        }
+        return;
+      }
       const result = await printKitchenOrderSlip(printerSettings, {
         outletId: currentOutlet?.id,
-        ...input,
+        orderNumber: input.orderNumber,
+        orderType: input.orderType,
+        tableNumber: input.tableNumber,
+        items: input.items,
+        createdAt: input.createdAt,
+        source: input.source,
       });
       if (!result.ok) {
         sonnerToast.error("Kitchen print failed", { description: result.message });
       }
     },
-    [printerSettings, currentOutlet?.id]
+    [printerSettings, currentOutlet?.id, currentOutlet?.name, selfService]
   );
 
   const goToReview = () => {
@@ -474,6 +504,7 @@ export default function NewOrder() {
   };
 
   const handleChangeOrderType = () => {
+    if (selfService) return;
     if (cart.length > 0 && !window.confirm("Change order type? This will clear the cart.")) return;
     clearCart();
     setFlowStep("type");
@@ -485,6 +516,13 @@ export default function NewOrder() {
       fetchMenuItems();
     }
   }, [currentOutlet]);
+
+  useEffect(() => {
+    if (!addToOrderId && isSelfServiceMode(currentOutlet?.operation_mode)) {
+      setOrderType("takeaway");
+      setFlowStep("menu");
+    }
+  }, [currentOutlet?.operation_mode, addToOrderId]);
 
   const fetchCategories = async () => {
     if (!currentOutlet) return;
@@ -504,9 +542,8 @@ export default function NewOrder() {
       .from("menu_items")
       .select("*")
       .eq("outlet_id", currentOutlet.id)
-      .eq("is_available", true)
       .order("name");
-    setMenuItems(data || []);
+    setMenuItems((data || []).filter(isItemEffectivelyAvailable));
   };
 
   const addToCart = (item: MenuItem) => {
@@ -569,7 +606,7 @@ export default function NewOrder() {
       toast({ variant: "destructive", title: "Cart is empty" });
       return;
     }
-    if (orderType === "dine_in" && !tableNumber.trim()) {
+    if (orderType === "dine_in" && !selfService && !tableNumber.trim()) {
       toast({ variant: "destructive", title: "Please select a table" });
       return;
     }
@@ -655,12 +692,14 @@ export default function NewOrder() {
         setCart([]);
         setCartDrawerOpen(false);
         setSuccessDialogOpen(true);
-        void fireKitchenPrint({
+        void fireOrderPrint({
           orderNumber: orderMeta?.order_number ?? addToOrderId,
           orderType: addToType,
           tableNumber: addToTable || undefined,
           items: kitchenItems,
           createdAt: slipCreatedAt,
+          total: cartTotal,
+          source: "pos",
         });
       } catch (error: any) {
         toast({ variant: "destructive", title: "Error", description: error.message });
@@ -685,6 +724,7 @@ export default function NewOrder() {
           total: cartTotal,
           created_by: user?.id,
           status: "pending",
+          source: "pos",
         })
         .select()
         .single();
@@ -733,12 +773,14 @@ export default function NewOrder() {
       setCart([]);
       setTableNumber("");
       setFlowStep("type");
-      void fireKitchenPrint({
+      void fireOrderPrint({
         orderNumber: receiptData.orderNumber,
         orderType: receiptData.orderType,
         tableNumber: receiptData.tableNumber,
         items: receiptData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
         createdAt: receiptData.createdAt,
+        total: receiptData.total,
+        source: "pos",
       });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
@@ -806,7 +848,7 @@ export default function NewOrder() {
     );
   }
 
-  if (!addToOrderId && flowStep === "type") {
+  if (!addToOrderId && flowStep === "type" && !selfService) {
     return (
       <AppLayout>
         <OrderTypeStep
@@ -849,6 +891,7 @@ export default function NewOrder() {
               orderType={orderType}
               tableNumber={tableNumber}
               onChangeType={handleChangeOrderType}
+              selfService={selfService}
             />
           )}
 
@@ -936,23 +979,25 @@ export default function NewOrder() {
             <div
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border-2",
-                orderType === "dine_in"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-orange-400 bg-orange-50 text-orange-600"
+                selfService || orderType !== "dine_in"
+                  ? "border-orange-400 bg-orange-50 text-orange-600"
+                  : "border-primary bg-primary/10 text-primary"
               )}
             >
-              {orderType === "dine_in" ? (
+              {selfService ? (
+                <><Store className="h-3.5 w-3.5" /> Self Service</>
+              ) : orderType === "dine_in" ? (
                 <><Utensils className="h-3.5 w-3.5" /> Dine In</>
               ) : (
                 <><Package className="h-3.5 w-3.5" /> Takeaway</>
               )}
             </div>
-            {orderType === "dine_in" && tableNumber && (
+            {!selfService && orderType === "dine_in" && tableNumber && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border-2 border-primary/30 bg-primary/5 text-primary">
                 Table {tableNumber}
               </div>
             )}
-            {orderType === "dine_in" && !tableNumber && (
+            {!selfService && orderType === "dine_in" && !tableNumber && (
               <span className="text-xs text-muted-foreground">
                 Select table above
               </span>
@@ -1084,6 +1129,9 @@ export default function NewOrder() {
         onOpenChange={setSuccessDialogOpen}
         orderData={lastOrderData}
         onNewOrder={handleNewOrder}
+        selfService={selfService}
+        outletId={currentOutlet?.id}
+        outletName={currentOutlet?.name}
       />
 
       <VoicePOSOrder

@@ -3,6 +3,15 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useFeatureGating } from "@/hooks/use-feature-gating";
+import { LimitIndicator } from "@/components/FeatureGate";
+import {
+  DISCOUNTS,
+  calcPlanTotal,
+  calcPlanSavings,
+  getPlanDisplayName,
+  type PaidPlanId,
+} from "@/lib/plans";
 import { useNotifications } from "@/hooks/use-notifications";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -76,6 +85,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
+import { PrinterSettings } from "@/components/settings/PrinterSettings";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -90,6 +100,7 @@ export default function Settings() {
     createOrder,
     cancelSubscription,
   } = useSubscription();
+  const { isWithinLimit, usage, getUpgradeMessage } = useFeatureGating();
   const { 
     notifications, 
     unreadCount, 
@@ -110,14 +121,7 @@ export default function Settings() {
   const [cancelling, setCancelling] = useState(false);
   const [openingNativePrinters, setOpeningNativePrinters] = useState(false);
 
-  const BASE_PRICES: Record<string, number> = { starter: 999, professional: 2499 };
-  const DISCOUNTS: Record<number, number> = { 1: 0, 3: 0.05, 6: 0.10, 12: 0.20 };
-  const calcTotal = (plan: string, months: number) =>
-    Math.round((BASE_PRICES[plan] ?? 0) * months * (1 - (DISCOUNTS[months] ?? 0)));
-  const calcSavings = (plan: string, months: number) =>
-    Math.round(BASE_PRICES[plan] * months) - calcTotal(plan, months);
-
-  const handlePay = async (planId: "starter" | "professional") => {
+  const handlePay = async (planId: PaidPlanId) => {
     setPayingPlan(planId);
     try {
       await createOrder(planId, planMonths);
@@ -272,6 +276,11 @@ export default function Settings() {
   const handleAddOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOutletName.trim()) return;
+    if (!isWithinLimit("outlets", usage.outlets)) {
+      toast.error(getUpgradeMessage("outlets"));
+      navigate("/addons");
+      return;
+    }
     setAddOutletSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/api/outlets`, {
@@ -332,10 +341,7 @@ export default function Settings() {
     }
   };
 
-  const getPlanDisplay = () => {
-    if (!subscription) return "No Plan";
-    return subscription.plan_type.charAt(0).toUpperCase() + subscription.plan_type.slice(1);
-  };
+  const getPlanDisplay = () => getPlanDisplayName(subscription?.plan_type);
 
   const getStatusBadge = () => {
     if (!subscription) return null;
@@ -613,10 +619,18 @@ export default function Settings() {
                     <CardDescription>
                       Manage your restaurant locations — add, view details, or delete outlets
                     </CardDescription>
+                    <LimitIndicator feature="outlets" currentCount={usage.outlets} label="Outlets" />
                   </div>
                   <Button
                     className="gradient-primary glow-primary shrink-0"
-                    onClick={() => setAddOutletOpen(true)}
+                    onClick={() => {
+                      if (!isWithinLimit("outlets", usage.outlets)) {
+                        toast.error(getUpgradeMessage("outlets"));
+                        navigate("/addons");
+                        return;
+                      }
+                      setAddOutletOpen(true);
+                    }}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Outlet
@@ -940,7 +954,12 @@ export default function Settings() {
                   <Crown className="h-5 w-5 text-primary" />
                   Current Plan
                 </CardTitle>
-                <CardDescription>Your active subscription details</CardDescription>
+                <CardDescription className="flex flex-wrap items-center justify-between gap-2">
+                  <span>Your active subscription details</span>
+                  <Link to="/addons" className="text-primary text-sm font-medium hover:underline">
+                    Manage add-ons →
+                  </Link>
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {subLoading ? (
@@ -1074,15 +1093,15 @@ export default function Settings() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {/* Starter */}
                   {(() => {
-                    const total = calcTotal("starter", planMonths);
-                    const savings = calcSavings("starter", planMonths);
+                    const total = calcPlanTotal("starter", planMonths);
+                    const savings = calcPlanSavings("starter", planMonths);
                     const isCurrentPlan = subscription?.plan_type === "starter" && hasActiveSubscription;
                     return (
                       <div className={`flex flex-col rounded-xl border p-5 gap-4 ${isCurrentPlan ? "border-primary ring-1 ring-primary" : "border-border"}`}>
                         {isCurrentPlan && <span className="text-xs font-semibold text-primary">Current Plan</span>}
                         <div>
-                          <h3 className="text-lg font-bold">Starter</h3>
-                          <p className="text-sm text-muted-foreground">Perfect for small restaurants just getting started.</p>
+                          <h3 className="text-lg font-bold">Launcher</h3>
+                          <p className="text-sm text-muted-foreground">Everything you need to run one outlet.</p>
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
@@ -1090,7 +1109,7 @@ export default function Settings() {
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">
-                          {["1 Outlet", "Up to 5 staff accounts", "Basic order management", "Menu management", "Email support", "Mobile app access"].map((f) => (
+                          {["1 Outlet", "Up to 5 staff accounts", "Order, menu, kitchen & table management", "Analytics & reports", "Email support"].map((f) => (
                             <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                           ))}
                         </ul>
@@ -1108,8 +1127,8 @@ export default function Settings() {
 
                   {/* Professional */}
                   {(() => {
-                    const total = calcTotal("professional", planMonths);
-                    const savings = calcSavings("professional", planMonths);
+                    const total = calcPlanTotal("professional", planMonths);
+                    const savings = calcPlanSavings("professional", planMonths);
                     const isCurrentPlan = subscription?.plan_type === "professional" && hasActiveSubscription;
                     return (
                       <div className={`flex flex-col rounded-xl border-2 p-5 gap-4 relative ${isCurrentPlan ? "border-primary" : "border-primary"}`}>
@@ -1119,8 +1138,8 @@ export default function Settings() {
                           </span>
                         </div>
                         <div>
-                          <h3 className="text-lg font-bold">Professional</h3>
-                          <p className="text-sm text-muted-foreground">Best for growing restaurants with multiple needs.</p>
+                          <h3 className="text-lg font-bold">Growth</h3>
+                          <p className="text-sm text-muted-foreground">Launcher plus mobile app and priority support.</p>
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
@@ -1128,7 +1147,7 @@ export default function Settings() {
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">
-                          {["Up to 3 Outlets", "Unlimited staff accounts", "Advanced order management", "Kitchen display system", "AI menu import", "Analytics & reports", "Priority support", "Table management"].map((f) => (
+                          {["1 Outlet", "Up to 5 staff accounts", "All Launcher features", "Mobile app access", "Priority support"].map((f) => (
                             <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                           ))}
                         </ul>
@@ -1146,17 +1165,17 @@ export default function Settings() {
                   {/* Enterprise */}
                   <div className="flex flex-col rounded-xl border border-border p-5 gap-4">
                     <div>
-                      <h3 className="text-lg font-bold">Enterprise</h3>
-                      <p className="text-sm text-muted-foreground">For large chains with custom requirements.</p>
+                      <h3 className="text-lg font-bold">Expand</h3>
+                      <p className="text-sm text-muted-foreground">For multi-branch brands with custom needs.</p>
                     </div>
                     <div><span className="text-2xl font-bold">Custom</span></div>
                     <ul className="space-y-1.5 flex-1 text-sm">
-                      {["Unlimited Outlets", "Unlimited staff accounts", "All Professional features", "Custom integrations", "Dedicated account manager", "24/7 phone support"].map((f) => (
+                      {["Unlimited outlets", "Flexible staff scaling", "All Growth features", "Custom integrations", "Multi-branch management", "Dedicated support"].map((f) => (
                         <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                       ))}
                     </ul>
-                    <Button variant="outline" className="w-full" onClick={() => window.open("mailto:connect@banaoo.in?subject=Enterprise Plan Enquiry", "_blank")}>
-                      Contact Sales
+                    <Button variant="outline" className="w-full" onClick={() => window.open("mailto:connect@banaoo.in?subject=Expand Plan Enquiry", "_blank")}>
+                      Contact Us
                     </Button>
                   </div>
                 </div>
@@ -1397,53 +1416,55 @@ export default function Settings() {
 
           {/* Printers Tab */}
           <TabsContent value="printers" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bluetooth className="h-5 w-5 text-primary" />
-                  Native Printer Settings
-                </CardTitle>
-                <CardDescription>
-                  Printer configuration is handled directly in the mobile native screen for better Bluetooth support and cleaner setup.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                  <p className="text-sm font-medium text-foreground">
-                    Use Native Printer screen to configure Kitchen and Billing printers.
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    This avoids duplicate settings and keeps mobile printing behavior consistent.
-                  </p>
-                </div>
-                <Button
-                  className="gap-2"
-                  disabled={openingNativePrinters}
-                  onClick={() => {
-                    setOpeningNativePrinters(true);
-                    const opened = openNativePrinterSettings();
-                    if (!opened) {
-                      toast.error(
-                        isNativePrinterBridgeExpected()
-                          ? "Native printer settings are unavailable right now. Please reopen the app and try again."
-                          : "Native printer settings can be opened only inside the Banaoo mobile app."
-                      );
-                      setOpeningNativePrinters(false);
-                    } else {
-                      toast.success("Opening native printer settings…");
-                      window.setTimeout(() => setOpeningNativePrinters(false), 220);
-                    }
-                  }}
-                >
-                  {openingNativePrinters ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Bluetooth className="h-4 w-4" />
-                  )}
-                  Open Native Printer Settings
-                </Button>
-              </CardContent>
-            </Card>
+            {isNativePrinterBridgeExpected() ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bluetooth className="h-5 w-5 text-primary" />
+                    Native Printer Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Bluetooth, Wi‑Fi/LAN, and Kitchen vs Billing assignment are configured in the native printer screen.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                    <p className="text-sm font-medium text-foreground">
+                      Open native settings to pair Bluetooth or enter the printer IP (LAN/Wi‑Fi, port 9100).
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Assign each device to Kitchen or Billing, then run a test print.
+                    </p>
+                  </div>
+                  <Button
+                    className="gap-2"
+                    disabled={openingNativePrinters}
+                    onClick={() => {
+                      setOpeningNativePrinters(true);
+                      const opened = openNativePrinterSettings();
+                      if (!opened) {
+                        toast.error(
+                          "Native printer settings are unavailable. Please reopen the app and try again."
+                        );
+                        setOpeningNativePrinters(false);
+                      } else {
+                        toast.success("Opening native printer settings…");
+                        window.setTimeout(() => setOpeningNativePrinters(false), 220);
+                      }
+                    }}
+                  >
+                    {openingNativePrinters ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Bluetooth className="h-4 w-4" />
+                    )}
+                    Open Native Printer Settings
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <PrinterSettings />
+            )}
           </TabsContent>
         </Tabs>
       </div>

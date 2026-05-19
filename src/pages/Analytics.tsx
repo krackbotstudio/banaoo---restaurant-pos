@@ -6,7 +6,16 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, TrendingUp, IndianRupee, ShoppingBag, Users, Award, BarChart2 } from "lucide-react";
+import { Loader2, TrendingUp, IndianRupee, ShoppingBag, Users, Award, BarChart2, Download } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import {
   ResponsiveContainer,
   LineChart,
@@ -30,6 +39,31 @@ const fmtCurrency = (v: number) =>
 
 const fmtShort = (v: number) =>
   v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${(v / 1000).toFixed(1)}K` : `₹${v}`;
+
+function toCsv(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const escape = (v: unknown) => {
+    const s = v === null || v === undefined ? "" : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [
+    headers.join(","),
+    ...rows.map((r) => headers.map((h) => escape(r[h])).join(",")),
+  ].join("\n");
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export default function Analytics() {
   const { user } = useAuth();
@@ -55,43 +89,83 @@ export default function Analytics() {
       .eq("outlet_id", currentOutlet.id)
       .gte("created_at", start.toISOString())
       .neq("status", "cancelled")
-      .order("created_at");
+      .order("created_at")
+      .limit(20000);
 
-    const { data: itemData } = await supabase
-      .from("order_items")
-      .select("item_name, quantity, total_price, order_id")
-      .in(
-        "order_id",
-        (orderData || []).map((o) => o.id)
-      );
+    const orderIds = (orderData || []).map((o) => o.id);
+    let itemData: any[] = [];
+    if (orderIds.length > 0) {
+      // Chunk to avoid Supabase IN() limits on very long lists.
+      const CHUNK = 800;
+      for (let i = 0; i < orderIds.length; i += CHUNK) {
+        const slice = orderIds.slice(i, i + CHUNK);
+        const { data } = await supabase
+          .from("order_items")
+          .select("item_name, quantity, total_price, order_id")
+          .in("order_id", slice);
+        if (data) itemData = itemData.concat(data);
+      }
+    }
 
     setOrders(orderData || []);
-    setOrderItems(itemData || []);
+    setOrderItems(itemData);
     setLoading(false);
   };
 
   const filteredOrders = orders;
   const filteredItems = orderItems;
 
-  // Revenue & orders by day
+  // Revenue & orders bucketed by day (≤90d) or week (>90d) for readability.
+  const periodDays = parseInt(period);
+  const bucketBy: "day" | "week" = periodDays > 90 ? "week" : "day";
+
   const dailyData = useMemo(() => {
     const map = new Map<string, { date: string; revenue: number; orders: number }>();
-    for (let i = parseInt(period) - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-      map.set(key, { date: label, revenue: 0, orders: 0 });
-    }
-    for (const o of filteredOrders) {
-      const key = o.created_at.slice(0, 10);
-      if (map.has(key)) {
-        map.get(key)!.revenue += o.total || 0;
-        map.get(key)!.orders += 1;
+
+    const startOfWeek = (d: Date) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      const day = x.getDay(); // 0=Sun
+      const diff = (day + 6) % 7; // Monday start
+      x.setDate(x.getDate() - diff);
+      return x;
+    };
+
+    if (bucketBy === "day") {
+      for (let i = periodDays - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+        map.set(key, { date: label, revenue: 0, orders: 0 });
+      }
+      for (const o of filteredOrders) {
+        const key = o.created_at.slice(0, 10);
+        if (map.has(key)) {
+          map.get(key)!.revenue += o.total || 0;
+          map.get(key)!.orders += 1;
+        }
+      }
+    } else {
+      // Weekly buckets keyed by Monday's ISO date.
+      const today = new Date();
+      const earliest = startOfWeek(new Date(today.getTime() - (periodDays - 1) * 86400000));
+      for (let d = new Date(earliest); d <= today; d.setDate(d.getDate() + 7)) {
+        const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+        map.set(key, { date: label, revenue: 0, orders: 0 });
+      }
+      for (const o of filteredOrders) {
+        const wk = startOfWeek(new Date(o.created_at));
+        const key = wk.toISOString().slice(0, 10);
+        if (map.has(key)) {
+          map.get(key)!.revenue += o.total || 0;
+          map.get(key)!.orders += 1;
+        }
       }
     }
     return Array.from(map.values());
-  }, [filteredOrders, period]);
+  }, [filteredOrders, periodDays, bucketBy]);
 
   // Top items
   const topItems = useMemo(() => {
@@ -145,6 +219,65 @@ export default function Analytics() {
     return { totalRevenue, totalOrders, avgOrderValue, uniqueCustomers, bestDay };
   }, [filteredOrders, dailyData]);
 
+  // ─── CSV export ────────────────────────────────────────────────────────────
+  const outletSlug = (currentOutlet?.name || "outlet").replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase();
+
+  const exportOrdersCsv = () => {
+    if (filteredOrders.length === 0) {
+      toast.message("Nothing to export", { description: "No orders in this period." });
+      return;
+    }
+    const rows = filteredOrders.map((o) => ({
+      order_id: o.id,
+      created_at: new Date(o.created_at).toLocaleString("en-IN"),
+      status: o.status ?? "",
+      order_type: o.order_type ?? "",
+      source: o.source ?? "",
+      customer_phone: o.customer_phone ?? "",
+      total_inr: Number(o.total ?? 0).toFixed(2),
+    }));
+    downloadCsv(`banaoo_orders_${outletSlug}_${period}d.csv`, toCsv(rows));
+    toast.success(`Exported ${rows.length} orders`);
+  };
+
+  const exportItemsCsv = () => {
+    if (filteredItems.length === 0) {
+      toast.message("Nothing to export", { description: "No items in this period." });
+      return;
+    }
+    const orderMap = new Map(filteredOrders.map((o) => [o.id, o]));
+    const rows = filteredItems
+      .filter((it) => orderMap.has(it.order_id))
+      .map((it) => {
+        const o = orderMap.get(it.order_id);
+        return {
+          order_id: it.order_id,
+          created_at: o ? new Date(o.created_at).toLocaleString("en-IN") : "",
+          item_name: it.item_name ?? "",
+          quantity: it.quantity ?? 0,
+          total_price_inr: Number(it.total_price ?? 0).toFixed(2),
+        };
+      });
+    downloadCsv(`banaoo_items_${outletSlug}_${period}d.csv`, toCsv(rows));
+    toast.success(`Exported ${rows.length} order items`);
+  };
+
+  const exportSummaryCsv = () => {
+    const rows = [
+      { metric: "Outlet", value: currentOutlet?.name ?? "" },
+      { metric: "Period (days)", value: period },
+      { metric: "Generated", value: new Date().toLocaleString("en-IN") },
+      { metric: "Total Revenue (INR)", value: kpis.totalRevenue.toFixed(2) },
+      { metric: "Total Orders", value: kpis.totalOrders },
+      { metric: "Avg Order Value (INR)", value: kpis.avgOrderValue.toFixed(2) },
+      { metric: "Unique Customers", value: kpis.uniqueCustomers },
+      { metric: `Best ${bucketBy === "week" ? "Week" : "Day"}`, value: `${kpis.bestDay.date} (₹${Math.round(kpis.bestDay.revenue)})` },
+      ...topItems.map((it, i) => ({ metric: `Top Item #${i + 1}`, value: `${it.name} — ${it.qty} sold (₹${Math.round(it.revenue)})` })),
+    ];
+    downloadCsv(`banaoo_summary_${outletSlug}_${period}d.csv`, toCsv(rows));
+    toast.success("Exported summary");
+  };
+
 
   if (loading) {
     return (
@@ -170,12 +303,14 @@ export default function Analytics() {
               <p className="text-sm text-muted-foreground">{currentOutlet?.name}</p>
             </div>
           </div>
-          <div className="flex gap-3">
-            <div className="flex gap-1">
+          <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-1 flex-wrap">
               {[
                 { label: "7D", value: "7" },
                 { label: "30D", value: "30" },
                 { label: "90D", value: "90" },
+                { label: "6M", value: "180" },
+                { label: "1Y", value: "365" },
               ].map((p) => (
                 <Button
                   key={p.value}
@@ -188,6 +323,27 @@ export default function Analytics() {
                 </Button>
               ))}
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Download as CSV</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={exportSummaryCsv}>
+                  Summary (KPIs + top items)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportOrdersCsv}>
+                  Orders ({filteredOrders.length})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportItemsCsv}>
+                  Order items ({filteredItems.length})
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -217,7 +373,12 @@ export default function Analytics() {
         {/* Revenue Trend */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Revenue & Orders Trend</CardTitle>
+            <CardTitle className="text-base">
+              Revenue & Orders Trend
+              {bucketBy === "week" ? (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(weekly buckets)</span>
+              ) : null}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
@@ -226,7 +387,17 @@ export default function Analytics() {
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11 }}
-                  interval={period === "7" ? 0 : period === "30" ? 4 : 9}
+                  interval={
+                    period === "7"
+                      ? 0
+                      : period === "30"
+                      ? 4
+                      : period === "90"
+                      ? 9
+                      : period === "180"
+                      ? 2 // ~26 weekly buckets → show ~9 labels
+                      : 4 // 1Y, ~52 weekly buckets → show ~10 labels
+                  }
                 />
                 <YAxis yAxisId="rev" tickFormatter={fmtShort} tick={{ fontSize: 11 }} width={55} />
                 <YAxis yAxisId="ord" orientation="right" tick={{ fontSize: 11 }} width={30} />

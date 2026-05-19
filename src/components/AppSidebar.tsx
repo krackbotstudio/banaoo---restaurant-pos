@@ -13,7 +13,10 @@ import {
   History,
   BarChart2,
   UserCog,
+  Boxes,
 } from "lucide-react";
+import { useFeatureGating } from "@/hooks/use-feature-gating";
+import type { FeatureKey } from "@/hooks/use-feature-gating";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
@@ -44,11 +47,18 @@ const mainNavItems = [
   { title: "Menu",      url: "/menu",      icon: UtensilsCrossed, key: "menu"      },
 ];
 
-const operationsItems = [
+const operationsItems: {
+  title: string;
+  url: string;
+  icon: typeof ShoppingCart;
+  key: string;
+  feature?: FeatureKey;
+}[] = [
   { title: "Orders",        url: "/orders",        icon: ShoppingCart, key: "orders"        },
   { title: "Order History", url: "/order-history", icon: History,      key: "order-history" },
   { title: "Customers",     url: "/customers",     icon: Users,        key: "customers"     },
   { title: "Analytics",     url: "/analytics",     icon: BarChart2,    key: "analytics"     },
+  { title: "Inventory",     url: "/inventory",     icon: Boxes,        key: "inventory", feature: "inventoryManagement" },
   { title: "Kitchen",       url: "/kitchen",       icon: ChefHat,      key: "kitchen"       },
   { title: "Staff",         url: "/staff",         icon: UserCog,      key: "staff"         },
   { title: "Integrations",  url: "/integrations",  icon: Link2,        key: "integrations"  },
@@ -60,14 +70,18 @@ export function AppSidebar() {
   const { profile, signOut, getImageUrl } = useAuth();
   const { currentOutlet } = useOutlet();
   const { permissions, loading: permissionsLoading } = useStaffPermissions();
+  const { canAccess: canAccessFeature } = useFeatureGating();
   const collapsed = state === "collapsed";
 
   // permissions === null means owner (no filter). Otherwise filter by allowed keys.
   // During loading, return [] so staff don't see a flash of all items before filtering.
-  const getAllowed = <T extends { key: string }>(items: T[]): T[] => {
+  const getAllowed = <T extends { key: string; feature?: FeatureKey }>(items: T[]): T[] => {
     if (permissionsLoading && profile?.role !== "owner") return [];
-    if (permissions === null) return items;
-    return items.filter((item) => permissions.includes(item.key));
+    let list = items;
+    if (permissions !== null) {
+      list = list.filter((item) => permissions.includes(item.key));
+    }
+    return list.filter((item) => !item.feature || canAccessFeature(item.feature));
   };
   const allowedMain = getAllowed(mainNavItems);
   const allowedOps = getAllowed(operationsItems);
