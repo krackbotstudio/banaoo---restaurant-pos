@@ -12,6 +12,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AffiliateLayout } from "@/components/affiliate/AffiliateLayout";
 import { AffiliateProtectedRoute } from "@/components/affiliate/AffiliateProtectedRoute";
 import { ThemeProvider } from "@/lib/theme";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages for code splitting
@@ -78,6 +79,7 @@ const App = () => (
             <SupportChatWidget />
             <BrowserRouter>
               <CookieConsent />
+              <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public routes */}
@@ -153,6 +155,7 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+              </ErrorBoundary>
             </BrowserRouter>
           </TooltipProvider>
         </OutletProvider>

@@ -294,22 +294,40 @@ function writeKitchenHandoffBody(
   d.dashes(w);
 }
 
-export function buildSelfServiceBillingReceipt(
+/** Self service job 1: customer bill only → cut. */
+export function buildSelfServiceMainBill(
   data: BillingReceiptPayload,
   layout: PrintLayout,
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const rl = receiptLayout(layout, options);
-  const w = lineWidth(rl);
+  const rl = receiptLayoutFromFields(layout.columns, options);
   const d = beginDoc(fontSize);
   const fmt = (n: number) => formatMoney(n);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
-  const showCut = options?.showTearCutLine !== false;
 
   d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
-  writeBillingReceiptBody(d, data, w, fmt, options);
-  if (showCut) appendTearCutLine(d, w);
+  writeBillingReceiptBody(d, data, layout.columns, fmt, options);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
+/** Self service job 2: kitchen handoff → cut. */
+export function buildKitchenHandoffSlip(
+  data: {
+    orderNumber: string;
+    orderType: "dine_in" | "takeaway";
+    tableNumber?: string;
+    items: Array<{ name: string; quantity: number }>;
+    createdAt: Date;
+  },
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const rl = receiptLayoutFromFields(layout.columns, options);
+  const d = beginDoc(fontSize);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
 
   writeKitchenHandoffBody(
     d,
@@ -317,12 +335,11 @@ export function buildSelfServiceBillingReceipt(
       orderNumber: data.orderNumber,
       orderType: data.orderType,
       tableNumber: data.tableNumber,
-      items: data.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+      items: data.items,
       createdAt: data.createdAt,
     },
     rl
   );
-  if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();
 }

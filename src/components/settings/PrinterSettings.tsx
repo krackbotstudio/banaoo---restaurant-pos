@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useOutlet } from "@/lib/outlet-context";
 import { usePrinterSettings, PrinterConfig, type PrinterTransport } from "@/lib/use-printer-settings";
 import { PRINTER_TRANSPORT_LABELS, DEFAULT_NETWORK_PORT } from "@/lib/printer-types";
 import {
@@ -20,7 +19,7 @@ import { ReceiptAlignmentControls } from "@/components/settings/ReceiptAlignment
 import { useOutlet } from "@/lib/outlet-context";
 import { isSelfServiceMode } from "@/lib/outlet-operation";
 import { escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
-import { buildSelfServiceBillingReceipt } from "@/lib/serial-printer";
+import { buildSelfServiceMainBill } from "@/lib/serial-printer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -550,8 +549,8 @@ function PrinterCard({
                 fontSize,
                 escOpts
               )
-            : selfService && config.selfServiceBillWithHandoff
-            ? buildSelfServiceBillingReceipt(
+            : selfService
+            ? buildSelfServiceMainBill(
                 {
                   orderNumber: "TEST",
                   outletName: config.name || "My Restaurant",
@@ -940,9 +939,9 @@ function PrinterCard({
               </div>
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label className="text-sm">Bill + kitchen handoff copy</Label>
+                  <Label className="text-sm">Kitchen slip after bill (auto-cut)</Label>
                   <p className="text-xs text-muted-foreground">
-                    After the full bill, a cut, then items and quantity only for the customer to give the kitchen.
+                    Prints kitchen copy on a second slip after the customer bill is cut (700ms pause).
                   </p>
                 </div>
                 <Switch

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
@@ -26,7 +26,19 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw } from "lucide-react";
+import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw, CheckSquare, Pencil } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { BulkEditMenuDialog, type BulkMenuEditPatch } from "@/components/menu/BulkEditMenuDialog";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { MenuImportDialog } from "@/components/MenuImportDialog";
 import { AvailabilityScheduleSection } from "@/components/menu/AvailabilityScheduleSection";
@@ -65,6 +77,13 @@ interface MenuItem {
 
 const SPECIAL_LABELS = ["Today's Special", "Chef's Pick", "Must Try", "New"];
 
+function isForeignKeyError(error: { code?: string; message?: string } | null): boolean {
+  return (
+    error?.code === "23503" ||
+    /foreign key|violates foreign key|referenced from table/i.test(error?.message ?? "")
+  );
+}
+
 export default function Menu() {
   const { user, getImageUrl } = useAuth();
   const { toast } = useToast();
@@ -79,6 +98,11 @@ export default function Menu() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [vegFilter, setVegFilter] = useState<boolean | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Item form state
   const [itemName, setItemName] = useState("");
@@ -339,7 +363,7 @@ export default function Menu() {
       fetchMenuItems();
       // Auto-assign image in background if none was set manually
       if (noImage) {
-        autoAssignImage(savedName, savedOutlet, fetchMenuItems);
+        autoAssignImage(savedName, currentOutlet!.id, fetchMenuItems);
       }
     }
   };
@@ -401,17 +425,158 @@ export default function Menu() {
   };
 
   const handleDeleteItem = async () => {
-    if (!editingItem) return;
+    if (!editingItem || !currentOutlet?.id) return;
     if (!confirm("Are you sure you want to delete this item?")) return;
 
-    const { error } = await supabase.from("menu_items").delete().eq("id", editingItem.id);
+    const { error } = await supabase
+      .from("menu_items")
+      .delete()
+      .eq("id", editingItem.id)
+      .eq("outlet_id", currentOutlet.id);
     if (error) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+      if (isForeignKeyError(error)) {
+        const { error: hideErr } = await supabase
+          .from("menu_items")
+          .update({ is_available: false })
+          .eq("id", editingItem.id);
+        if (hideErr) {
+          toast({ variant: "destructive", title: "Error", description: hideErr.message });
+        } else {
+          toast({
+            title: "Hidden from menu",
+            description: "This item was used in past orders and cannot be deleted.",
+          });
+          closeEditDialog();
+          fetchMenuItems();
+        }
+      } else {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
     } else {
       toast({ title: "Deleted", description: "Menu item deleted" });
       closeEditDialog();
       fetchMenuItems();
     }
+  };
+
+  const filteredMenuItems = useMemo(
+    () =>
+      menuItems
+        .filter((item) => selectedCategory === null || item.category_id === selectedCategory)
+        .filter((item) => vegFilter === null || item.is_veg === vegFilter),
+    [menuItems, selectedCategory, vegFilter]
+  );
+
+  const selectedCount = selectedIds.size;
+  const allFilteredSelected =
+    filteredMenuItems.length > 0 && filteredMenuItems.every((item) => selectedIds.has(item.id));
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleItemSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filteredMenuItems.map((item) => item.id)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkEditApply = async (patch: BulkMenuEditPatch) => {
+    if (!currentOutlet?.id || selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    const { error } = await supabase
+      .from("menu_items")
+      .update(patch)
+      .in("id", ids)
+      .eq("outlet_id", currentOutlet.id);
+    if (error) {
+      toast({ variant: "destructive", title: "Bulk update failed", description: error.message });
+      throw error;
+    }
+    toast({
+      title: "Updated",
+      description: `${ids.length} menu item${ids.length === 1 ? "" : "s"} updated`,
+    });
+    exitSelectionMode();
+    fetchMenuItems();
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentOutlet?.id || selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    setIsBulkDeleting(true);
+    let deleted = 0;
+    let hidden = 0;
+    let failed = 0;
+
+    for (const id of ids) {
+      const { error } = await supabase
+        .from("menu_items")
+        .delete()
+        .eq("id", id)
+        .eq("outlet_id", currentOutlet.id);
+      if (!error) {
+        deleted++;
+        continue;
+      }
+      if (isForeignKeyError(error)) {
+        const { error: hideErr } = await supabase
+          .from("menu_items")
+          .update({ is_available: false })
+          .eq("id", id)
+          .eq("outlet_id", currentOutlet.id);
+        if (!hideErr) hidden++;
+        else failed++;
+      } else {
+        failed++;
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    exitSelectionMode();
+    fetchMenuItems();
+
+    if (failed > 0) {
+      toast({
+        variant: "destructive",
+        title: "Some items could not be removed",
+        description: `${failed} item${failed === 1 ? "" : "s"} failed. Try again or edit individually.`,
+      });
+    } else if (deleted > 0 && hidden > 0) {
+      toast({
+        title: "Removed",
+        description: `Deleted ${deleted} item${deleted === 1 ? "" : "s"}. ${hidden} hidden (used in past orders).`,
+      });
+    } else if (hidden > 0) {
+      toast({
+        title: "Hidden from menu",
+        description: `${hidden} item${hidden === 1 ? "" : "s"} used in orders — marked unavailable instead.`,
+      });
+    } else {
+      toast({
+        title: "Deleted",
+        description: `${deleted} menu item${deleted === 1 ? "" : "s"} removed`,
+      });
+    }
+  };
+
+  const handleCardClick = (item: MenuItem) => {
+    if (selectionMode) {
+      toggleItemSelected(item.id);
+      return;
+    }
+    openEditDialog(item);
   };
 
   // Shared image upload UI
@@ -638,7 +803,21 @@ export default function Menu() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            {menuItems.length > 0 ? (
+              <Button
+                variant={selectionMode ? "secondary" : "outline"}
+                size="sm"
+                className="h-10"
+                onClick={() => {
+                  if (selectionMode) exitSelectionMode();
+                  else setSelectionMode(true);
+                }}
+              >
+                <CheckSquare className="h-4 w-4 mr-2" />
+                {selectionMode ? "Cancel" : "Select"}
+              </Button>
+            ) : null}
             <MenuImportDialog
               outletId={currentOutlet.id}
               categories={categories}
@@ -813,6 +992,25 @@ export default function Menu() {
               </div>
             </>
           )}
+
+          {selectionMode && filteredMenuItems.length > 0 ? (
+            <>
+              <div className="h-6 w-px bg-border" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={allFilteredSelected ? clearSelection : selectAllFiltered}
+                >
+                  {allFilteredSelected ? "Clear all" : `Select all (${filteredMenuItems.length})`}
+                </Button>
+                {selectedCount > 0 ? (
+                  <span className="text-sm text-muted-foreground">{selectedCount} selected</span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Menu Items Grid */}
@@ -825,18 +1023,34 @@ export default function Menu() {
             onAction={() => setIsItemDialogOpen(true)}
           />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {menuItems
-              .filter(item => selectedCategory === null || item.category_id === selectedCategory)
-              .filter(item => vegFilter === null || item.is_veg === vegFilter)
-              .map((item) => (
+          <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${selectedCount > 0 ? "pb-24" : ""}`}>
+            {filteredMenuItems.map((item) => {
+              const isSelected = selectedIds.has(item.id);
+              return (
                 <Card
                   key={item.id}
-                  className="group hover:border-primary/50 transition-all duration-300 overflow-hidden cursor-pointer"
-                  onClick={() => openEditDialog(item)}
+                  className={`group transition-all duration-300 overflow-hidden cursor-pointer ${
+                    isSelected
+                      ? "border-primary ring-2 ring-primary/30"
+                      : "hover:border-primary/50"
+                  }`}
+                  onClick={() => handleCardClick(item)}
                 >
                   {/* Image */}
                   <div className="relative h-36 bg-muted/30 overflow-hidden">
+                    {selectionMode ? (
+                      <div
+                        className="absolute bottom-2 right-2 z-10"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleItemSelected(item.id)}
+                          className="h-5 w-5 border-2 bg-background shadow"
+                          aria-label={`Select ${item.name}`}
+                        />
+                      </div>
+                    ) : null}
                     {item.image_url ? (
                       <img src={getImageUrl(item.image_url)} alt={item.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -902,9 +1116,77 @@ export default function Menu() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              );
+            })}
           </div>
         )}
+
+        {selectedCount > 0 ? (
+          <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 md:left-[var(--sidebar-width,0)]">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <p className="text-sm font-medium">
+                {selectedCount} item{selectedCount === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={clearSelection}>
+                  Clear
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setIsBulkEditOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Bulk edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <BulkEditMenuDialog
+          open={isBulkEditOpen}
+          onOpenChange={setIsBulkEditOpen}
+          selectedCount={selectedCount}
+          categories={categories}
+          outletGstRates={currentOutlet.gst_categories}
+          onApply={handleBulkEditApply}
+        />
+
+        <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove {selectedCount} menu items?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Items will be permanently deleted. If an item was used in past orders, it will be hidden from the
+                menu instead (marked unavailable).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={isBulkDeleting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleBulkDelete();
+                }}
+              >
+                {isBulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remove"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Edit Item Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => !open && closeEditDialog()}>

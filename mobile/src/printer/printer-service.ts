@@ -2,7 +2,8 @@ import { Platform } from "react-native";
 import {
   BillingReceiptPayload,
   buildBillingReceipt,
-  buildSelfServiceBillingReceipt,
+  buildKitchenHandoffSlip,
+  buildSelfServiceMainBill,
   buildCalibrationSlip,
   buildCustomerTokenSlip,
   buildKitchenCancelSlip,
@@ -336,17 +337,33 @@ export async function printCustomerTokenSlip(
 export async function printBillingReceipt(
   settings: MobilePrinterSettings,
   data: BillingReceiptPayload,
-  options?: { selfServiceHandoff?: boolean }
+  options?: { selfServiceMainBillOnly?: boolean }
 ): Promise<PrintResult> {
   const capability = getPrintCapability();
   const { layout, fontSize } = getPrintLayoutFromConfig(settings.billingPrinter);
   const escOpts = escPosOptionsFromRole(settings.billingPrinter);
-  const useHandoff =
-    options?.selfServiceHandoff === true && settings.billingPrinter.selfServiceBillWithHandoff !== false;
-  const payload = useHandoff
-    ? buildSelfServiceBillingReceipt(data, layout, fontSize, escOpts)
-    : buildBillingReceipt(data, layout, fontSize, escOpts);
-  return executePrint("billing", settings.billingPrinter, capability, payload);
+  const bytes =
+    options?.selfServiceMainBillOnly === true
+      ? buildSelfServiceMainBill(data, layout, fontSize, escOpts)
+      : buildBillingReceipt(data, layout, fontSize, escOpts);
+  return executePrint("billing", settings.billingPrinter, capability, bytes);
+}
+
+export async function printKitchenHandoffReceipt(
+  settings: MobilePrinterSettings,
+  data: {
+    orderNumber: string;
+    orderType: "dine_in" | "takeaway";
+    tableNumber?: string;
+    items: Array<{ name: string; quantity: number }>;
+    createdAt: Date;
+  }
+): Promise<PrintResult> {
+  const capability = getPrintCapability();
+  const { layout, fontSize } = getPrintLayoutFromConfig(settings.billingPrinter);
+  const escOpts = escPosOptionsFromRole(settings.billingPrinter);
+  const bytes = buildKitchenHandoffSlip(data, layout, fontSize, escOpts);
+  return executePrint("billing", settings.billingPrinter, capability, bytes);
 }
 
 export function applyRuntimePaperFromPayload(

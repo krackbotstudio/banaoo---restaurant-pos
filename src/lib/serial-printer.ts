@@ -456,13 +456,61 @@ function writeBillingReceiptBody(
   d.line("Powered by banaoo.in");
 }
 
-/** Self service: full bill, cut, then kitchen handoff (items + qty only). */
+export interface KitchenHandoffSlipData {
+  orderNumber: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: { name: string; quantity: number }[];
+  createdAt: Date;
+}
+
+/** Self service job 1: customer bill only — ends with printer cut (no kitchen section). */
+export function buildSelfServiceMainBill(
+  data: BillingReceiptData,
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const rl = receiptLayout(layout, options);
+  const d = beginDoc(fontSize);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+
+  d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
+  writeBillingReceiptBody(d, data, rl, options);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
+/** Self service job 2: kitchen handoff (items + qty) — separate print after main bill cut. */
+export function buildKitchenHandoffSlip(
+  data: KitchenHandoffSlipData,
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const rl = receiptLayout(layout, options);
+  const d = beginDoc(fontSize);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+
+  writeKitchenHandoffBody(d, data, rl);
+  d.feed(feed).cut();
+  return d.bytes();
+}
+
+/** @deprecated Use buildSelfServiceMainBill + buildKitchenHandoffSlip as two jobs. */
 export function buildSelfServiceBillingReceipt(
   data: BillingReceiptData,
   layout: PrintLayout,
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
+  const handoff: KitchenHandoffSlipData = {
+    orderNumber: data.orderNumber,
+    orderType: data.orderType,
+    tableNumber: data.tableNumber,
+    items: data.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+    createdAt: data.createdAt,
+  };
   const rl = receiptLayout(layout, options);
   const w = lineWidth(rl);
   const d = beginDoc(fontSize);
@@ -472,18 +520,7 @@ export function buildSelfServiceBillingReceipt(
   d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
   writeBillingReceiptBody(d, data, rl, options);
   if (showCut) appendTearCutLine(d, w);
-
-  writeKitchenHandoffBody(
-    d,
-    {
-      orderNumber: data.orderNumber,
-      orderType: data.orderType,
-      tableNumber: data.tableNumber,
-      items: data.items.map((i) => ({ name: i.name, quantity: i.quantity })),
-      createdAt: data.createdAt,
-    },
-    rl
-  );
+  writeKitchenHandoffBody(d, handoff, rl);
   if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();

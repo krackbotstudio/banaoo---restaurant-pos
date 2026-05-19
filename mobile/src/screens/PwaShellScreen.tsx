@@ -22,6 +22,7 @@ import {
   printBillingReceipt,
   printCustomerTokenSlip,
   printKitchenCancelSlip,
+  printKitchenHandoffReceipt,
   printKitchenSlip,
 } from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
@@ -31,7 +32,7 @@ interface PwaShellScreenProps {
   onOpenPrinters: () => void;
 }
 
-type BridgeRole = "kitchen" | "billing" | "customer_token";
+type BridgeRole = "kitchen" | "billing" | "customer_token" | "kitchen_handoff";
 type KitchenItem = { name: string; quantity: number };
 type BillingItem = { name: string; quantity: number; totalPrice: number; gstRate?: number };
 
@@ -83,7 +84,10 @@ function isValidMessage(data: unknown): data is BridgeMessage {
   if (candidate.type === "banaoo-native-open-printers") return true;
   return (
     candidate.type === "banaoo-native-print" &&
-    (candidate.role === "kitchen" || candidate.role === "billing" || candidate.role === "customer_token") &&
+    (candidate.role === "kitchen" ||
+      candidate.role === "billing" ||
+      candidate.role === "customer_token" ||
+      candidate.role === "kitchen_handoff") &&
     !!candidate.payload &&
     typeof candidate.payload === "object"
   );
@@ -327,34 +331,59 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       return;
     }
 
-    const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
-    const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
-    const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
-    const items = asBillingItems(payload.items);
-    const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
-    if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) return;
-
-    settings = applyRuntimePaperFromPayload(settings, "billing", payload);
-    await printBillingReceipt(
-      settings,
-      {
+    if (parsed.role === "kitchen_handoff") {
+      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+      const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
+      const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
+      const orderTypeRaw =
+        payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
+      const items = asKitchenItems(payload.items);
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) {
+        return;
+      }
+      await printKitchenHandoffReceipt(settings, {
         orderNumber,
-        outletName,
-        gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
         orderType: orderTypeRaw,
         tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
         items,
-        subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
-        discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
-        discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
-        serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
-        serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
-        gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
-        grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
         createdAt,
-      },
-      { selfServiceHandoff: payload.selfServiceHandoff === true }
-    );
+      });
+      return;
+    }
+
+    if (parsed.role === "billing") {
+      const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
+      const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
+      const orderTypeRaw =
+        payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
+      const items = asBillingItems(payload.items);
+      const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) {
+        return;
+      }
+
+      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+      await printBillingReceipt(
+        settings,
+        {
+          orderNumber,
+          outletName,
+          gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
+          orderType: orderTypeRaw,
+          tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+          items,
+          subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
+          discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
+          discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
+          serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
+          serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
+          gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
+          grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
+          createdAt,
+        },
+        { selfServiceMainBillOnly: payload.selfServiceMainBillOnly === true }
+      );
+    }
   };
 
   if (!WEBAPP_URL) {

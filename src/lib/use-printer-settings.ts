@@ -4,6 +4,7 @@ import { DEFAULT_NETWORK_PORT } from "@/lib/printer-types";
 import {
   resolvePaperLayout,
   paperLayoutToStorage,
+  coercePaperWidthPreset,
   type PaperWidthPresetId,
 } from "@/lib/paper-width";
 import type { EscPosPrintOptions } from "@/lib/serial-printer";
@@ -145,6 +146,12 @@ function normalizePrinterConfig(raw?: Partial<PrinterConfig>): PrinterConfig {
   merged.selfServicePrintOnOrder = merged.selfServicePrintOnOrder !== false;
   merged.selfServiceBillWithHandoff = merged.selfServiceBillWithHandoff !== false;
   merged.selfServiceKitchenStationCopy = merged.selfServiceKitchenStationCopy === true;
+  const coercedPreset = coercePaperWidthPreset(merged.paperWidthPreset);
+  if (coercedPreset) {
+    merged.paperWidthPreset = coercedPreset;
+  } else if (merged.paperWidthPreset != null) {
+    merged.paperWidthPreset = DEFAULT_PRINTER.paperWidthPreset;
+  }
   merged.networkPort =
     typeof merged.networkPort === "number" && merged.networkPort > 0
       ? merged.networkPort

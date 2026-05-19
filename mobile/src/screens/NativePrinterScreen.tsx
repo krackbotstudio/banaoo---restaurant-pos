@@ -682,8 +682,8 @@ export function NativePrinterScreen() {
         </View>
         <View style={styles.rowBetween}>
           <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.label}>Bill + kitchen handoff</Text>
-            <Text style={styles.metaText}>Full bill, cut, then items and qty only for the kitchen.</Text>
+            <Text style={styles.label}>Kitchen slip after bill cut</Text>
+            <Text style={styles.metaText}>Second print job after customer bill is cut (auto-cutter).</Text>
           </View>
           <Switch
             value={settings.billingPrinter.selfServiceBillWithHandoff}

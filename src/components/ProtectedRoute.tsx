@@ -106,7 +106,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  const redirectLoader = (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+
+  if (!user) return redirectLoader;
 
   // Profile still loading
   if (profileLoading) {
@@ -118,13 +124,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   // Profile failed to load — useEffect will sign out
-  if (!profile) return null;
+  if (!profile) return redirectLoader;
 
   // Staff and admins: render immediately
   if (profile.role !== "owner" || profile.is_admin) return <>{children}</>;
 
   // Block: onboarding not done
-  if (!isOnboardingExempt && !profile.onboarding_completed) return null;
+  if (!isOnboardingExempt && !profile.onboarding_completed) return redirectLoader;
 
   return <>{children}</>;
 }

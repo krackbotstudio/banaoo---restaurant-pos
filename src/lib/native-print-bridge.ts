@@ -89,16 +89,35 @@ export interface NativeBillingPrintPayload {
   gstTotal: number;
   grandTotal: number;
   createdAt: string;
-  /** When true, print full bill then items/qty handoff slip (self service). */
-  selfServiceHandoff?: boolean;
+  /** When true, billing job is main customer bill only (self service job 1). */
+  selfServiceMainBillOnly?: boolean;
+  columnOffset?: number;
+  amountColumnWidth?: number;
+  boldTotalLine?: boolean;
+}
+
+export interface NativeKitchenHandoffPrintPayload {
+  outletId?: string | null;
+  paperWidth?: 58 | 80;
+  paperWidthMm?: number;
+  paperColumns?: number;
+  orderNumber: string;
+  orderType: "dine_in" | "takeaway";
+  tableNumber?: string;
+  items: Array<{ name: string; quantity: number }>;
+  createdAt: string;
   columnOffset?: number;
   amountColumnWidth?: number;
   boldTotalLine?: boolean;
 }
 
 function postToNative(
-  role: "kitchen" | "billing" | "customer_token",
-  payload: NativeKitchenPrintPayload | NativeBillingPrintPayload | NativeCustomerTokenPrintPayload
+  role: "kitchen" | "billing" | "customer_token" | "kitchen_handoff",
+  payload:
+    | NativeKitchenPrintPayload
+    | NativeBillingPrintPayload
+    | NativeCustomerTokenPrintPayload
+    | NativeKitchenHandoffPrintPayload
 ): boolean {
   const host = getReactNativeHost();
   if (!host) return false;
@@ -122,6 +141,10 @@ export function postNativeKitchenCancelPrint(payload: NativeKitchenPrintPayload)
 
 export function postNativeBillingPrint(payload: NativeBillingPrintPayload): boolean {
   return postToNative("billing", payload);
+}
+
+export function postNativeKitchenHandoffPrint(payload: NativeKitchenHandoffPrintPayload): boolean {
+  return postToNative("kitchen_handoff", payload);
 }
 
 export function postNativeCustomerTokenPrint(payload: NativeCustomerTokenPrintPayload): boolean {

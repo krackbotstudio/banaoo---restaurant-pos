@@ -34,6 +34,18 @@ export interface PaperLayoutFields {
   paperWidth?: 58 | 80;
 }
 
+const VALID_PRESET_IDS = new Set<string>(["40", "58", "76", "80", "90", "custom"]);
+
+/** Coerce stored/localStorage values (e.g. numeric 58) to a valid preset id. */
+export function coercePaperWidthPreset(value: unknown): PaperWidthPresetId | undefined {
+  if (value === "custom") return "custom";
+  const key = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (VALID_PRESET_IDS.has(key) && key !== "custom") {
+    return key as Exclude<PaperWidthPresetId, "custom">;
+  }
+  return undefined;
+}
+
 export function presetById(id: PaperWidthPresetId): PaperPreset | undefined {
   if (id === "custom") return undefined;
   return PAPER_PRESETS.find((p) => p.id === id);
@@ -65,19 +77,25 @@ export function legacyPaperWidthMm(mm: number): 58 | 80 {
 }
 
 export function resolvePaperLayout(fields: PaperLayoutFields): PrintLayout {
-  if (fields.paperWidthPreset) {
-    const preset = fields.paperWidthPreset;
-    if (preset === "custom") {
-      const mm = fields.paperWidthMm ?? 58;
+  const coercedPreset = coercePaperWidthPreset(fields.paperWidthPreset);
+  if (coercedPreset) {
+    if (coercedPreset === "custom") {
+      const mm =
+        typeof fields.paperWidthMm === "number" && Number.isFinite(fields.paperWidthMm)
+          ? fields.paperWidthMm
+          : 58;
       const columns = clampColumns(
         fields.paperColumns ?? defaultColumnsForMm(mm)
       );
       return { preset: "custom", paperWidthMm: mm, columns };
     }
-    const def = presetById(preset)!;
+    const def = presetById(coercedPreset) ?? presetById("58")!;
     return {
-      preset,
-      paperWidthMm: fields.paperWidthMm ?? def.mm,
+      preset: coercedPreset,
+      paperWidthMm:
+        typeof fields.paperWidthMm === "number" && Number.isFinite(fields.paperWidthMm)
+          ? fields.paperWidthMm
+          : def.mm,
       columns: clampColumns(fields.paperColumns ?? def.defaultColumns),
     };
   }

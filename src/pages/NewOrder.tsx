@@ -27,9 +27,7 @@ import { CartDrawer } from "@/components/order/CartDrawer";
 import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
 import { usePrinterSettings } from "@/lib/use-printer-settings";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
-import { printSelfServiceOrderSlips } from "@/lib/print-self-service";
 import { isSelfServiceMode } from "@/lib/outlet-operation";
-import { computeReceiptTotals } from "@/lib/order-receipt-totals";
 import { toast as sonnerToast } from "sonner";
 
 interface Category {
@@ -465,26 +463,7 @@ export default function NewOrder() {
       source?: string;
     }) => {
       if (selfService) {
-        const { subtotal, gstTotal, grandTotal } = computeReceiptTotals(input.items);
-        const result = await printSelfServiceOrderSlips(printerSettings, {
-          outletId: currentOutlet?.id,
-          outletName: currentOutlet?.name,
-          gstNumber: (currentOutlet as { gst_number?: string | null })?.gst_number,
-          source: input.source ?? "pos",
-          orderNumber: input.orderNumber,
-          orderType: input.orderType,
-          tableNumber: input.tableNumber,
-          items: input.items,
-          createdAt: input.createdAt,
-          subtotal,
-          gstTotal,
-          grandTotal,
-        });
-        if (!result.ok) {
-          sonnerToast.error("Print failed", { description: result.message });
-        } else if (!result.billingOk || !result.kitchenOk) {
-          sonnerToast.warning("Partial print", { description: result.message });
-        }
+        // Printing handled in OrderSuccessDialog (bill cut, then kitchen slip).
         return;
       }
       const result = await printKitchenOrderSlip(printerSettings, {
