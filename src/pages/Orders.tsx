@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isToday, subDays, formatISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
-import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { usePrinterSettings, escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -526,11 +526,7 @@ export default function Orders() {
           },
           layout,
           pt,
-          {
-            postPrintFeedLines: billingCfg.postPrintFeedLines,
-            showTearCutLine: billingCfg.showTearCutLine,
-            dualBillingCopies: billingCfg.dualBillingCopies,
-          }
+          escPosOptionsFromPrinterConfig(billingCfg)
         );
         await printViaSerial(portIndex, bytes, printerSettings.billingPrinter.baudRate);
         toast.success("Bill printed");

@@ -335,22 +335,26 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) return;
 
     settings = applyRuntimePaperFromPayload(settings, "billing", payload);
-    await printBillingReceipt(settings, {
-      orderNumber,
-      outletName,
-      gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
-      orderType: orderTypeRaw,
-      tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
-      items,
-      subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
-      discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
-      discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
-      serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
-      serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
-      gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
-      grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
-      createdAt,
-    });
+    await printBillingReceipt(
+      settings,
+      {
+        orderNumber,
+        outletName,
+        gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
+        orderType: orderTypeRaw,
+        tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+        items,
+        subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
+        discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
+        discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
+        serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
+        serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
+        gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
+        grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
+        createdAt,
+      },
+      { selfServiceHandoff: payload.selfServiceHandoff === true }
+    );
   };
 
   if (!WEBAPP_URL) {

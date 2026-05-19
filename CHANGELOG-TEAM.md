@@ -29,6 +29,27 @@ Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo
 
 ## Change log
 
+### 2026-05-19 — Android package `com.banaoo` (Play Store)
+
+**Summary:** Application ID changed from `com.banaoo.pos` → **`com.banaoo`** before first Play upload. Run `expo prebuild --clean` after changing `app.json`.
+
+**AAB (local Gradle):** `mobile/play-store/releases/banaoo-app-V.0.08.aab` · package **`com.banaoo`** · version **0.0.8** (versionCode 10). Rebuild: `npm run build:aab:local` from `mobile/`.
+
+---
+
+### 2026-05-19 — Mobile APK **0.0.8** (versionCode 10)
+
+**Summary:** Release APK with updated app icon from `mobile/assets`, menu schedule, paper width presets, LAN printers.
+
+| Item | Value |
+|------|--------|
+| Version | **0.0.8** (`versionCode` **10**) |
+| APK | `public/downloads/banaoo-app-V.0.08.apk`, `banaoo-latest.apk` |
+| Build | `mobile/scripts/build-release-apk.ps1` (local Gradle) |
+| Icons | `npm run icons:generate` from `mobile/assets/icon.png` |
+
+---
+
 ### 2026-05-19 — Menu item availability schedule (days & times)
 
 **Summary:** Menu items can auto hide/show by day and time (e.g. breakfast-only). Manual **Available** toggle still disables completely.

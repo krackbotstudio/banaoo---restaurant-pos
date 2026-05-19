@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import {
   BillingReceiptPayload,
   buildBillingReceipt,
+  buildSelfServiceBillingReceipt,
   buildCalibrationSlip,
   buildCustomerTokenSlip,
   buildKitchenCancelSlip,
@@ -42,6 +43,12 @@ export interface RolePrinterConfig {
   showTearCutLine: boolean;
   dualKitchenCopies: boolean;
   dualBillingCopies: boolean;
+  columnOffset: number;
+  amountColumnWidth: number;
+  boldTotalLine: boolean;
+  selfServicePrintOnOrder: boolean;
+  selfServiceBillWithHandoff: boolean;
+  selfServiceKitchenStationCopy: boolean;
 }
 
 export interface MobilePrinterSettings {
@@ -113,6 +120,12 @@ export const DEFAULT_ROLE_PRINTER: RolePrinterConfig = {
   showTearCutLine: true,
   dualKitchenCopies: false,
   dualBillingCopies: false,
+  columnOffset: 0,
+  amountColumnWidth: 10,
+  boldTotalLine: false,
+  selfServicePrintOnOrder: true,
+  selfServiceBillWithHandoff: true,
+  selfServiceKitchenStationCopy: false,
 };
 
 export const DEFAULT_MOBILE_PRINTER_SETTINGS: MobilePrinterSettings = {
@@ -264,6 +277,9 @@ function escPosOptionsFromRole(config: RolePrinterConfig): EscPosPrintOptions {
     showTearCutLine: config.showTearCutLine,
     dualKitchenCopies: config.dualKitchenCopies,
     dualBillingCopies: config.dualBillingCopies,
+    columnOffset: config.columnOffset ?? 0,
+    amountColumnWidth: config.amountColumnWidth ?? 10,
+    boldTotalLine: config.boldTotalLine === true,
   };
 }
 
@@ -319,16 +335,17 @@ export async function printCustomerTokenSlip(
 
 export async function printBillingReceipt(
   settings: MobilePrinterSettings,
-  data: BillingReceiptPayload
+  data: BillingReceiptPayload,
+  options?: { selfServiceHandoff?: boolean }
 ): Promise<PrintResult> {
   const capability = getPrintCapability();
   const { layout, fontSize } = getPrintLayoutFromConfig(settings.billingPrinter);
-  const payload = buildBillingReceipt(
-    data,
-    layout,
-    fontSize,
-    escPosOptionsFromRole(settings.billingPrinter)
-  );
+  const escOpts = escPosOptionsFromRole(settings.billingPrinter);
+  const useHandoff =
+    options?.selfServiceHandoff === true && settings.billingPrinter.selfServiceBillWithHandoff !== false;
+  const payload = useHandoff
+    ? buildSelfServiceBillingReceipt(data, layout, fontSize, escOpts)
+    : buildBillingReceipt(data, layout, fontSize, escOpts);
   return executePrint("billing", settings.billingPrinter, capability, payload);
 }
 
@@ -348,6 +365,15 @@ export function applyRuntimePaperFromPayload(
     patch.paperWidth = mm <= 60 ? 58 : 80;
   } else if (payload.paperWidth === 80 || payload.paperWidth === 58) {
     patch.paperWidth = payload.paperWidth;
+  }
+  if (typeof payload.columnOffset === "number" && Number.isFinite(payload.columnOffset)) {
+    patch.columnOffset = Math.min(4, Math.max(0, Math.round(payload.columnOffset)));
+  }
+  if (typeof payload.amountColumnWidth === "number" && Number.isFinite(payload.amountColumnWidth)) {
+    patch.amountColumnWidth = Math.min(14, Math.max(8, Math.round(payload.amountColumnWidth)));
+  }
+  if (typeof payload.boldTotalLine === "boolean") {
+    patch.boldTotalLine = payload.boldTotalLine;
   }
   if (Object.keys(patch).length === 0) return settings;
   if (role === "kitchen") {

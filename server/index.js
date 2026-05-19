@@ -603,17 +603,33 @@ app.get('/auth/supabase-token', (req, res) => {
   res.json({ access_token });
 });
 
-const ANDROID_APK_CANDIDATES = [
-  path.join(__dirname, 'downloads/banaoo-latest.apk'),
-  path.join(__dirname, '../public/downloads/banaoo-latest.apk'),
-  path.join(__dirname, '../public/downloads/banaoo-app-V.0.07.apk'),
-  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-V.0.07.apk'),
-  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.6.apk'),
-  path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/app-release.apk'),
-];
+function getMobileApkDownloadFileName() {
+  try {
+    const appJsonPath = path.join(__dirname, '../mobile/app.json');
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+    const version = String(appJson?.expo?.version || '0.0.0');
+    const parts = version.split('.');
+    const label = parts.length >= 3 ? `0.${parts[1]}${parts[2]}` : version.replace(/\./g, '');
+    return `banaoo-app-V.${label}.apk`;
+  } catch {
+    return 'banaoo-latest.apk';
+  }
+}
+
+function androidApkCandidates() {
+  const versioned = getMobileApkDownloadFileName();
+  return [
+    path.join(__dirname, 'downloads/banaoo-latest.apk'),
+    path.join(__dirname, '../public/downloads/banaoo-latest.apk'),
+    path.join(__dirname, '../public/downloads', versioned),
+    path.join(__dirname, '../mobile/android/app/build/outputs/apk/release', versioned),
+    path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/banaoo-app-v0.6.apk'),
+    path.join(__dirname, '../mobile/android/app/build/outputs/apk/release/app-release.apk'),
+  ];
+}
 
 function resolveAndroidApkPath() {
-  for (const candidate of ANDROID_APK_CANDIDATES) {
+  for (const candidate of androidApkCandidates()) {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
@@ -659,7 +675,7 @@ app.get('/api/mobile-app/apk', (req, res) => {
     return res.status(404).json({ error: 'Android APK is not available yet' });
   }
   res.setHeader('Cache-Control', 'public, max-age=300');
-  res.download(apkPath, 'banaoo-app-V.0.07.apk');
+  res.download(apkPath, getMobileApkDownloadFileName());
 });
 
 function parseBooleanEnv(value, fallback = false) {

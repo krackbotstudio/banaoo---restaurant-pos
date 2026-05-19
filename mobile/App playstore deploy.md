@@ -1,6 +1,6 @@
 # Banaoo Android — Google Play Store deployment guide
 
-This document covers everything needed to publish **Banaoo** (`com.banaoo.pos`) on Google Play, including required files, build steps, store listing, and code changes made for Play readiness.
+This document covers everything needed to publish **Banaoo** (`com.banaoo`) on Google Play, including required files, build steps, store listing, and code changes made for Play readiness.
 
 **Current release baseline:** version **0.6** (`versionCode` **8**)
 
@@ -80,7 +80,7 @@ See `store-assets/README.md` for graphic file names and sizes.
 | **`android.version` / `version`: 0.6** | User-visible semver |
 | Trimmed Bluetooth permissions | Play policy: request only what you use |
 | **`blockedPermissions`** | Blocks camera, mic, background location, legacy `BLUETOOTH_ADMIN` |
-| Package unchanged: **`com.banaoo.pos`** | Do not change after first Play upload |
+| Package: **`com.banaoo`** | Do not change after first Play upload |
 
 ### 3.3 `src/lib/app-version.ts` + `PwaShellScreen.tsx`
 

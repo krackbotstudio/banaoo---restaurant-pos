@@ -10,12 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Printer, Check, X, ChefHat, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { printKitchenOrderSlip, openKitchenPrinterSettingsIfNeeded } from "@/lib/print-kitchen";
-import { printSelfServiceOrderSlips } from "@/lib/print-self-service";
+import {
+  printSelfServiceOrderSlips,
+  openSelfServicePrinterSettingsIfNeeded,
+} from "@/lib/print-self-service";
 import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { useOutlet } from "@/lib/outlet-context";
+import { computeReceiptTotals } from "@/lib/order-receipt-totals";
 
-interface KitchenItem {
+interface OrderItem {
   name: string;
   quantity: number;
+  totalPrice?: number;
+  gstRate?: number;
 }
 
 interface OrderData {
@@ -24,7 +31,7 @@ interface OrderData {
   outletName: string;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
-  items: KitchenItem[];
+  items: OrderItem[];
   subtotal: number;
   total: number;
   createdAt: Date;
@@ -49,29 +56,39 @@ export function OrderSuccessDialog({
   outletId,
   outletName,
 }: OrderSuccessDialogProps) {
+  const { currentOutlet } = useOutlet();
   const { settings: printerSettings } = usePrinterSettings(orderData?.outletId ?? outletId);
 
   const handleReprint = async () => {
     if (!orderData) return;
 
     if (selfService) {
+      const lineItems = orderData.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        totalPrice: i.totalPrice ?? 0,
+        gstRate: i.gstRate,
+      }));
+      const { subtotal, gstTotal, grandTotal } = computeReceiptTotals(lineItems);
       const result = await printSelfServiceOrderSlips(printerSettings, {
         outletId: orderData.outletId ?? outletId,
         outletName: orderData.outletName || outletName || "",
+        gstNumber: (currentOutlet as { gst_number?: string | null })?.gst_number,
         orderNumber: orderData.orderNumber,
         orderType: orderData.orderType,
         tableNumber: orderData.tableNumber,
-        items: orderData.items,
+        items: lineItems,
         createdAt: orderData.createdAt,
-        total: orderData.total,
+        subtotal,
+        gstTotal,
+        grandTotal,
         source: "pos",
-        selfServiceMode: true,
       });
       if (result.ok) {
-        toast.success("Kitchen bill and customer token sent to printer");
+        toast.success("Bill and kitchen handoff sent to printer");
       } else {
         toast.error("Print failed", { description: result.message });
-        openKitchenPrinterSettingsIfNeeded();
+        openSelfServicePrinterSettingsIfNeeded();
       }
       return;
     }
@@ -81,7 +98,7 @@ export function OrderSuccessDialog({
       orderNumber: orderData.orderNumber,
       orderType: orderData.orderType,
       tableNumber: orderData.tableNumber,
-      items: orderData.items,
+      items: orderData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
       createdAt: orderData.createdAt,
     });
     if (result.ok) {
@@ -102,7 +119,9 @@ export function OrderSuccessDialog({
   const typeLabel = selfService
     ? "Self Service"
     : orderData.orderType === "dine_in"
-      ? (orderData.tableNumber ? `Table T${orderData.tableNumber}` : "Dine In")
+      ? orderData.tableNumber
+        ? `Table T${orderData.tableNumber}`
+        : "Dine In"
       : "Takeaway";
 
   return (
@@ -116,7 +135,7 @@ export function OrderSuccessDialog({
           <DialogDescription className="text-center text-sm">
             #{orderData.orderNumber} · {typeLabel}
             {selfService
-              ? " · kitchen bill + customer token printed"
+              ? " · customer bill + kitchen handoff printed"
               : " · kitchen slip printed"}
           </DialogDescription>
         </DialogHeader>
@@ -125,20 +144,23 @@ export function OrderSuccessDialog({
           <div className="flex items-center gap-2 mb-1">
             {selfService ? (
               <>
-                <ChefHat className="h-4 w-4 text-muted-foreground" />
                 <Receipt className="h-4 w-4 text-muted-foreground" />
+                <ChefHat className="h-4 w-4 text-muted-foreground" />
               </>
             ) : (
               <ChefHat className="h-4 w-4 text-muted-foreground" />
             )}
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {selfService ? "Kitchen bill + Customer token" : "Kitchen Copy"}
+              {selfService ? "Customer bill + Take to kitchen" : "Kitchen Copy"}
             </span>
           </div>
 
           <div className="space-y-1">
             {orderData.items.map((item, i) => (
-              <div key={i} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
+              <div
+                key={i}
+                className="flex items-center justify-between py-1 border-b border-border/50 last:border-0"
+              >
                 <span className="text-sm font-medium">{item.name}</span>
                 <span className="text-sm font-bold text-primary bg-primary/10 rounded-full px-2.5 py-0.5">
                   ×{item.quantity}
@@ -147,7 +169,9 @@ export function OrderSuccessDialog({
             ))}
           </div>
           {selfService ? (
-            <p className="text-sm font-bold text-right pt-1">Total: ₹{orderData.total.toLocaleString("en-IN")}</p>
+            <p className="text-sm font-bold text-right pt-1">
+              Total: ₹{orderData.total.toLocaleString("en-IN")}
+            </p>
           ) : null}
         </div>
 

@@ -6,6 +6,7 @@ import {
   paperLayoutToStorage,
   type PaperWidthPresetId,
 } from "@/lib/paper-width";
+import type { EscPosPrintOptions } from "@/lib/serial-printer";
 
 export type { PrinterTransport };
 
@@ -37,6 +38,18 @@ export interface PrinterConfig {
   showTearCutLine: boolean;
   dualKitchenCopies: boolean;
   dualBillingCopies: boolean;
+  /** Left margin in character spaces (0–4). */
+  columnOffset: number;
+  /** Width reserved for amount column on item lines (8–14). */
+  amountColumnWidth: number;
+  /** Bold TOTAL line (avoid double-width on 58mm — causes wrap). */
+  boldTotalLine: boolean;
+  /** Self service: print full bill + kitchen handoff on billing printer when order is placed. */
+  selfServicePrintOnOrder: boolean;
+  /** Self service: include items/qty-only slip after cut (take to kitchen). */
+  selfServiceBillWithHandoff: boolean;
+  /** Self service: also print kitchen station slip on kitchen printer. */
+  selfServiceKitchenStationCopy: boolean;
 }
 
 export interface OutletPrinterSettings {
@@ -64,6 +77,12 @@ const DEFAULT_PRINTER: PrinterConfig = {
   showTearCutLine: true,
   dualKitchenCopies: false,
   dualBillingCopies: false,
+  columnOffset: 0,
+  amountColumnWidth: 10,
+  boldTotalLine: false,
+  selfServicePrintOnOrder: true,
+  selfServiceBillWithHandoff: true,
+  selfServiceKitchenStationCopy: false,
 };
 
 const DEFAULT_SETTINGS: OutletPrinterSettings = {
@@ -117,6 +136,15 @@ function normalizePrinterConfig(raw?: Partial<PrinterConfig>): PrinterConfig {
   merged.showTearCutLine = merged.showTearCutLine !== false;
   merged.dualKitchenCopies = merged.dualKitchenCopies === true;
   merged.dualBillingCopies = merged.dualBillingCopies === true;
+  merged.columnOffset = Math.min(4, Math.max(0, Math.round(merged.columnOffset ?? 0)));
+  merged.amountColumnWidth = Math.min(
+    14,
+    Math.max(8, Math.round(merged.amountColumnWidth ?? DEFAULT_PRINTER.amountColumnWidth))
+  );
+  merged.boldTotalLine = merged.boldTotalLine === true;
+  merged.selfServicePrintOnOrder = merged.selfServicePrintOnOrder !== false;
+  merged.selfServiceBillWithHandoff = merged.selfServiceBillWithHandoff !== false;
+  merged.selfServiceKitchenStationCopy = merged.selfServiceKitchenStationCopy === true;
   merged.networkPort =
     typeof merged.networkPort === "number" && merged.networkPort > 0
       ? merged.networkPort
@@ -195,4 +223,16 @@ export function usePrinterSettings(outletId: string | null | undefined) {
   };
 
   return { settings, updateKitchen, updateBilling, resetToDefaults };
+}
+
+export function escPosOptionsFromPrinterConfig(config: PrinterConfig): EscPosPrintOptions {
+  return {
+    postPrintFeedLines: config.postPrintFeedLines,
+    showTearCutLine: config.showTearCutLine,
+    dualKitchenCopies: config.dualKitchenCopies,
+    dualBillingCopies: config.dualBillingCopies,
+    columnOffset: config.columnOffset,
+    amountColumnWidth: config.amountColumnWidth,
+    boldTotalLine: config.boldTotalLine,
+  };
 }

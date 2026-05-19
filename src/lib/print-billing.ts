@@ -10,18 +10,10 @@ import {
   type NativeBillingPrintPayload,
 } from "@/lib/native-print-bridge";
 import type { OutletPrinterSettings } from "@/lib/use-printer-settings";
-import { getPrintLayoutFromConfig } from "@/lib/paper-width";
+import { escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
+import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
 
 export type BillingPrintResult = { ok: boolean; message?: string };
-
-function escPosOptions(settings: OutletPrinterSettings) {
-  const b = settings.billingPrinter;
-  return {
-    postPrintFeedLines: b.postPrintFeedLines,
-    showTearCutLine: b.showTearCutLine,
-    dualBillingCopies: b.dualBillingCopies,
-  };
-}
 
 export async function printBillingReceiptWeb(
   settings: OutletPrinterSettings,
@@ -58,7 +50,7 @@ export async function printBillingReceiptWeb(
     }
     try {
       const { layout, fontSize } = getPrintLayoutFromConfig(b);
-      const bytes = buildBillingReceipt(slipData, layout, fontSize, escPosOptions(settings));
+      const bytes = buildBillingReceipt(slipData, layout, fontSize, escPosOptionsFromPrinterConfig(b));
       await printViaSerial(portIndex, bytes, b.baudRate);
       return { ok: true };
     } catch (err) {

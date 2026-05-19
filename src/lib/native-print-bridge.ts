@@ -89,6 +89,11 @@ export interface NativeBillingPrintPayload {
   gstTotal: number;
   grandTotal: number;
   createdAt: string;
+  /** When true, print full bill then items/qty handoff slip (self service). */
+  selfServiceHandoff?: boolean;
+  columnOffset?: number;
+  amountColumnWidth?: number;
+  boldTotalLine?: boolean;
 }
 
 function postToNative(

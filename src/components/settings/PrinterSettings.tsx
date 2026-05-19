@@ -16,6 +16,11 @@ import {
 import { getPrintLayoutFromConfig } from "@/lib/paper-width";
 import { suggestProfileForPort, profileToConfigPatch } from "@/lib/printer-profiles";
 import { PaperLayoutControls } from "@/components/settings/PaperLayoutControls";
+import { ReceiptAlignmentControls } from "@/components/settings/ReceiptAlignmentControls";
+import { useOutlet } from "@/lib/outlet-context";
+import { isSelfServiceMode } from "@/lib/outlet-operation";
+import { escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
+import { buildSelfServiceBillingReceipt } from "@/lib/serial-printer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -466,6 +471,7 @@ interface PrinterCardProps {
   assignedPort: GrantedPort | null;
   onUpdate: (patch: Partial<PrinterConfig>) => void;
   isKitchen: boolean;
+  selfService: boolean;
 }
 
 function PrinterCard({
@@ -478,7 +484,12 @@ function PrinterCard({
   assignedPort,
   onUpdate,
   isKitchen,
+  selfService,
 }: PrinterCardProps) {
+  const persistUpdate = (patch: Partial<PrinterConfig>) => {
+    onUpdate(patch);
+    toast.success("Printer settings saved");
+  };
   const [testing, setTesting] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const { layout, fontSize } = getPrintLayoutFromConfig(config);
@@ -520,11 +531,12 @@ function PrinterCard({
       if (config.printMode === "serial" && config.usbPortIndex !== null) {
         try {
           const now = new Date();
-          const escOpts = {
-            postPrintFeedLines: config.postPrintFeedLines,
-            showTearCutLine: config.showTearCutLine,
-            ...(isKitchen ? { dualKitchenCopies: config.dualKitchenCopies } : { dualBillingCopies: config.dualBillingCopies }),
-          };
+          const escOpts = escPosOptionsFromPrinterConfig(config);
+          if (isKitchen) {
+            escOpts.dualKitchenCopies = config.dualKitchenCopies;
+          } else {
+            escOpts.dualBillingCopies = config.dualBillingCopies;
+          }
           const bytes = isKitchen
             ? buildKitchenSlip(
                 {
@@ -532,6 +544,28 @@ function PrinterCard({
                   orderType: "dine_in",
                   tableNumber: "1",
                   items: [{ name: "Test Item", quantity: 1 }],
+                  createdAt: now,
+                },
+                layout,
+                fontSize,
+                escOpts
+              )
+            : selfService && config.selfServiceBillWithHandoff
+            ? buildSelfServiceBillingReceipt(
+                {
+                  orderNumber: "TEST",
+                  outletName: config.name || "My Restaurant",
+                  orderType: "takeaway",
+                  items: [
+                    { name: "Paneer", quantity: 1, totalPrice: 50, gstRate: 18 },
+                    { name: "Biryani", quantity: 1, totalPrice: 300, gstRate: 18 },
+                  ],
+                  subtotal: 350,
+                  discountAmt: 0,
+                  serviceTax: 0,
+                  serviceTaxPercent: 0,
+                  gstTotal: 54,
+                  grandTotal: 404,
                   createdAt: now,
                 },
                 layout,
@@ -799,10 +833,12 @@ function PrinterCard({
 
         <PaperLayoutControls
           config={config}
-          onUpdate={onUpdate}
+          onUpdate={persistUpdate}
           onCalibrationPrint={handleCalibrationPrint}
           calibrationDisabled={calibrating || testing}
         />
+
+        <ReceiptAlignmentControls config={config} onUpdate={persistUpdate} />
 
         {config.printMode === "serial" && config.transport !== "network" && (
           <div className="space-y-2 max-w-[200px]">
@@ -888,6 +924,49 @@ function PrinterCard({
               onCheckedChange={(checked) => onUpdate({ showTearCutLine: checked })}
             />
           </div>
+          {!isKitchen && selfService ? (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">Print bill when order is placed</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Full GST bill on the billing printer when the counter order is created.
+                  </p>
+                </div>
+                <Switch
+                  checked={config.selfServicePrintOnOrder}
+                  onCheckedChange={(checked) => persistUpdate({ selfServicePrintOnOrder: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">Bill + kitchen handoff copy</Label>
+                  <p className="text-xs text-muted-foreground">
+                    After the full bill, a cut, then items and quantity only for the customer to give the kitchen.
+                  </p>
+                </div>
+                <Switch
+                  checked={config.selfServiceBillWithHandoff}
+                  onCheckedChange={(checked) => persistUpdate({ selfServiceBillWithHandoff: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">Also print kitchen station copy</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Extra kitchen slip on the kitchen printer (optional).
+                  </p>
+                </div>
+                <Switch
+                  checked={config.selfServiceKitchenStationCopy}
+                  onCheckedChange={(checked) =>
+                    persistUpdate({ selfServiceKitchenStationCopy: checked })
+                  }
+                />
+              </div>
+            </>
+          ) : null}
+          {!( !isKitchen && selfService) ? (
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-sm">
@@ -896,21 +975,24 @@ function PrinterCard({
               <p className="text-xs text-muted-foreground">
                 {isKitchen
                   ? "Kitchen copy, then Table (dine-in) or Parcel (takeaway) copy in one print job."
-                  : "Prints the full bill twice with labels for counter and customer."}
+                  : "Standard mode: two full bills (counter, then customer)."}
               </p>
             </div>
             <Switch
               checked={isKitchen ? config.dualKitchenCopies : config.dualBillingCopies}
               onCheckedChange={(checked) =>
-                isKitchen ? onUpdate({ dualKitchenCopies: checked }) : onUpdate({ dualBillingCopies: checked })
+                isKitchen
+                  ? persistUpdate({ dualKitchenCopies: checked })
+                  : persistUpdate({ dualBillingCopies: checked })
               }
             />
           </div>
+          ) : null}
         </div>
 
         <Separator />
 
-        {/* Auto-print toggle */}
+        {!( !isKitchen && selfService) && (
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor={`autoprint-${title}`}>{autoSwitchLabel}</Label>
@@ -919,10 +1001,11 @@ function PrinterCard({
           <Switch
             id={`autoprint-${title}`}
             checked={config.autoPrint}
-            onCheckedChange={(checked) => onUpdate({ autoPrint: checked })}
+            onCheckedChange={(checked) => persistUpdate({ autoPrint: checked })}
           />
         </div>
 
+        )}
         {/* Test print */}
         <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={handleTestPrint} disabled={testing}>
           {testing
@@ -938,6 +1021,7 @@ function PrinterCard({
 // ── Main component ────────────────────────────────────────────────────────────
 export function PrinterSettings() {
   const { currentOutlet } = useOutlet();
+  const selfService = isSelfServiceMode(currentOutlet?.operation_mode);
   const { settings, updateKitchen, updateBilling, resetToDefaults } = usePrinterSettings(currentOutlet?.id);
   const [ports, setPorts] = useState<GrantedPort[]>([]);
 
@@ -1017,6 +1101,7 @@ export function PrinterSettings() {
         assignedPort={kitchenPort}
         onUpdate={updateKitchen}
         isKitchen={true}
+        selfService={selfService}
       />
 
       <PrinterCard
@@ -1029,6 +1114,7 @@ export function PrinterSettings() {
         assignedPort={billingPort}
         onUpdate={updateBilling}
         isKitchen={false}
+        selfService={selfService}
       />
 
       {/* Reset */}

@@ -1433,7 +1433,7 @@ export default function Settings() {
                       Open native settings to pair Bluetooth or enter the printer IP (LAN/Wi‑Fi, port 9100).
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Assign each device to Kitchen or Billing, then run a test print.
+                      Paper width, alignment, self-service receipts (bill + kitchen handoff), and test print are on the native screen. Settings save per outlet.
                     </p>
                   </div>
                   <Button

@@ -1,4 +1,12 @@
 import type { PrintLayout } from "./paper-width";
+import {
+  colsLine,
+  formatItemLine,
+  formatMoney,
+  receiptLayoutFromFields,
+  truncateCenter,
+  type ReceiptLayoutConfig,
+} from "./receipt-layout";
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -83,6 +91,17 @@ export interface EscPosPrintOptions {
   showTearCutLine?: boolean;
   dualKitchenCopies?: boolean;
   dualBillingCopies?: boolean;
+  columnOffset?: number;
+  amountColumnWidth?: number;
+  boldTotalLine?: boolean;
+}
+
+function receiptLayout(layout: PrintLayout, options?: EscPosPrintOptions): ReceiptLayoutConfig {
+  return receiptLayoutFromFields(layout.columns, options);
+}
+
+function lineWidth(rl: ReceiptLayoutConfig): number {
+  return rl.columns;
 }
 
 function clampPostPrintFeed(n: number | undefined, fallback = 4): number {
@@ -179,7 +198,13 @@ function writeKitchenCancelSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: n
   d.align("C").bold(true).line("*** VOID ***").bold(false);
 }
 
-function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptPayload, w: number, fmt: (n: number) => string) {
+function writeBillingReceiptBody(
+  d: EscPosDoc,
+  data: BillingReceiptPayload,
+  w: number,
+  fmt: (n: number) => string,
+  options?: EscPosPrintOptions
+) {
   const date = data.createdAt.toLocaleString("en-IN", {
     day: "2-digit",
     month: "2-digit",
@@ -221,8 +246,85 @@ function writeBillingReceiptBody(d: EscPosDoc, data: BillingReceiptPayload, w: n
   if (data.gstTotal > 0) d.cols("GST", fmt(data.gstTotal), w);
   if (data.serviceTax > 0) d.cols(`Service (${data.serviceTaxPercent}%)`, "+" + fmt(data.serviceTax), w);
   d.dashes(w);
-  d.bold(true).size(false, true).cols("TOTAL", fmt(data.grandTotal), w).size(false, false).bold(false);
+  const rl = receiptLayoutFromFields(w, options);
+  const totalLine = colsLine("TOTAL", fmt(data.grandTotal), rl);
+  if (options?.boldTotalLine) {
+    d.bold(true).line(totalLine).bold(false);
+  } else {
+    d.line(totalLine);
+  }
   d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by banaoo.in");
+}
+
+function writeKitchenHandoffBody(
+  d: EscPosDoc,
+  data: {
+    orderNumber: string;
+    orderType: "dine_in" | "takeaway";
+    tableNumber?: string;
+    items: Array<{ name: string; quantity: number }>;
+    createdAt: Date;
+  },
+  rl: ReceiptLayoutConfig
+) {
+  const w = lineWidth(rl);
+  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const typeLabel =
+    data.orderType === "dine_in"
+      ? data.tableNumber
+        ? `Table T${data.tableNumber}`
+        : "Takeaway"
+      : "TAKEAWAY";
+
+  d.align("C").bold(true).line("TAKE TO KITCHEN").bold(false);
+  d.align("C").line("Give this slip to prepare your order");
+  d.dashes(w);
+  d.line(colsLine("Order #", data.orderNumber, rl));
+  d.line(colsLine("Time", timeStr, rl));
+  d.line(colsLine("Type", typeLabel, rl));
+  d.dashes(w);
+  d.bold(true).line(colsLine("ITEM", "QTY", rl)).bold(false);
+  for (const item of data.items) {
+    d.line(formatItemLine(item.name, item.quantity, null, rl));
+  }
+  d.dashes(w);
+}
+
+export function buildSelfServiceBillingReceipt(
+  data: BillingReceiptPayload,
+  layout: PrintLayout,
+  fontSize = 12,
+  options?: EscPosPrintOptions
+): Uint8Array {
+  const rl = receiptLayout(layout, options);
+  const w = lineWidth(rl);
+  const d = beginDoc(fontSize);
+  const fmt = (n: number) => formatMoney(n);
+  const feed = clampPostPrintFeed(options?.postPrintFeedLines);
+  const showCut = options?.showTearCutLine !== false;
+
+  d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
+  writeBillingReceiptBody(d, data, w, fmt, options);
+  if (showCut) appendTearCutLine(d, w);
+
+  writeKitchenHandoffBody(
+    d,
+    {
+      orderNumber: data.orderNumber,
+      orderType: data.orderType,
+      tableNumber: data.tableNumber,
+      items: data.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+      createdAt: data.createdAt,
+    },
+    rl
+  );
+  if (showCut) appendTearCutLine(d, w);
+  d.feed(feed).cut();
+  return d.bytes();
 }
 
 export interface KitchenSlipPayload {
@@ -388,7 +490,9 @@ export function buildCustomerTokenSlip(
     d.cols(name, qty, w);
   }
   d.dashes(w);
-  d.bold(true).size(false, true).cols("TOTAL", fmt(data.total), w).size(false, false).bold(false);
+  const rl = receiptLayout(layout, options);
+  const totalLine = colsLine("TOTAL", fmt(data.total), rl);
+  d.bold(true).line(totalLine).bold(false);
   d.dashes(w);
   d.align("C").line("Show this token at pickup");
   if (showCut) appendTearCutLine(d, w);
@@ -410,18 +514,18 @@ export function buildBillingReceipt(
   const dual = options?.dualBillingCopies === true;
 
   if (!dual) {
-    writeBillingReceiptBody(d, data, w, fmt);
+    writeBillingReceiptBody(d, data, w, fmt, options);
     if (showCut) appendTearCutLine(d, w);
     d.feed(feed).cut();
     return d.bytes();
   }
 
   d.align("C").bold(true).line("*** COUNTER COPY ***").bold(false);
-  writeBillingReceiptBody(d, data, w, fmt);
+  writeBillingReceiptBody(d, data, w, fmt, options);
   if (showCut) appendTearCutLine(d, w);
 
   d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
-  writeBillingReceiptBody(d, data, w, fmt);
+  writeBillingReceiptBody(d, data, w, fmt, options);
   if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();

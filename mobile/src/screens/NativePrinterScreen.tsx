@@ -672,12 +672,65 @@ export function NativePrinterScreen() {
         </View>
         <View style={styles.rowBetween}>
           <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.label}>Counter + customer copies</Text>
-            <Text style={styles.metaText}>Full bill twice with tear line between.</Text>
+            <Text style={styles.label}>Print bill when order is placed</Text>
+            <Text style={styles.metaText}>Self service: full GST bill on billing printer.</Text>
           </View>
           <Switch
-            value={settings.billingPrinter.dualBillingCopies}
-            onValueChange={(dualBillingCopies) => void updateBilling({ dualBillingCopies })}
+            value={settings.billingPrinter.selfServicePrintOnOrder}
+            onValueChange={(selfServicePrintOnOrder) => void updateBilling({ selfServicePrintOnOrder })}
+          />
+        </View>
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.label}>Bill + kitchen handoff</Text>
+            <Text style={styles.metaText}>Full bill, cut, then items and qty only for the kitchen.</Text>
+          </View>
+          <Switch
+            value={settings.billingPrinter.selfServiceBillWithHandoff}
+            onValueChange={(selfServiceBillWithHandoff) =>
+              void updateBilling({ selfServiceBillWithHandoff })
+            }
+          />
+        </View>
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.label}>Also print kitchen station copy</Text>
+            <Text style={styles.metaText}>Optional slip on the kitchen printer.</Text>
+          </View>
+          <Switch
+            value={settings.billingPrinter.selfServiceKitchenStationCopy}
+            onValueChange={(selfServiceKitchenStationCopy) =>
+              void updateBilling({ selfServiceKitchenStationCopy })
+            }
+          />
+        </View>
+        <Text style={styles.label}>Left offset (0–4)</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="number-pad"
+          value={String(settings.billingPrinter.columnOffset ?? 0)}
+          onChangeText={(t) =>
+            void updateBilling({
+              columnOffset: Math.min(4, Math.max(0, Number(t) || 0)),
+            })
+          }
+        />
+        <Text style={styles.label}>Amount column width (8–14)</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="number-pad"
+          value={String(settings.billingPrinter.amountColumnWidth ?? 10)}
+          onChangeText={(t) =>
+            void updateBilling({
+              amountColumnWidth: Math.min(14, Math.max(8, Number(t) || 10)),
+            })
+          }
+        />
+        <View style={styles.rowBetween}>
+          <Text style={styles.label}>Bold total line</Text>
+          <Switch
+            value={settings.billingPrinter.boldTotalLine}
+            onValueChange={(boldTotalLine) => void updateBilling({ boldTotalLine })}
           />
         </View>
         <Pressable

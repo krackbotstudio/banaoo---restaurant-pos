@@ -29,6 +29,7 @@ import { usePrinterSettings } from "@/lib/use-printer-settings";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
 import { printSelfServiceOrderSlips } from "@/lib/print-self-service";
 import { isSelfServiceMode } from "@/lib/outlet-operation";
+import { computeReceiptTotals } from "@/lib/order-receipt-totals";
 import { toast as sonnerToast } from "sonner";
 
 interface Category {
@@ -58,7 +59,7 @@ interface OrderData {
   outletName: string;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
-  items: { name: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  items: { name: string; quantity: number; unitPrice: number; totalPrice: number; gstRate?: number }[];
   subtotal: number;
   total: number;
   createdAt: Date;
@@ -458,22 +459,30 @@ export default function NewOrder() {
       orderNumber: string;
       orderType: "dine_in" | "takeaway";
       tableNumber?: string;
-      items: { name: string; quantity: number }[];
+      items: { name: string; quantity: number; totalPrice: number; gstRate?: number }[];
       createdAt: Date;
       total: number;
       source?: string;
     }) => {
       if (selfService) {
+        const { subtotal, gstTotal, grandTotal } = computeReceiptTotals(input.items);
         const result = await printSelfServiceOrderSlips(printerSettings, {
           outletId: currentOutlet?.id,
           outletName: currentOutlet?.name,
+          gstNumber: (currentOutlet as { gst_number?: string | null })?.gst_number,
           source: input.source ?? "pos",
-          selfServiceMode: true,
-          ...input,
+          orderNumber: input.orderNumber,
+          orderType: input.orderType,
+          tableNumber: input.tableNumber,
+          items: input.items,
+          createdAt: input.createdAt,
+          subtotal,
+          gstTotal,
+          grandTotal,
         });
         if (!result.ok) {
           sonnerToast.error("Print failed", { description: result.message });
-        } else if (!result.kitchenOk || !result.tokenOk) {
+        } else if (!result.billingOk || !result.kitchenOk) {
           sonnerToast.warning("Partial print", { description: result.message });
         }
         return;
@@ -670,6 +679,8 @@ export default function NewOrder() {
         const kitchenItems = cart.map((item) => ({
           name: item.menuItem.name,
           quantity: item.quantity,
+          totalPrice: item.menuItem.base_price * item.quantity,
+          gstRate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
         }));
         const slipCreatedAt = new Date();
 
@@ -761,6 +772,7 @@ export default function NewOrder() {
           quantity: item.quantity,
           unitPrice: item.menuItem.base_price,
           totalPrice: item.menuItem.base_price * item.quantity,
+          gstRate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
         })),
         subtotal: cartTotal,
         total: cartTotal,
@@ -777,7 +789,12 @@ export default function NewOrder() {
         orderNumber: receiptData.orderNumber,
         orderType: receiptData.orderType,
         tableNumber: receiptData.tableNumber,
-        items: receiptData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+        items: receiptData.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          totalPrice: i.totalPrice,
+          gstRate: i.gstRate,
+        })),
         createdAt: receiptData.createdAt,
         total: receiptData.total,
         source: "pos",

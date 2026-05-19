@@ -14,6 +14,9 @@ Invoke-WithShortMobilePath $MobileRoot {
   Push-Location (Join-Path $workRoot "android")
   try {
     .\gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+    if ($LASTEXITCODE -ne 0) {
+      throw "Gradle assembleRelease failed (exit $LASTEXITCODE)"
+    }
   } finally {
     Pop-Location
   }
@@ -30,7 +33,7 @@ if (-not $apk) {
 if ($apk) {
   $webApkDir = Join-Path (Split-Path $MobileRoot -Parent) "public\downloads"
   New-Item -ItemType Directory -Force -Path $webApkDir | Out-Null
-  $versionedName = "banaoo-app-V.0.07.apk"
+  $versionedName = & "$PSScriptRoot\apk-version-name.ps1" -MobileRoot $MobileRoot
   $versionedApk = Join-Path $webApkDir $versionedName
   $webApk = Join-Path $webApkDir "banaoo-latest.apk"
   Copy-Item -Force $apk.FullName $versionedApk

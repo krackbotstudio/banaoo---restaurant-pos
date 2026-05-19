@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.0",
+  "version": "0.0.8",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -12,6 +12,7 @@
     "build:apk": "eas build --platform android --profile preview",
     "build:apk:production": "eas build --platform android --profile preview",
     "build:aab": "eas build --platform android --profile production",
+    "build:aab:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release-aab.ps1",
     "submit:play": "eas submit --platform android --profile production --latest",
     "android:emulator": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-android-emulator.ps1",
     "icons:generate": "node ./scripts/build-adaptive-assets.cjs"
