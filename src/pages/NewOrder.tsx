@@ -25,7 +25,7 @@ import { MenuItemCard } from "@/components/order/MenuItemCard";
 import { CartSummaryBar } from "@/components/order/CartSummaryBar";
 import { CartDrawer } from "@/components/order/CartDrawer";
 import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
-import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
 import { isSelfServiceMode } from "@/lib/outlet-operation";
 import { toast as sonnerToast } from "sonner";
@@ -444,7 +444,7 @@ export default function NewOrder() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [lastOrderData, setLastOrderData] = useState<OrderData | null>(null);
-  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
+  const { legacySettings: printerSettings, fleetContext } = usePrintFleet(currentOutlet?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
   type FlowStep = "type" | "menu" | "review";
@@ -457,7 +457,7 @@ export default function NewOrder() {
       orderNumber: string;
       orderType: "dine_in" | "takeaway";
       tableNumber?: string;
-      items: { name: string; quantity: number; totalPrice: number; gstRate?: number }[];
+      items: { name: string; quantity: number; totalPrice: number; gstRate?: number; categoryId?: string | null }[];
       createdAt: Date;
       total: number;
       source?: string;
@@ -466,20 +466,24 @@ export default function NewOrder() {
         // Printing handled in OrderSuccessDialog (bill cut, then kitchen slip).
         return;
       }
-      const result = await printKitchenOrderSlip(printerSettings, {
-        outletId: currentOutlet?.id,
-        orderNumber: input.orderNumber,
-        orderType: input.orderType,
-        tableNumber: input.tableNumber,
-        items: input.items,
-        createdAt: input.createdAt,
-        source: input.source,
-      });
+      const result = await printKitchenOrderSlip(
+        printerSettings,
+        {
+          outletId: currentOutlet?.id,
+          orderNumber: input.orderNumber,
+          orderType: input.orderType,
+          tableNumber: input.tableNumber,
+          items: input.items,
+          createdAt: input.createdAt,
+          source: input.source,
+        },
+        fleetContext
+      );
       if (!result.ok) {
         sonnerToast.error("Kitchen print failed", { description: result.message });
       }
     },
-    [printerSettings, currentOutlet?.id, currentOutlet?.name, selfService]
+    [printerSettings, fleetContext, currentOutlet?.id, selfService]
   );
 
   const goToReview = () => {
@@ -660,6 +664,7 @@ export default function NewOrder() {
           quantity: item.quantity,
           totalPrice: item.menuItem.base_price * item.quantity,
           gstRate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
+          categoryId: item.menuItem.category_id,
         }));
         const slipCreatedAt = new Date();
 
@@ -768,11 +773,12 @@ export default function NewOrder() {
         orderNumber: receiptData.orderNumber,
         orderType: receiptData.orderType,
         tableNumber: receiptData.tableNumber,
-        items: receiptData.items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          totalPrice: i.totalPrice,
-          gstRate: i.gstRate,
+        items: cart.map((item) => ({
+          name: item.menuItem.name,
+          quantity: item.quantity,
+          totalPrice: item.menuItem.base_price * item.quantity,
+          gstRate: resolveGstRate(item.menuItem.gst_category, currentOutlet?.gst_categories),
+          categoryId: item.menuItem.category_id,
         })),
         createdAt: receiptData.createdAt,
         total: receiptData.total,

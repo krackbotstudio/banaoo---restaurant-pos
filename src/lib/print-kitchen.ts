@@ -13,6 +13,8 @@ import {
 } from "@/lib/native-print-bridge";
 import type { OutletPrinterSettings } from "@/lib/use-printer-settings";
 import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
+import type { FleetPrintContext } from "@/lib/print/print-service";
+import { printRoutedKitchen } from "@/lib/print/print-service";
 
 export type KitchenPrintResult = { ok: true } | { ok: false; message: string };
 
@@ -21,7 +23,7 @@ export interface KitchenOrderPrintInput {
   orderNumber: string;
   orderType: "dine_in" | "takeaway";
   tableNumber?: string;
-  items: { name: string; quantity: number }[];
+  items: { name: string; quantity: number; categoryId?: string | null }[];
   createdAt: Date;
   source?: string;
   selfServiceMode?: boolean;
@@ -40,7 +42,7 @@ function escPosOptions(settings: OutletPrinterSettings, selfServiceMode?: boolea
   };
 }
 
-function printKitchenBrowser(
+export function printKitchenBrowser(
   orderData: KitchenOrderPrintInput,
   fontSize: number,
   paperWidthMm: number,
@@ -142,8 +144,37 @@ async function printKitchenSerial(
 
 export async function printKitchenOrderSlip(
   settings: OutletPrinterSettings,
-  input: KitchenOrderPrintInput
+  input: KitchenOrderPrintInput,
+  fleet?: FleetPrintContext | null
 ): Promise<KitchenPrintResult> {
+  if (fleet && fleet.printers.some((p) => p.enabled)) {
+    const summary = await printRoutedKitchen(
+      fleet,
+      input.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        categoryId: i.categoryId,
+      })),
+      {
+        outletId: input.outletId ?? fleet.settings.outlet_id,
+        orderNumber: input.orderNumber,
+        orderType: input.orderType,
+        tableNumber: input.tableNumber,
+        createdAt: input.createdAt,
+        source: input.source,
+        selfServiceMode: input.selfServiceMode,
+      }
+    );
+    if (summary.total === 0) {
+      return { ok: false, message: "No kitchen printers configured or enabled" };
+    }
+    if (summary.ok) return { ok: true };
+    return {
+      ok: false,
+      message: summary.results.find((r) => !r.ok)?.message ?? "Some kitchen prints failed",
+    };
+  }
+
   const slipData: KitchenSlipData = {
     orderNumber: input.orderNumber,
     orderType: input.orderType,
@@ -196,6 +227,38 @@ export async function printKitchenOrderSlip(
 }
 
 export async function printKitchenCancelSlip(
+  settings: OutletPrinterSettings,
+  input: KitchenCancelPrintInput,
+  fleet?: FleetPrintContext | null
+): Promise<KitchenPrintResult> {
+  if (fleet && fleet.printers.some((p) => p.enabled)) {
+    const summary = await printRoutedKitchen(
+      fleet,
+      input.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        categoryId: i.categoryId,
+      })),
+      {
+        outletId: input.outletId ?? fleet.settings.outlet_id,
+        orderNumber: input.orderNumber,
+        orderType: input.orderType,
+        tableNumber: input.tableNumber,
+        createdAt: input.createdAt,
+        source: input.source,
+        selfServiceMode: input.selfServiceMode,
+      },
+      { jobType: "kot_cancel", skipAutoPrintCheck: true }
+    );
+    if (summary.total === 0) return { ok: false, message: "No kitchen printers configured" };
+    if (summary.ok) return { ok: true };
+    return { ok: false, message: summary.results.find((r) => !r.ok)?.message ?? "Cancel print failed" };
+  }
+
+  return printKitchenCancelSlipLegacy(settings, input);
+}
+
+async function printKitchenCancelSlipLegacy(
   settings: OutletPrinterSettings,
   input: KitchenCancelPrintInput
 ): Promise<KitchenPrintResult> {

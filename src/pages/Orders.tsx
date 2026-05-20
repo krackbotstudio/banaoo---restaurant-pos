@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isToday, subDays, formatISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
-import { usePrinterSettings, escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
+import { usePrintFleet } from "@/hooks/use-print-fleet";
+import { escPosOptionsFromPrinterConfig, usePrinterSettings } from "@/lib/use-printer-settings";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -109,7 +110,7 @@ const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
 
 export default function Orders() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
-  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
+  const { legacySettings: printerSettings, fleetContext } = usePrintFleet(currentOutlet?.id);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -410,15 +411,19 @@ export default function Orders() {
           .filter((i) => i.status !== "completed")
           .map((i) => ({ name: i.item_name, quantity: i.quantity }));
         if (cancelItems.length > 0) {
-          void printKitchenCancelSlip(printerSettings, {
-            outletId: currentOutlet?.id,
-            orderNumber: selectedOrder.order_number,
-            orderType: selectedOrder.order_type === "takeaway" ? "takeaway" : "dine_in",
-            tableNumber: selectedOrder.table_number ?? undefined,
-            items: cancelItems,
-            createdAt: new Date(selectedOrder.created_at),
-            cancelledAt: new Date(),
-          }).then((result) => {
+          void printKitchenCancelSlip(
+            printerSettings,
+            {
+              outletId: currentOutlet?.id,
+              orderNumber: selectedOrder.order_number,
+              orderType: selectedOrder.order_type === "takeaway" ? "takeaway" : "dine_in",
+              tableNumber: selectedOrder.table_number ?? undefined,
+              items: cancelItems,
+              createdAt: new Date(selectedOrder.created_at),
+              cancelledAt: new Date(),
+            },
+            fleetContext
+          ).then((result) => {
             if (!result.ok) {
               toast.error("Kitchen cancel slip failed", { description: result.message });
             }

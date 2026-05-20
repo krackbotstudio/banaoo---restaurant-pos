@@ -19,7 +19,7 @@ import {
   openSelfServicePrinterSettingsIfNeeded,
   type SelfServicePrintInput,
 } from "@/lib/print-self-service";
-import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { useOutlet } from "@/lib/outlet-context";
 import { computeReceiptTotals } from "@/lib/order-receipt-totals";
 
@@ -62,7 +62,7 @@ export function OrderSuccessDialog({
   outletName,
 }: OrderSuccessDialogProps) {
   const { currentOutlet } = useOutlet();
-  const { settings: printerSettings } = usePrinterSettings(orderData?.outletId ?? outletId);
+  const { legacySettings: printerSettings, fleetContext } = usePrintFleet(orderData?.outletId ?? outletId);
   const [mainBillPrinted, setMainBillPrinted] = useState(false);
   const [kitchenPrinted, setKitchenPrinted] = useState(false);
   const [printingMain, setPrintingMain] = useState(false);
@@ -76,6 +76,7 @@ export function OrderSuccessDialog({
       quantity: i.quantity,
       totalPrice: i.totalPrice ?? 0,
       gstRate: i.gstRate,
+      categoryId: (i as { categoryId?: string | null }).categoryId,
     }));
     const { subtotal, gstTotal, grandTotal } = computeReceiptTotals(lineItems);
     return {
@@ -108,7 +109,7 @@ export function OrderSuccessDialog({
     void (async () => {
       const input = buildPrintInput();
       if (!input) return;
-      const result = await printSelfServiceOrderSlips(printerSettings, input);
+      const result = await printSelfServiceOrderSlips(printerSettings, input, undefined, fleetContext);
       setMainBillPrinted(result.billingOk);
       setKitchenPrinted(result.kitchenHandoffOk);
       if (result.ok) {
@@ -169,10 +170,15 @@ export function OrderSuccessDialog({
     if (selfService) {
       const input = buildPrintInput();
       if (!input) return;
-      const result = await printSelfServiceOrderSlips(printerSettings, input, {
-        printMainBill: true,
-        printKitchenHandoff: printerSettings.billingPrinter.selfServiceBillWithHandoff,
-      });
+      const result = await printSelfServiceOrderSlips(
+        printerSettings,
+        input,
+        {
+          printMainBill: true,
+          printKitchenHandoff: printerSettings.billingPrinter.selfServiceBillWithHandoff,
+        },
+        fleetContext
+      );
       setMainBillPrinted(result.billingOk);
       setKitchenPrinted(result.kitchenHandoffOk);
       if (result.ok) {
@@ -184,14 +190,18 @@ export function OrderSuccessDialog({
       return;
     }
 
-    const result = await printKitchenOrderSlip(printerSettings, {
-      outletId: orderData.outletId,
-      orderNumber: orderData.orderNumber,
-      orderType: orderData.orderType,
-      tableNumber: orderData.tableNumber,
-      items: orderData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
-      createdAt: orderData.createdAt,
-    });
+    const result = await printKitchenOrderSlip(
+      printerSettings,
+      {
+        outletId: orderData.outletId,
+        orderNumber: orderData.orderNumber,
+        orderType: orderData.orderType,
+        tableNumber: orderData.tableNumber,
+        items: orderData.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+        createdAt: orderData.createdAt,
+      },
+      fleetContext
+    );
     if (result.ok) {
       toast.success("Kitchen slip sent to printer");
     } else {
