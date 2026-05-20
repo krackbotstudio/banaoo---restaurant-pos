@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
 import { getPrintLayoutFromConfig } from "@/lib/paper-width";
-import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
+import { isNativePrinterBridgeExpected, isNativePrintCapable, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
 import { printKitchenCancelSlip } from "@/lib/print-kitchen";
 
 interface Order {
@@ -469,7 +469,7 @@ export default function Orders() {
     const restaurantName = restaurantDisplayName(profile);
     const outletName = currentOutlet?.name || "";
 
-    const postedToNative = postNativeBillingPrint({
+    const postedToNative = await postNativeBillingPrint({
       outletId: currentOutlet?.id,
       orderNumber: selectedOrder.order_number,
       restaurantName: restaurantName || undefined,
@@ -492,8 +492,13 @@ export default function Orders() {
       grandTotal,
       createdAt: new Date(selectedOrder.created_at).toISOString(),
     });
-    if (postedToNative) {
-      toast.success("Bill sent to native printer bridge");
+    if (isNativePrintCapable()) {
+      if (postedToNative.ok) {
+        toast.success("Bill printed");
+      } else {
+        toast.error(postedToNative.message ?? "Billing print failed");
+        openNativePrinterSettings();
+      }
       return;
     }
     if (isNativePrinterBridgeExpected()) {

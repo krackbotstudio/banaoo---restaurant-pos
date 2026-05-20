@@ -5,6 +5,7 @@ import {
 } from "@/lib/serial-printer";
 import {
   isNativePrinterBridgeExpected,
+  isNativePrintCapable,
   openNativePrinterSettings,
   postNativeBillingPrint,
   type NativeBillingPrintPayload,
@@ -20,8 +21,10 @@ export async function printBillingReceiptWeb(
   nativePayload: NativeBillingPrintPayload,
   slipData: BillingReceiptData
 ): Promise<BillingPrintResult> {
-  const posted = postNativeBillingPrint(nativePayload);
-  if (posted) return { ok: true };
+  const posted = await postNativeBillingPrint(nativePayload);
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Billing print failed" };
+  }
 
   if (isNativePrinterBridgeExpected()) {
     return { ok: false, message: "Native printer bridge unavailable" };

@@ -24,10 +24,14 @@ import {
   printKitchenCancelSlip,
   printKitchenHandoffReceipt,
   printKitchenSlip,
+  testBillingPrint,
+  testKitchenPrint,
+  type PrintResult,
 } from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
 import {
   buildBluetoothScanInjectScript,
+  buildPrintResultInjectScript,
   handleWebSyncPrinter,
   handleWebSyncSelfServiceSettings,
   scanBluetoothForWeb,
@@ -39,7 +43,7 @@ interface PwaShellScreenProps {
   onOpenPrinters: () => void;
 }
 
-type BridgeRole = "kitchen" | "billing" | "customer_token" | "kitchen_handoff";
+type BridgeRole = "kitchen" | "billing" | "customer_token" | "kitchen_handoff" | "test_print";
 type KitchenItem = { name: string; quantity: number };
 type BillingItem = { name: string; quantity: number; totalPrice: number; gstRate?: number };
 
@@ -51,6 +55,7 @@ interface BridgeMessage {
     | "banaoo-native-sync-self-service"
     | "banaoo-native-scan-bluetooth";
   role?: BridgeRole;
+  requestId?: string;
   payload?: Record<string, unknown>;
   mode?: "ble" | "classic";
 }
@@ -105,10 +110,15 @@ function isValidMessage(data: unknown): data is BridgeMessage {
     (candidate.role === "kitchen" ||
       candidate.role === "billing" ||
       candidate.role === "customer_token" ||
-      candidate.role === "kitchen_handoff") &&
+      candidate.role === "kitchen_handoff" ||
+      candidate.role === "test_print") &&
     !!candidate.payload &&
     typeof candidate.payload === "object"
   );
+}
+
+function toPrintResult(result: PrintResult): { ok: boolean; message: string } {
+  return { ok: result.ok, message: result.message };
 }
 
 function asKitchenItems(input: unknown): KitchenItem[] {
@@ -349,8 +359,32 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     }
 
     const payload = parsed.payload as Record<string, unknown>;
+    const requestId = typeof parsed.requestId === "string" ? parsed.requestId : undefined;
     const outletId = typeof payload.outletId === "string" ? payload.outletId : undefined;
+
+    const reportPrintResult = (result: { ok: boolean; message: string }) => {
+      if (!requestId) return;
+      webViewRef.current?.injectJavaScript(
+        buildPrintResultInjectScript({ requestId, ok: result.ok, message: result.message })
+      );
+    };
+
     let settings = await loadEffectivePrinterSettings(outletId);
+
+    if (parsed.role === "test_print") {
+      const testRole = payload.role === "billing" ? "billing" : "kitchen";
+      try {
+        const result =
+          testRole === "billing" ? await testBillingPrint(settings) : await testKitchenPrint(settings);
+        reportPrintResult(toPrintResult(result));
+      } catch (err) {
+        reportPrintResult({
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
 
     if (parsed.role === "kitchen") {
       settings = applyRuntimePaperFromPayload(settings, "kitchen", payload);
@@ -358,7 +392,10 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asKitchenItems(payload.items);
-      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) return;
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) {
+        reportPrintResult({ ok: false, message: "Invalid kitchen print payload" });
+        return;
+      }
       const slipData = {
         orderNumber,
         orderType: orderTypeRaw,
@@ -369,16 +406,20 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         selfServiceMode: payload.selfServiceMode === true,
       };
       const intent = payload.intent === "cancel" ? "cancel" : "order";
-      if (intent === "cancel") {
-        const cancelledAt =
-          typeof payload.cancelledAt === "string" ? new Date(payload.cancelledAt) : new Date();
-        await printKitchenCancelSlip(
-          settings,
-          slipData,
-          Number.isNaN(cancelledAt.getTime()) ? new Date() : cancelledAt
-        );
-      } else {
-        await printKitchenSlip(settings, slipData);
+      try {
+        const result =
+          intent === "cancel"
+            ? await printKitchenCancelSlip(
+                settings,
+                slipData,
+                typeof payload.cancelledAt === "string"
+                  ? new Date(payload.cancelledAt)
+                  : new Date()
+              )
+            : await printKitchenSlip(settings, slipData);
+        reportPrintResult(toPrintResult(result));
+      } catch (err) {
+        reportPrintResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
       }
       return;
     }
@@ -388,19 +429,30 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asKitchenItems(payload.items);
-      const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
+      const outletName =
+        (typeof payload.outletName === "string" ? payload.outletName.slice(0, 120).trim() : "") ||
+        settings.billingPrinter.name ||
+        "Outlet";
       const total = typeof payload.total === "number" ? payload.total : 0;
-      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) return;
-      await printCustomerTokenSlip(settings, {
-        orderNumber,
-        outletName,
-        orderType: orderTypeRaw,
-        tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
-        items,
-        total,
-        createdAt,
-        source: typeof payload.source === "string" ? payload.source.slice(0, 40) : undefined,
-      });
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) {
+        reportPrintResult({ ok: false, message: "Invalid customer token print payload" });
+        return;
+      }
+      try {
+        const result = await printCustomerTokenSlip(settings, {
+          orderNumber,
+          outletName,
+          orderType: orderTypeRaw,
+          tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+          items,
+          total,
+          createdAt,
+          source: typeof payload.source === "string" ? payload.source.slice(0, 40) : undefined,
+        });
+        reportPrintResult(toPrintResult(result));
+      } catch (err) {
+        reportPrintResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
 
@@ -411,15 +463,21 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asKitchenItems(payload.items);
       if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) {
+        reportPrintResult({ ok: false, message: "Invalid kitchen handoff print payload" });
         return;
       }
-      await printKitchenHandoffReceipt(settings, {
-        orderNumber,
-        orderType: orderTypeRaw,
-        tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
-        items,
-        createdAt,
-      });
+      try {
+        const result = await printKitchenHandoffReceipt(settings, {
+          orderNumber,
+          orderType: orderTypeRaw,
+          tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+          items,
+          createdAt,
+        });
+        reportPrintResult(toPrintResult(result));
+      } catch (err) {
+        reportPrintResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
 
@@ -429,35 +487,44 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       const orderTypeRaw =
         payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
       const items = asBillingItems(payload.items);
-      const outletName = typeof payload.outletName === "string" ? payload.outletName.slice(0, 120) : "";
-      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || !outletName || items.length === 0) {
+      const outletName =
+        (typeof payload.outletName === "string" ? payload.outletName.slice(0, 120).trim() : "") ||
+        settings.billingPrinter.name ||
+        "Outlet";
+      if (!orderNumber || !createdAt || Number.isNaN(createdAt.getTime()) || !orderTypeRaw || items.length === 0) {
+        reportPrintResult({ ok: false, message: "Invalid billing print payload" });
         return;
       }
 
       const selfServiceMainBillOnly = payload.selfServiceMainBillOnly === true;
 
-      await printBillingReceipt(
-        settings,
-        {
-          orderNumber,
-          restaurantName:
-            typeof payload.restaurantName === "string" ? payload.restaurantName.slice(0, 120) : undefined,
-          outletName,
-          gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
-          orderType: orderTypeRaw,
-          tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
-          items,
-          subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
-          discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
-          discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
-          serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
-          serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
-          gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
-          grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
-          createdAt,
-        },
-        { selfServiceMainBillOnly }
-      );
+      try {
+        const result = await printBillingReceipt(
+          settings,
+          {
+            orderNumber,
+            restaurantName:
+              typeof payload.restaurantName === "string" ? payload.restaurantName.slice(0, 120) : undefined,
+            outletName,
+            gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
+            orderType: orderTypeRaw,
+            tableNumber: typeof payload.tableNumber === "string" ? payload.tableNumber.slice(0, 24) : undefined,
+            items,
+            subtotal: typeof payload.subtotal === "number" ? payload.subtotal : 0,
+            discountAmt: typeof payload.discountAmt === "number" ? payload.discountAmt : 0,
+            discountPercent: typeof payload.discountPercent === "number" ? payload.discountPercent : undefined,
+            serviceTax: typeof payload.serviceTax === "number" ? payload.serviceTax : 0,
+            serviceTaxPercent: typeof payload.serviceTaxPercent === "number" ? payload.serviceTaxPercent : 0,
+            gstTotal: typeof payload.gstTotal === "number" ? payload.gstTotal : 0,
+            grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
+            createdAt,
+          },
+          { selfServiceMainBillOnly }
+        );
+        reportPrintResult(toPrintResult(result));
+      } catch (err) {
+        reportPrintResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+      }
     }
   };
 

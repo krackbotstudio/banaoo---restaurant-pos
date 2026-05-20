@@ -10,6 +10,19 @@ declare global {
 
 export const NATIVE_PRINT_BRIDGE_TYPE = "banaoo-native-print";
 export const NATIVE_OPEN_PRINTERS_TYPE = "banaoo-native-open-printers";
+export const NATIVE_PRINT_RESULT_EVENT = "banaoo-native-print-result";
+
+export type NativePrintRole = "kitchen" | "billing" | "customer_token" | "kitchen_handoff" | "test_print";
+
+export interface NativePrintResultDetail {
+  requestId: string;
+  ok: boolean;
+  message?: string;
+}
+
+export type NativePrintWaitResult = { ok: boolean; message?: string };
+
+const NATIVE_PRINT_TIMEOUT_MS = 20_000;
 
 function getReactNativeHost():
   | {
@@ -43,6 +56,38 @@ export function isNativePrintCapable(): boolean {
   if (typeof window === "undefined") return false;
   if (window.__BANAOO_NATIVE_PRINTER_BRIDGE__ || window.__BANAOO_NATIVE_APP__) return true;
   return isReactNativePrintHost();
+}
+
+export function awaitNativePrintResult(
+  requestId: string,
+  timeoutMs = NATIVE_PRINT_TIMEOUT_MS
+): Promise<NativePrintWaitResult> {
+  if (typeof window === "undefined") {
+    return Promise.resolve({ ok: false, message: "Native print unavailable" });
+  }
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve({ ok: false, message: "Native print timed out — check Native Printer Settings" });
+    }, timeoutMs);
+
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<NativePrintResultDetail>;
+      if (custom.detail?.requestId !== requestId) return;
+      cleanup();
+      resolve({
+        ok: custom.detail.ok === true,
+        message: custom.detail.message,
+      });
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(NATIVE_PRINT_RESULT_EVENT, handler);
+    };
+
+    window.addEventListener(NATIVE_PRINT_RESULT_EVENT, handler);
+  });
 }
 
 export const NATIVE_SYNC_SELF_SERVICE_TYPE = "banaoo-native-sync-self-service";
@@ -189,44 +234,66 @@ export interface NativeKitchenHandoffPrintPayload {
   boldTotalLine?: boolean;
 }
 
-function postToNative(
-  role: "kitchen" | "billing" | "customer_token" | "kitchen_handoff",
+export interface NativeTestPrintPayload {
+  outletId?: string | null;
+  role: "kitchen" | "billing";
+  printerId?: string;
+}
+
+async function postToNativeAndWait(
+  role: NativePrintRole,
   payload:
     | NativeKitchenPrintPayload
     | NativeBillingPrintPayload
     | NativeCustomerTokenPrintPayload
     | NativeKitchenHandoffPrintPayload
-): boolean {
+    | NativeTestPrintPayload
+): Promise<NativePrintWaitResult> {
   const host = getReactNativeHost();
-  if (!host) return false;
+  if (!host) {
+    return { ok: false, message: "Native printer bridge unavailable" };
+  }
+  const requestId = crypto.randomUUID();
+  const resultPromise = awaitNativePrintResult(requestId);
   host.postMessage(
     JSON.stringify({
       type: NATIVE_PRINT_BRIDGE_TYPE,
       role,
+      requestId,
       payload,
     })
   );
-  return true;
+  return resultPromise;
 }
 
-export function postNativeKitchenPrint(payload: NativeKitchenPrintPayload): boolean {
-  return postToNative("kitchen", { ...payload, intent: payload.intent ?? "order" });
+export async function postNativeKitchenPrint(payload: NativeKitchenPrintPayload): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("kitchen", { ...payload, intent: payload.intent ?? "order" });
 }
 
-export function postNativeKitchenCancelPrint(payload: NativeKitchenPrintPayload): boolean {
-  return postToNative("kitchen", { ...payload, intent: "cancel" });
+export async function postNativeKitchenCancelPrint(
+  payload: NativeKitchenPrintPayload
+): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("kitchen", { ...payload, intent: "cancel" });
 }
 
-export function postNativeBillingPrint(payload: NativeBillingPrintPayload): boolean {
-  return postToNative("billing", payload);
+export async function postNativeBillingPrint(payload: NativeBillingPrintPayload): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("billing", payload);
 }
 
-export function postNativeKitchenHandoffPrint(payload: NativeKitchenHandoffPrintPayload): boolean {
-  return postToNative("kitchen_handoff", payload);
+export async function postNativeKitchenHandoffPrint(
+  payload: NativeKitchenHandoffPrintPayload
+): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("kitchen_handoff", payload);
 }
 
-export function postNativeCustomerTokenPrint(payload: NativeCustomerTokenPrintPayload): boolean {
-  return postToNative("customer_token", payload);
+export async function postNativeCustomerTokenPrint(
+  payload: NativeCustomerTokenPrintPayload
+): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("customer_token", payload);
+}
+
+export async function postNativeTestPrint(payload: NativeTestPrintPayload): Promise<NativePrintWaitResult> {
+  return postToNativeAndWait("test_print", payload);
 }
 
 export function openNativePrinterSettings(): boolean {

@@ -30,3 +30,5 @@ dist-ssr
 
 .claude
 public/*.mp4
+
+public/downloads/*.apk

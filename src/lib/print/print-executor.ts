@@ -17,11 +17,13 @@ import {
   postNativeKitchenCancelPrint,
   postNativeBillingPrint,
   postNativeKitchenHandoffPrint,
+  postNativeTestPrint,
 } from "@/lib/native-print-bridge";
 import { legacyPaperWidthMm } from "@/lib/paper-width";
 import { printerRecordToConfig } from "./legacy-adapter";
 import type { PrinterRecord, RoutedPrintBatch, PrintJobType } from "./types";
 import { printKitchenBrowser } from "@/lib/print-kitchen";
+import { KITCHEN_PRINTER_TYPES } from "./types";
 
 export type ExecuteResult = { ok: boolean; message?: string };
 
@@ -68,7 +70,7 @@ async function executeKitchenBatch(batch: RoutedPrintBatch): Promise<ExecuteResu
 
   if (isNativePrintCapable()) {
     const fn = isCancel ? postNativeKitchenCancelPrint : postNativeKitchenPrint;
-    const posted = fn({
+    const posted = await fn({
       outletId: batch.meta.outletId,
       printerId: printer.id,
       paperWidth: legacyPaperWidthMm(config.paperWidthMm),
@@ -83,8 +85,7 @@ async function executeKitchenBatch(batch: RoutedPrintBatch): Promise<ExecuteResu
       selfServiceMode: batch.meta.selfServiceMode,
       intent: isCancel ? "cancel" : "order",
     });
-    if (posted) return { ok: true };
-    return { ok: false, message: "Native printer bridge unavailable" };
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Native kitchen print failed" };
   }
 
   if (config.transport === "network") {
@@ -131,18 +132,17 @@ async function executeHandoffBatch(batch: RoutedPrintBatch): Promise<ExecuteResu
   const config = printerRecordToConfig(batch.printer);
   const slip = kitchenSlipFromBatch(batch);
 
-    if (isNativePrintCapable()) {
-      const posted = postNativeKitchenHandoffPrint({
-        outletId: batch.meta.outletId,
-        printerId: batch.printer.id,
-        orderNumber: batch.meta.orderNumber,
+  if (isNativePrintCapable()) {
+    const posted = await postNativeKitchenHandoffPrint({
+      outletId: batch.meta.outletId,
+      printerId: batch.printer.id,
+      orderNumber: batch.meta.orderNumber,
       orderType: batch.meta.orderType,
       tableNumber: batch.meta.tableNumber,
       items: slip.items,
       createdAt: batch.meta.createdAt.toISOString(),
     });
-    if (posted) return { ok: true };
-    return { ok: false, message: "Native printer bridge unavailable" };
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Native handoff print failed" };
   }
 
   if (config.usbPortIndex === null) {
@@ -172,7 +172,7 @@ export async function executePrintBatch(
   if (jobType === "bill" && billingData) {
     const config = printerRecordToConfig(batch.printer);
     if (isNativePrintCapable()) {
-      const posted = postNativeBillingPrint({
+      const posted = await postNativeBillingPrint({
         outletId: batch.meta.outletId,
         printerId: batch.printer.id,
         orderNumber: billingData.orderNumber,
@@ -191,8 +191,7 @@ export async function executePrintBatch(
         grandTotal: billingData.grandTotal,
         createdAt: billingData.createdAt.toISOString(),
       });
-      if (posted) return { ok: true };
-      return { ok: false, message: "Native printer bridge unavailable" };
+      return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Native billing print failed" };
     }
     if (config.usbPortIndex !== null) {
       try {
@@ -212,8 +211,20 @@ export async function executePrintBatch(
 export async function executeTestPrint(printer: PrinterRecord): Promise<ExecuteResult> {
   const config = printerRecordToConfig(printer);
   const { layout, fontSize } = getPrintLayoutFromConfig(config);
+
+  if (isNativePrintCapable()) {
+    const isKitchen = KITCHEN_PRINTER_TYPES.includes(printer.printer_type);
+    const role = isKitchen ? "kitchen" : "billing";
+    const result = await postNativeTestPrint({
+      outletId: printer.outlet_id,
+      role,
+      printerId: printer.id,
+    });
+    return result.ok ? { ok: true } : { ok: false, message: result.message ?? "Native test print failed" };
+  }
+
   if (config.transport === "network") {
-    return { ok: false, message: "Test LAN print: use the mobile app" };
+    return { ok: false, message: "Test LAN print: use the Banaoo Android app" };
   }
   if (config.usbPortIndex === null) {
     return { ok: false, message: "Assign a USB/serial port first" };
