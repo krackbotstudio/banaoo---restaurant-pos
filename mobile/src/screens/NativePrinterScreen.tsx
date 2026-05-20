@@ -682,7 +682,7 @@ export function NativePrinterScreen() {
         </View>
         <View style={styles.rowBetween}>
           <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.label}>Kitchen slip after bill cut</Text>
+            <Text style={styles.label}>Kitchen slip after customer copy (separate slip)</Text>
             <Text style={styles.metaText}>Second print job after customer bill is cut (auto-cutter).</Text>
           </View>
           <Switch

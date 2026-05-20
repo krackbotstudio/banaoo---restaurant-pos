@@ -3,7 +3,7 @@
     "name": "Banaoo",
     "slug": "banaoo-pos-mobile",
     "scheme": "banaoo",
-    "version": "0.0.11",
+    "version": "0.0.15",
     "description": "Restaurant POS and management for Indian restaurants — orders, kitchen, billing, staff, and Bluetooth receipt printing.",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.banaoo",
-      "versionCode": 13,
+      "versionCode": 17,
       "permissions": [
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",

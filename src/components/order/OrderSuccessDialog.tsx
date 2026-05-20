@@ -21,6 +21,8 @@ import {
 } from "@/lib/print-self-service";
 import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { useOutlet } from "@/lib/outlet-context";
+import { useAuth } from "@/lib/auth";
+import { restaurantDisplayName } from "@/lib/restaurant-display-name";
 import { computeReceiptTotals } from "@/lib/order-receipt-totals";
 
 interface OrderItem {
@@ -62,6 +64,7 @@ export function OrderSuccessDialog({
   outletName,
 }: OrderSuccessDialogProps) {
   const { currentOutlet } = useOutlet();
+  const { profile } = useAuth();
   const { legacySettings: printerSettings, fleetContext } = usePrintFleet(orderData?.outletId ?? outletId);
   const [mainBillPrinted, setMainBillPrinted] = useState(false);
   const [kitchenPrinted, setKitchenPrinted] = useState(false);
@@ -82,6 +85,7 @@ export function OrderSuccessDialog({
     return {
       outletId: orderData.outletId ?? outletId,
       outletName: orderData.outletName || outletName || "",
+      restaurantName: restaurantDisplayName(profile) || undefined,
       gstNumber: (currentOutlet as { gst_number?: string | null })?.gst_number,
       orderNumber: orderData.orderNumber,
       orderType: orderData.orderType,
@@ -93,7 +97,7 @@ export function OrderSuccessDialog({
       grandTotal,
       source: "pos",
     };
-  }, [orderData, outletId, outletName, currentOutlet]);
+  }, [orderData, outletId, outletName, currentOutlet, profile]);
 
   useEffect(() => {
     if (!open) {

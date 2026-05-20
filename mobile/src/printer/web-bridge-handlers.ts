@@ -29,6 +29,28 @@ function applyRolePatch(
   };
 }
 
+export async function handleWebSyncSelfServiceSettings(payload: {
+  outletId: string;
+  selfServicePrintOnOrder?: boolean;
+  selfServiceBillWithHandoff?: boolean;
+  selfServiceKitchenStationCopy?: boolean;
+}): Promise<void> {
+  const key = printerStorageKey(payload.outletId);
+  const settings = await loadPrinterSettingsByKey(key);
+  const patch: Partial<RolePrinterConfig> = {};
+  if (typeof payload.selfServicePrintOnOrder === "boolean") {
+    patch.selfServicePrintOnOrder = payload.selfServicePrintOnOrder;
+  }
+  if (typeof payload.selfServiceBillWithHandoff === "boolean") {
+    patch.selfServiceBillWithHandoff = payload.selfServiceBillWithHandoff;
+  }
+  if (typeof payload.selfServiceKitchenStationCopy === "boolean") {
+    patch.selfServiceKitchenStationCopy = payload.selfServiceKitchenStationCopy;
+  }
+  const next = applyRolePatch(settings, "billing", patch);
+  await storage.setItem(key, { ...next, updatedAt: new Date().toISOString() });
+}
+
 export async function handleWebSyncPrinter(payload: WebSyncPrinterPayload): Promise<void> {
   const key = printerStorageKey(payload.outletId);
   const settings = await loadPrinterSettingsByKey(key);

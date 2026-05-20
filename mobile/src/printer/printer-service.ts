@@ -72,6 +72,9 @@ export interface PrintResult {
   message: string;
 }
 
+/** Wait for auto-cutter between self-service customer copy and kitchen handoff. */
+export const SELF_SERVICE_CUT_DELAY_MS = 1800;
+
 export function getPrintCapability(): PrintCapability {
   if (Platform.OS === "android") {
     return {

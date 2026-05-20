@@ -131,14 +131,11 @@ async function executeHandoffBatch(batch: RoutedPrintBatch): Promise<ExecuteResu
   const config = printerRecordToConfig(batch.printer);
   const slip = kitchenSlipFromBatch(batch);
 
-  if (isNativePrintCapable()) {
-    const posted = postNativeKitchenHandoffPrint({
-      outletId: batch.meta.outletId,
-      printerId: batch.printer.id,
-      paperWidth: legacyPaperWidthMm(config.paperWidthMm),
-      paperWidthMm: config.paperWidthMm,
-      paperColumns: config.paperColumns,
-      orderNumber: batch.meta.orderNumber,
+    if (isNativePrintCapable()) {
+      const posted = postNativeKitchenHandoffPrint({
+        outletId: batch.meta.outletId,
+        printerId: batch.printer.id,
+        orderNumber: batch.meta.orderNumber,
       orderType: batch.meta.orderType,
       tableNumber: batch.meta.tableNumber,
       items: slip.items,
@@ -178,10 +175,8 @@ export async function executePrintBatch(
       const posted = postNativeBillingPrint({
         outletId: batch.meta.outletId,
         printerId: batch.printer.id,
-        paperWidth: legacyPaperWidthMm(config.paperWidthMm),
-        paperWidthMm: config.paperWidthMm,
-        paperColumns: config.paperColumns,
         orderNumber: billingData.orderNumber,
+        restaurantName: billingData.restaurantName,
         outletName: billingData.outletName,
         gstNumber: billingData.gstNumber,
         orderType: billingData.orderType,
@@ -195,9 +190,6 @@ export async function executePrintBatch(
         gstTotal: billingData.gstTotal,
         grandTotal: billingData.grandTotal,
         createdAt: billingData.createdAt.toISOString(),
-        columnOffset: config.columnOffset,
-        amountColumnWidth: config.amountColumnWidth,
-        boldTotalLine: config.boldTotalLine,
       });
       if (posted) return { ok: true };
       return { ok: false, message: "Native printer bridge unavailable" };

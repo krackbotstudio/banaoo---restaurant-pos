@@ -29,6 +29,7 @@ import { loadEffectivePrinterSettings } from "../printer/printer-storage";
 import {
   buildBluetoothScanInjectScript,
   handleWebSyncPrinter,
+  handleWebSyncSelfServiceSettings,
   scanBluetoothForWeb,
   type WebSyncPrinterPayload,
 } from "../printer/web-bridge-handlers";
@@ -47,6 +48,7 @@ interface BridgeMessage {
     | "banaoo-native-print"
     | "banaoo-native-open-printers"
     | "banaoo-native-sync-printer"
+    | "banaoo-native-sync-self-service"
     | "banaoo-native-scan-bluetooth";
   role?: BridgeRole;
   payload?: Record<string, unknown>;
@@ -94,6 +96,7 @@ function isValidMessage(data: unknown): data is BridgeMessage {
   const candidate = data as Partial<BridgeMessage>;
   if (candidate.type === "banaoo-native-open-printers") return true;
   if (candidate.type === "banaoo-native-sync-printer") return !!candidate.payload;
+  if (candidate.type === "banaoo-native-sync-self-service") return !!candidate.payload;
   if (candidate.type === "banaoo-native-scan-bluetooth") {
     return candidate.mode === "ble" || candidate.mode === "classic";
   }
@@ -315,6 +318,24 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       return;
     }
 
+    if (parsed.type === "banaoo-native-sync-self-service") {
+      const p = parsed.payload as Record<string, unknown>;
+      if (typeof p.outletId === "string") {
+        await handleWebSyncSelfServiceSettings({
+          outletId: p.outletId,
+          selfServicePrintOnOrder:
+            typeof p.selfServicePrintOnOrder === "boolean" ? p.selfServicePrintOnOrder : undefined,
+          selfServiceBillWithHandoff:
+            typeof p.selfServiceBillWithHandoff === "boolean" ? p.selfServiceBillWithHandoff : undefined,
+          selfServiceKitchenStationCopy:
+            typeof p.selfServiceKitchenStationCopy === "boolean"
+              ? p.selfServiceKitchenStationCopy
+              : undefined,
+        });
+      }
+      return;
+    }
+
     if (parsed.type === "banaoo-native-scan-bluetooth") {
       const mode = parsed.mode ?? "classic";
       try {
@@ -363,7 +384,6 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     }
 
     if (parsed.role === "customer_token") {
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
@@ -385,7 +405,6 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     }
 
     if (parsed.role === "kitchen_handoff") {
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw =
@@ -415,11 +434,14 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         return;
       }
 
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+      const selfServiceMainBillOnly = payload.selfServiceMainBillOnly === true;
+
       await printBillingReceipt(
         settings,
         {
           orderNumber,
+          restaurantName:
+            typeof payload.restaurantName === "string" ? payload.restaurantName.slice(0, 120) : undefined,
           outletName,
           gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
           orderType: orderTypeRaw,
@@ -434,7 +456,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
           grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
           createdAt,
         },
-        { selfServiceMainBillOnly: payload.selfServiceMainBillOnly === true }
+        { selfServiceMainBillOnly }
       );
     }
   };

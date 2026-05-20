@@ -6,6 +6,8 @@ import {
   colsLine,
   formatItemLine,
   formatMoney,
+  formatReceiptDateTime,
+  formatReceiptTime,
   receiptLayoutFromFields,
   truncateCenter,
   type ReceiptLayoutConfig,
@@ -88,6 +90,27 @@ function lineWidth(layout: ReceiptLayoutConfig): number {
   return layout.columns;
 }
 
+function printOrderHighlight(d: EscPosDoc, orderNumber: string) {
+  d.align("C").bold(true).size(true, true).line(`ORDER #${orderNumber}`).size(false, false).bold(false);
+  d.align("L");
+}
+
+function printBillingHeader(
+  d: EscPosDoc,
+  data: { restaurantName?: string; outletName: string; gstNumber?: string | null },
+  w: number
+) {
+  const restaurant = data.restaurantName?.trim() || data.outletName.trim();
+  const outlet = data.outletName.trim();
+  if (restaurant) {
+    d.align("C").bold(true).line(truncateCenter(restaurant, w)).bold(false);
+  }
+  if (data.restaurantName?.trim() && outlet && outlet !== restaurant) {
+    d.align("C").line(truncateCenter(outlet, w));
+  }
+  if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
+}
+
 function clampPostPrintFeed(n: number | undefined, fallback = 4): number {
   if (n == null || !Number.isFinite(n)) return fallback;
   return Math.min(24, Math.max(1, Math.round(n)));
@@ -118,9 +141,7 @@ function writeKitchenSlipBody(
   rl: ReceiptLayoutConfig
 ) {
   const w = lineWidth(rl);
-  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  });
+  const timeStr = formatReceiptTime(data.createdAt);
   const typeLabel = data.orderType === "dine_in"
     ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In")
     : "TAKEAWAY";
@@ -134,7 +155,7 @@ function writeKitchenSlipBody(
   const header = data.selfServiceMode ? "KITCHEN BILL" : "KITCHEN";
   d.align("C").bold(true).line(header).bold(false);
   d.align("L").dashes(w);
-  d.line(colsLine("Order #", data.orderNumber, rl));
+  printOrderHighlight(d, data.orderNumber);
   d.line(colsLine("Time", timeStr, rl));
   d.bold(true).line(colsLine(data.orderType === "dine_in" ? "Table" : "Type", typeLabel, rl)).bold(false);
   d.dashes(w);
@@ -160,9 +181,7 @@ export function writeKitchenHandoffBody(
   rl: ReceiptLayoutConfig
 ) {
   const w = lineWidth(rl);
-  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  });
+  const timeStr = formatReceiptTime(data.createdAt);
   const typeLabel =
     data.orderType === "dine_in"
       ? data.tableNumber
@@ -173,7 +192,7 @@ export function writeKitchenHandoffBody(
   d.align("C").bold(true).line("TAKE TO KITCHEN").bold(false);
   d.align("C").line("Give this slip to prepare your order");
   d.dashes(w);
-  d.line(colsLine("Order #", data.orderNumber, rl));
+  printOrderHighlight(d, data.orderNumber);
   d.line(colsLine("Time", timeStr, rl));
   d.line(colsLine("Type", typeLabel, rl));
   d.dashes(w);
@@ -284,20 +303,18 @@ export function buildCustomerTokenSlip(
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
-  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  });
+  const timeStr = formatReceiptTime(data.createdAt);
 
   const sourceBanner = formatSourceBanner(data.source);
   if (sourceBanner) {
     d.align("C").bold(true).line(`*** ${sourceBanner} ***`).bold(false);
   }
 
-  d.align("C").bold(true).line("CUSTOMER TOKEN").bold(false);
+  d.align("C").bold(true).size(true, true).line("CUSTOMER TOKEN").size(false, false).bold(false);
   if (data.outletName) d.align("C").line(truncateCenter(data.outletName, w));
   d.align("C").line("Please wait for your order");
   d.dashes(w);
-  d.line(colsLine("Order #", data.orderNumber, rl));
+  printOrderHighlight(d, data.orderNumber);
   d.line(colsLine("Time", timeStr, rl));
   const typeLabel =
     data.orderType === "dine_in"
@@ -340,35 +357,29 @@ export function buildKitchenCancelSlip(
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = layout.columns;
+  const rl = receiptLayout(layout, options);
+  const w = lineWidth(rl);
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
-  const placedTime = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  });
-  const cancelTime = (data.cancelledAt ?? new Date()).toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  });
+  const placedTime = formatReceiptTime(data.createdAt);
+  const cancelTime = formatReceiptTime(data.cancelledAt ?? new Date());
   const typeLabel = data.orderType === "dine_in"
-    ? (data.tableNumber ? `Table T${data.tableNumber}` : "Dine In")
+    ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In")
     : "TAKEAWAY";
 
   d.align("C").bold(true).size(true, true).line("CANCELLED").size(false, false).bold(false);
   d.align("C").bold(true).line("DO NOT PREPARE").bold(false);
   d.dashes(w);
-  d.cols("Order #", data.orderNumber, w);
-  d.cols("Was", typeLabel, w);
-  d.cols("Placed", placedTime, w);
-  d.cols("Cancelled", cancelTime, w);
+  printOrderHighlight(d, data.orderNumber);
+  d.line(colsLine("Was", typeLabel, rl));
+  d.line(colsLine("Placed", placedTime, rl));
+  d.line(colsLine("Cancelled", cancelTime, rl));
   d.dashes(w);
   d.bold(true).line("CANCELLED ITEMS:").bold(false);
 
   for (const item of data.items) {
-    const qty = `x${item.quantity}`;
-    const maxName = w - qty.length - 4;
-    const name = item.name.length > maxName ? item.name.slice(0, maxName - 1) + "." : item.name;
-    d.line(`X ${name}${" ".repeat(Math.max(1, w - name.length - qty.length - 2))}${qty}`);
+    d.line(formatItemLine(`X ${item.name}`, item.quantity, null, rl));
   }
 
   d.dashes(w);
@@ -381,6 +392,7 @@ export function buildKitchenCancelSlip(
 // ── Billing receipt ───────────────────────────────────────────────────────────
 export interface BillingReceiptData {
   orderNumber: string;
+  restaurantName?: string;
   outletName: string;
   gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
@@ -404,16 +416,11 @@ function writeBillingReceiptBody(
 ) {
   const w = lineWidth(rl);
   const fmt = formatMoney;
-  const dateStr = new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit", month: "2-digit", year: "2-digit",
-    hour: "2-digit", minute: "2-digit", hour12: true,
-  }).format(data.createdAt);
+  const dateStr = formatReceiptDateTime(data.createdAt);
 
-  d.align("C").bold(true).line(truncateCenter(data.outletName, w)).bold(false);
-  if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
-
+  printBillingHeader(d, data, w);
   d.align("L").dashes(w);
-  d.line(colsLine("Order #", data.orderNumber, rl));
+  printOrderHighlight(d, data.orderNumber);
   d.line(colsLine("Date", dateStr, rl));
   d.bold(true).line(colsLine("Type", data.orderType === "dine_in" ? "DINE IN" : "TAKEAWAY", rl)).bold(false);
   if (data.orderType === "dine_in" && data.tableNumber) {
@@ -475,8 +482,9 @@ export function buildSelfServiceMainBill(
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
 
-  d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
+  d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
   writeBillingReceiptBody(d, data, rl, options);
+  d.line("");
   d.feed(feed).cut();
   return d.bytes();
 }
@@ -497,7 +505,10 @@ export function buildKitchenHandoffSlip(
   return d.bytes();
 }
 
-/** @deprecated Use buildSelfServiceMainBill + buildKitchenHandoffSlip as two jobs. */
+/**
+ * @deprecated Combined bill+kitchen on one slip — do not use.
+ * Use buildSelfServiceMainBill + buildKitchenHandoffSlip as two separate print jobs.
+ */
 export function buildSelfServiceBillingReceipt(
   data: BillingReceiptData,
   layout: PrintLayout,

@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isToday, subDays, formatISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
+import { restaurantDisplayName } from "@/lib/restaurant-display-name";
+import { useAuth } from "@/lib/auth";
 import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { escPosOptionsFromPrinterConfig, usePrinterSettings } from "@/lib/use-printer-settings";
 import { AppLayout } from "@/components/AppLayout";
@@ -17,7 +19,7 @@ import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
-import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
+import { getPrintLayoutFromConfig } from "@/lib/paper-width";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
 import { printKitchenCancelSlip } from "@/lib/print-kitchen";
 
@@ -110,6 +112,7 @@ const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
 
 export default function Orders() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
+  const { profile } = useAuth();
   const { legacySettings: printerSettings, fleetContext } = usePrintFleet(currentOutlet?.id);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -463,13 +466,14 @@ export default function Orders() {
     const grandTotal = Math.round(Math.max(0, taxable + gstTotal + serviceTax) * 100) / 100;
     const discountPercent = discountType === "percent" ? discount : undefined;
 
+    const restaurantName = restaurantDisplayName(profile);
+    const outletName = currentOutlet?.name || "";
+
     const postedToNative = postNativeBillingPrint({
       outletId: currentOutlet?.id,
-      paperWidth: legacyPaperWidthMm(pwMm),
-      paperWidthMm: pwMm,
-      paperColumns: layout.columns,
       orderNumber: selectedOrder.order_number,
-      outletName: currentOutlet?.name || "",
+      restaurantName: restaurantName || undefined,
+      outletName,
       gstNumber: (currentOutlet as any)?.gst_number,
       orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
       tableNumber: selectedOrder.table_number || undefined,
@@ -510,7 +514,8 @@ export default function Orders() {
         const bytes = buildBillingReceipt(
           {
             orderNumber: selectedOrder.order_number,
-            outletName: currentOutlet?.name || "",
+            restaurantName: restaurantName || undefined,
+            outletName,
             gstNumber: (currentOutlet as any)?.gst_number,
             orderType: selectedOrder.order_type === "dine_in" ? "dine_in" : "takeaway",
             tableNumber: selectedOrder.table_number || undefined,
@@ -565,6 +570,7 @@ export default function Orders() {
     }).join("");
 
     const gstNumber = (currentOutlet as any)?.gst_number;
+    const printRestaurant = restaurantName || outletName;
     const printWindow = window.open("", "_blank", "width=220,height=650");
     if (!printWindow) {
       toast.error("Allow popups to use browser print mode");
@@ -591,11 +597,12 @@ export default function Orders() {
   </style>
 </head>
 <body>
-  <div class="center bold" style="font-size:${pt + 2}pt;margin-bottom:1mm">${currentOutlet?.name || ""}</div>
+  <div class="center bold" style="font-size:${pt + 2}pt;margin-bottom:1mm">${printRestaurant}</div>
+  ${restaurantName && outletName && outletName !== restaurantName ? `<div class="center" style="font-size:${pt}pt;margin-bottom:1mm">${outletName}</div>` : ""}
   ${gstNumber ? `<div class="center" style="font-size:${pt - 2}pt;margin-bottom:2mm">GSTIN: ${gstNumber}</div>` : ""}
   <div class="dash"></div>
+  <div class="center bold" style="font-size:${pt + 4}pt;margin:2mm 0">ORDER #${selectedOrder.order_number}</div>
   <table style="font-size:${pt - 1}pt">
-    <tr><td>Order #</td><td class="right bold">${selectedOrder.order_number}</td></tr>
     <tr><td>Date</td><td class="right">${dateStr}</td></tr>
     <tr><td>Type</td><td class="right bold">${selectedOrder.order_type === "dine_in" ? "DINE IN" : "TAKEAWAY"}</td></tr>
     ${selectedOrder.order_type === "dine_in" && selectedOrder.table_number

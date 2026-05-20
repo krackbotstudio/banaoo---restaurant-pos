@@ -45,6 +45,22 @@ export function isNativePrintCapable(): boolean {
   return isReactNativePrintHost();
 }
 
+export const NATIVE_SYNC_SELF_SERVICE_TYPE = "banaoo-native-sync-self-service";
+
+export interface NativeSyncSelfServicePayload {
+  outletId: string;
+  selfServicePrintOnOrder?: boolean;
+  selfServiceBillWithHandoff?: boolean;
+  selfServiceKitchenStationCopy?: boolean;
+}
+
+export function postNativeSyncSelfServiceSettings(payload: NativeSyncSelfServicePayload): boolean {
+  const host = getReactNativeHost();
+  if (!host) return false;
+  host.postMessage(JSON.stringify({ type: NATIVE_SYNC_SELF_SERVICE_TYPE, payload }));
+  return true;
+}
+
 export const NATIVE_SYNC_PRINTER_TYPE = "banaoo-native-sync-printer";
 export const NATIVE_SCAN_BLUETOOTH_TYPE = "banaoo-native-scan-bluetooth";
 export const BT_SCAN_RESULT_EVENT = "banaoo-bt-scan-result";
@@ -136,6 +152,7 @@ export interface NativeBillingPrintPayload {
   paperWidthMm?: number;
   paperColumns?: number;
   orderNumber: string;
+  restaurantName?: string;
   outletName: string;
   gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
