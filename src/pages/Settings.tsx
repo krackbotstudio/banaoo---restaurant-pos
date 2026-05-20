@@ -85,7 +85,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
-import { PrinterSettings } from "@/components/settings/PrinterSettings";
+import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -1416,55 +1416,7 @@ export default function Settings() {
 
           {/* Printers Tab */}
           <TabsContent value="printers" className="space-y-6">
-            {isNativePrinterBridgeExpected() ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bluetooth className="h-5 w-5 text-primary" />
-                    Native Printer Settings
-                  </CardTitle>
-                  <CardDescription>
-                    Bluetooth, Wi‑Fi/LAN, and Kitchen vs Billing assignment are configured in the native printer screen.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Open native settings to pair Bluetooth or enter the printer IP (LAN/Wi‑Fi, port 9100).
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Paper width, alignment, self-service receipts (bill + kitchen handoff), and test print are on the native screen. Settings save per outlet.
-                    </p>
-                  </div>
-                  <Button
-                    className="gap-2"
-                    disabled={openingNativePrinters}
-                    onClick={() => {
-                      setOpeningNativePrinters(true);
-                      const opened = openNativePrinterSettings();
-                      if (!opened) {
-                        toast.error(
-                          "Native printer settings are unavailable. Please reopen the app and try again."
-                        );
-                        setOpeningNativePrinters(false);
-                      } else {
-                        toast.success("Opening native printer settings…");
-                        window.setTimeout(() => setOpeningNativePrinters(false), 220);
-                      }
-                    }}
-                  >
-                    {openingNativePrinters ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Bluetooth className="h-4 w-4" />
-                    )}
-                    Open Native Printer Settings
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <PrinterSettings />
-            )}
+            <PrinterFleetSettings />
           </TabsContent>
         </Tabs>
       </div>

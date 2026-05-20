@@ -3,6 +3,8 @@ import {
   colsLine,
   formatItemLine,
   formatMoney,
+  formatReceiptDateTime,
+  formatReceiptTime,
   receiptLayoutFromFields,
   truncateCenter,
   type ReceiptLayoutConfig,
@@ -104,6 +106,27 @@ function lineWidth(rl: ReceiptLayoutConfig): number {
   return rl.columns;
 }
 
+function printOrderHighlight(d: EscPosDoc, orderNumber: string) {
+  d.align("C").bold(true).size(true, true).line(`ORDER #${orderNumber}`).size(false, false).bold(false);
+  d.align("L");
+}
+
+function printBillingHeader(
+  d: EscPosDoc,
+  data: { restaurantName?: string; outletName: string; gstNumber?: string | null },
+  w: number
+) {
+  const restaurant = data.restaurantName?.trim() || data.outletName.trim();
+  const outlet = data.outletName.trim();
+  if (restaurant) {
+    d.align("C").bold(true).line(truncateCenter(restaurant, w)).bold(false);
+  }
+  if (data.restaurantName?.trim() && outlet && outlet !== restaurant) {
+    d.align("C").line(truncateCenter(outlet, w));
+  }
+  if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
+}
+
 function clampPostPrintFeed(n: number | undefined, fallback = 4): number {
   if (n == null || !Number.isFinite(n)) return fallback;
   return Math.min(24, Math.max(1, Math.round(n)));
@@ -128,12 +151,9 @@ function formatSourceBanner(source?: string): string | null {
   return map[source] ?? `${source.replace(/_/g, " ").toUpperCase()} ORDER`;
 }
 
-function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number) {
-  const time = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipPayload, rl: ReceiptLayoutConfig) {
+  const w = lineWidth(rl);
+  const time = formatReceiptTime(data.createdAt);
 
   const typeLabel =
     data.orderType === "dine_in" ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In") : "TAKEAWAY";
@@ -147,51 +167,43 @@ function writeKitchenSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number)
   const header = data.selfServiceMode ? "KITCHEN BILL" : "KITCHEN";
   d.align("C").bold(true).size(true, true).line(header).size(false, false).bold(false);
   d.align("L").dashes(w);
-  d.cols("Order #", data.orderNumber, w);
-  d.cols("Time", time, w);
-  d.bold(true).cols(data.orderType === "dine_in" ? "Table" : "Type", typeLabel, w).bold(false);
+  printOrderHighlight(d, data.orderNumber);
+  d.line(colsLine("Time", time, rl));
+  d.bold(true).line(colsLine(data.orderType === "dine_in" ? "Table" : "Type", typeLabel, rl)).bold(false);
   d.dashes(w);
-  d.bold(true).line("ITEM" + " ".repeat(w - 7) + "QTY").bold(false);
+  d.bold(true).line(colsLine("ITEM", "QTY", rl)).bold(false);
 
   for (const item of data.items) {
-    const qty = `x${item.quantity}`;
-    const max = w - qty.length - 1;
-    const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
-    d.cols(name, qty, w);
+    d.line(formatItemLine(item.name, item.quantity, null, rl));
   }
 
   d.dashes(w);
 }
 
-function writeKitchenCancelSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: number, cancelledAt: Date) {
-  const placedTime = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-  const cancelTime = cancelledAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+function writeKitchenCancelSlipBody(
+  d: EscPosDoc,
+  data: KitchenSlipPayload,
+  rl: ReceiptLayoutConfig,
+  cancelledAt: Date
+) {
+  const w = lineWidth(rl);
+  const placedTime = formatReceiptTime(data.createdAt);
+  const cancelTime = formatReceiptTime(cancelledAt);
   const typeLabel =
     data.orderType === "dine_in" ? (data.tableNumber ? `T${data.tableNumber}` : "Dine In") : "TAKEAWAY";
 
   d.align("C").bold(true).size(true, true).line("CANCELLED").size(false, false).bold(false);
   d.align("C").bold(true).line("DO NOT PREPARE").bold(false);
   d.dashes(w);
-  d.cols("Order #", data.orderNumber, w);
-  d.cols("Was", typeLabel, w);
-  d.cols("Placed", placedTime, w);
-  d.cols("Cancelled", cancelTime, w);
+  printOrderHighlight(d, data.orderNumber);
+  d.line(colsLine("Was", typeLabel, rl));
+  d.line(colsLine("Placed", placedTime, rl));
+  d.line(colsLine("Cancelled", cancelTime, rl));
   d.dashes(w);
   d.bold(true).line("CANCELLED ITEMS:").bold(false);
 
   for (const item of data.items) {
-    const qty = `x${item.quantity}`;
-    const max = w - qty.length - 4;
-    const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
-    d.line(`X ${name}${" ".repeat(Math.max(1, w - name.length - qty.length - 2))}${qty}`);
+    d.line(formatItemLine(`X ${item.name}`, item.quantity, null, rl));
   }
 
   d.dashes(w);
@@ -201,52 +213,44 @@ function writeKitchenCancelSlipBody(d: EscPosDoc, data: KitchenSlipPayload, w: n
 function writeBillingReceiptBody(
   d: EscPosDoc,
   data: BillingReceiptPayload,
-  w: number,
-  fmt: (n: number) => string,
+  rl: ReceiptLayoutConfig,
   options?: EscPosPrintOptions
 ) {
-  const date = data.createdAt.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const w = lineWidth(rl);
+  const fmt = formatMoney;
+  const dateStr = formatReceiptDateTime(data.createdAt);
 
-  d.align("C").bold(true).line(data.outletName.slice(0, w)).bold(false);
-  if (data.gstNumber) d.align("C").line(`GSTIN: ${data.gstNumber}`);
+  printBillingHeader(d, data, w);
   d.align("L").dashes(w);
-  d.cols("Order #", data.orderNumber, w);
-  d.cols("Date", date, w);
-  d.bold(true).cols("Type", data.orderType === "dine_in" ? "DINE IN" : "TAKEAWAY", w).bold(false);
-  if (data.orderType === "dine_in" && data.tableNumber) d.bold(true).cols("Table", data.tableNumber, w).bold(false);
+  printOrderHighlight(d, data.orderNumber);
+  d.line(colsLine("Date", dateStr, rl));
+  d.bold(true).line(colsLine("Type", data.orderType === "dine_in" ? "DINE IN" : "TAKEAWAY", rl)).bold(false);
+  if (data.orderType === "dine_in" && data.tableNumber) {
+    d.bold(true).line(colsLine("Table", data.tableNumber, rl)).bold(false);
+  }
   d.dashes(w);
-  d.bold(true).line("ITEM" + " ".repeat(w - 11) + "QTY  AMT").bold(false);
+  d.bold(true).line(colsLine("ITEM", "QTY  AMT", rl)).bold(false);
 
   for (const item of data.items) {
-    const amt = fmt(item.totalPrice);
-    const qty = `x${item.quantity}`;
-    const max = w - qty.length - amt.length - 2;
-    const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
-    const pad = Math.max(1, w - name.length - qty.length - amt.length - 1);
-    d.line(name + " " + qty + " ".repeat(pad) + amt);
+    d.line(formatItemLine(item.name, item.quantity, item.totalPrice, rl));
     if (item.gstRate && item.totalPrice > 0) {
       const gstAmt = fmt(item.totalPrice * item.gstRate / 100);
-      d.line(`  +GST @${item.gstRate}%`.padEnd(w - gstAmt.length) + gstAmt);
+      const gstLabel = `  +GST @${item.gstRate}%`;
+      d.line(colsLine(gstLabel, gstAmt, rl));
     }
   }
 
   d.dashes(w);
-  d.cols("Subtotal", fmt(data.subtotal), w);
+  d.line(colsLine("Subtotal", fmt(data.subtotal), rl));
   if (data.discountAmt > 0) {
     const discountLabel = data.discountPercent ? `Discount (${data.discountPercent}%)` : "Discount";
-    d.cols(discountLabel, "-" + fmt(data.discountAmt), w);
+    d.line(colsLine(discountLabel, "-" + fmt(data.discountAmt), rl));
   }
-  if (data.gstTotal > 0) d.cols("GST", fmt(data.gstTotal), w);
-  if (data.serviceTax > 0) d.cols(`Service (${data.serviceTaxPercent}%)`, "+" + fmt(data.serviceTax), w);
+  if (data.gstTotal > 0) d.line(colsLine("GST", fmt(data.gstTotal), rl));
+  if (data.serviceTax > 0) {
+    d.line(colsLine(`Service (${data.serviceTaxPercent}%)`, "+" + fmt(data.serviceTax), rl));
+  }
   d.dashes(w);
-  const rl = receiptLayoutFromFields(w, options);
   const totalLine = colsLine("TOTAL", fmt(data.grandTotal), rl);
   if (options?.boldTotalLine) {
     d.bold(true).line(totalLine).bold(false);
@@ -268,11 +272,7 @@ function writeKitchenHandoffBody(
   rl: ReceiptLayoutConfig
 ) {
   const w = lineWidth(rl);
-  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const timeStr = formatReceiptTime(data.createdAt);
   const typeLabel =
     data.orderType === "dine_in"
       ? data.tableNumber
@@ -283,7 +283,7 @@ function writeKitchenHandoffBody(
   d.align("C").bold(true).line("TAKE TO KITCHEN").bold(false);
   d.align("C").line("Give this slip to prepare your order");
   d.dashes(w);
-  d.line(colsLine("Order #", data.orderNumber, rl));
+  printOrderHighlight(d, data.orderNumber);
   d.line(colsLine("Time", timeStr, rl));
   d.line(colsLine("Type", typeLabel, rl));
   d.dashes(w);
@@ -303,11 +303,11 @@ export function buildSelfServiceMainBill(
 ): Uint8Array {
   const rl = receiptLayoutFromFields(layout.columns, options);
   const d = beginDoc(fontSize);
-  const fmt = (n: number) => formatMoney(n);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
 
-  d.align("C").bold(true).line("*** CUSTOMER BILL ***").bold(false);
-  writeBillingReceiptBody(d, data, layout.columns, fmt, options);
+  d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
+  writeBillingReceiptBody(d, data, rl, options);
+  d.line("");
   d.feed(feed).cut();
   return d.bytes();
 }
@@ -367,6 +367,7 @@ export interface CustomerTokenSlipPayload {
 
 export interface BillingReceiptPayload {
   orderNumber: string;
+  restaurantName?: string;
   outletName: string;
   gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
@@ -418,25 +419,26 @@ export function buildKitchenSlip(
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = layout.columns;
+  const rl = receiptLayoutFromFields(layout.columns, options);
+  const w = lineWidth(rl);
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
   const dual = !data.selfServiceMode && options?.dualKitchenCopies === true;
 
   if (!dual) {
-    writeKitchenSlipBody(d, data, w);
+    writeKitchenSlipBody(d, data, rl);
     d.align("C").line(data.selfServiceMode ? "-- Kitchen Bill --" : "-- Kitchen Copy --");
     if (showCut) appendTearCutLine(d, w);
     d.feed(feed).cut();
     return d.bytes();
   }
 
-  writeKitchenSlipBody(d, data, w);
+  writeKitchenSlipBody(d, data, rl);
   d.align("C").bold(true).line("* KITCHEN COPY *").bold(false);
   if (showCut) appendTearCutLine(d, w);
 
-  writeKitchenSlipBody(d, data, w);
+  writeKitchenSlipBody(d, data, rl);
   const secondLabel = data.orderType === "takeaway" ? "* PARCEL COPY *" : "* TABLE COPY *";
   d.align("C").bold(true).line(secondLabel).bold(false);
   if (showCut) appendTearCutLine(d, w);
@@ -451,13 +453,14 @@ export function buildKitchenCancelSlip(
   options?: EscPosPrintOptions,
   cancelledAt?: Date
 ): Uint8Array {
+  const rl = receiptLayoutFromFields(layout.columns, options);
   const w = layout.columns;
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
   const when = cancelledAt ?? new Date();
 
-  writeKitchenCancelSlipBody(d, data, w, when);
+  writeKitchenCancelSlipBody(d, data, rl, when);
   if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();
@@ -469,16 +472,12 @@ export function buildCustomerTokenSlip(
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = layout.columns;
+  const rl = receiptLayoutFromFields(layout.columns, options);
+  const w = lineWidth(rl);
   const d = beginDoc(fontSize);
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
-  const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
-  const timeStr = data.createdAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const timeStr = formatReceiptTime(data.createdAt);
 
   const sourceBanner = formatSourceBanner(data.source);
   if (sourceBanner) {
@@ -486,29 +485,25 @@ export function buildCustomerTokenSlip(
   }
 
   d.align("C").bold(true).size(true, true).line("CUSTOMER TOKEN").size(false, false).bold(false);
-  if (data.outletName) d.align("C").line(data.outletName.slice(0, w));
+  if (data.outletName) d.align("C").line(truncateCenter(data.outletName, w));
   d.align("C").line("Please wait for your order");
   d.dashes(w);
-  d.cols("Order #", data.orderNumber, w);
-  d.cols("Time", timeStr, w);
+  printOrderHighlight(d, data.orderNumber);
+  d.line(colsLine("Time", timeStr, rl));
   const typeLabel =
     data.orderType === "dine_in"
       ? data.tableNumber
         ? `Table T${data.tableNumber}`
         : "Counter"
       : "Takeaway";
-  d.cols("Type", typeLabel, w);
+  d.line(colsLine("Type", typeLabel, rl));
   d.dashes(w);
-  d.bold(true).line("ITEM" + " ".repeat(w - 7) + "QTY").bold(false);
+  d.bold(true).line(colsLine("ITEM", "QTY", rl)).bold(false);
   for (const item of data.items) {
-    const qty = `x${item.quantity}`;
-    const max = w - qty.length - 1;
-    const name = item.name.length > max ? `${item.name.slice(0, max - 1)}.` : item.name;
-    d.cols(name, qty, w);
+    d.line(formatItemLine(item.name, item.quantity, null, rl));
   }
   d.dashes(w);
-  const rl = receiptLayout(layout, options);
-  const totalLine = colsLine("TOTAL", fmt(data.total), rl);
+  const totalLine = colsLine("TOTAL", formatMoney(data.total), rl);
   d.bold(true).line(totalLine).bold(false);
   d.dashes(w);
   d.align("C").line("Show this token at pickup");
@@ -523,26 +518,26 @@ export function buildBillingReceipt(
   fontSize = 12,
   options?: EscPosPrintOptions
 ): Uint8Array {
-  const w = layout.columns;
+  const rl = receiptLayoutFromFields(layout.columns, options);
+  const w = lineWidth(rl);
   const d = beginDoc(fontSize);
-  const fmt = (n: number) => `Rs.${n.toFixed(2)}`;
   const feed = clampPostPrintFeed(options?.postPrintFeedLines);
   const showCut = options?.showTearCutLine !== false;
   const dual = options?.dualBillingCopies === true;
 
   if (!dual) {
-    writeBillingReceiptBody(d, data, w, fmt, options);
+    writeBillingReceiptBody(d, data, rl, options);
     if (showCut) appendTearCutLine(d, w);
     d.feed(feed).cut();
     return d.bytes();
   }
 
   d.align("C").bold(true).line("*** COUNTER COPY ***").bold(false);
-  writeBillingReceiptBody(d, data, w, fmt, options);
+  writeBillingReceiptBody(d, data, rl, options);
   if (showCut) appendTearCutLine(d, w);
 
   d.align("C").bold(true).line("*** CUSTOMER COPY ***").bold(false);
-  writeBillingReceiptBody(d, data, w, fmt, options);
+  writeBillingReceiptBody(d, data, rl, options);
   if (showCut) appendTearCutLine(d, w);
   d.feed(feed).cut();
   return d.bytes();

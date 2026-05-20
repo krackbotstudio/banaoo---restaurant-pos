@@ -25,7 +25,7 @@ export default function handler(req: any, res: any) {
     display: "standalone",
     background_color: "#ffffff",
     theme_color: color,
-    orientation: "portrait-primary",
+    orientation: "any",
     icons: [
       {
         src: "/logo.png",

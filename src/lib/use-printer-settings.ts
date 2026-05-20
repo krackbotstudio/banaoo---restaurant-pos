@@ -8,6 +8,7 @@ import {
   type PaperWidthPresetId,
 } from "@/lib/paper-width";
 import type { EscPosPrintOptions } from "@/lib/serial-printer";
+import { syncSelfServicePrintToNative } from "@/lib/sync-native-self-service";
 
 export type { PrinterTransport };
 
@@ -195,6 +196,16 @@ export function usePrinterSettings(outletId: string | null | undefined) {
     setSettings(key ? readFromStorage(key) : DEFAULT_SETTINGS);
   }, [key]);
 
+  useEffect(() => {
+    if (!outletId) return;
+    syncSelfServicePrintToNative(outletId, settings.billingPrinter);
+  }, [
+    outletId,
+    settings.billingPrinter.selfServicePrintOnOrder,
+    settings.billingPrinter.selfServiceBillWithHandoff,
+    settings.billingPrinter.selfServiceKitchenStationCopy,
+  ]);
+
   const save = (next: OutletPrinterSettings) => {
     setSettings(next);
     if (key) {
@@ -212,11 +223,16 @@ export function usePrinterSettings(outletId: string | null | undefined) {
       kitchenPrinter: normalizePrinterConfig({ ...settings.kitchenPrinter, ...patch }),
     });
 
-  const updateBilling = (patch: Partial<PrinterConfig>) =>
-    save({
+  const updateBilling = (patch: Partial<PrinterConfig>) => {
+    const next = {
       ...settings,
       billingPrinter: normalizePrinterConfig({ ...settings.billingPrinter, ...patch }),
-    });
+    };
+    save(next);
+    if (outletId) {
+      syncSelfServicePrintToNative(outletId, next.billingPrinter);
+    }
+  };
 
   const resetToDefaults = () => {
     if (key) {

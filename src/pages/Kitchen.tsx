@@ -16,7 +16,7 @@ import {
 import { PlatformBadge } from "@/components/integrations";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
 import { isSelfServiceMode, isOnlineOrderSource } from "@/lib/outlet-operation";
-import { usePrinterSettings } from "@/lib/use-printer-settings";
+import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
 
 type ItemStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
@@ -59,7 +59,7 @@ interface KitchenOrder {
 
 export default function Kitchen() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
-  const { settings: printerSettings } = usePrinterSettings(currentOutlet?.id);
+  const { legacySettings: printerSettings, fleetContext } = usePrintFleet(currentOutlet?.id);
   const selfService = isSelfServiceMode(currentOutlet?.operation_mode);
   const { toast } = useToast();
   const { playSound, unlockAudio } = useKitchenOrderSound();
@@ -219,19 +219,23 @@ export default function Kitchen() {
                 .eq("order_id", row.id);
               const activeItems = (items || []).filter((i) => i.status !== "cancelled");
               if (activeItems.length > 0) {
-                void printKitchenOrderSlip(printerSettings, {
-                  outletId: currentOutlet?.id,
-                  orderNumber: row.order_number,
-                  orderType: row.order_type === "dine_in" ? "dine_in" : "takeaway",
-                  tableNumber: row.table_number || undefined,
-                  items: activeItems.map((i) => ({
-                    name: i.item_name,
-                    quantity: i.quantity,
-                  })),
-                  createdAt: new Date(row.created_at),
-                  source: row.source,
-                  selfServiceMode: true,
-                });
+                void printKitchenOrderSlip(
+                  printerSettings,
+                  {
+                    outletId: currentOutlet?.id,
+                    orderNumber: row.order_number,
+                    orderType: row.order_type === "dine_in" ? "dine_in" : "takeaway",
+                    tableNumber: row.table_number || undefined,
+                    items: activeItems.map((i) => ({
+                      name: i.item_name,
+                      quantity: i.quantity,
+                    })),
+                    createdAt: new Date(row.created_at),
+                    source: row.source,
+                    selfServiceMode: true,
+                  },
+                  fleetContext
+                );
               }
             }
           }

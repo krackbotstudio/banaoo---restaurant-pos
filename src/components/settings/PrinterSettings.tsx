@@ -941,7 +941,7 @@ function PrinterCard({
                 <div className="space-y-0.5">
                   <Label className="text-sm">Kitchen slip after bill (auto-cut)</Label>
                   <p className="text-xs text-muted-foreground">
-                    Prints kitchen copy on a second slip after the customer bill is cut (700ms pause).
+                    Prints kitchen slip on a separate slip after the customer copy is cut (~1.8s pause).
                   </p>
                 </div>
                 <Switch

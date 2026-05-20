@@ -92,3 +92,20 @@ export function truncateCenter(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen - 1) + ".";
 }
+
+/** ASCII-only time for thermal printers (avoids U+202F etc. from toLocaleTimeString). */
+export function formatReceiptTime(d: Date): string {
+  const h24 = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+/** ASCII-only date + time for billing receipts. */
+export function formatReceiptDateTime(d: Date): string {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}/${month}/${year} ${formatReceiptTime(d)}`;
+}

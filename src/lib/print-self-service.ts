@@ -15,11 +15,12 @@ import {
 } from "@/lib/native-print-bridge";
 import type { OutletPrinterSettings } from "@/lib/use-printer-settings";
 import { escPosOptionsFromPrinterConfig } from "@/lib/use-printer-settings";
-import { getPrintLayoutFromConfig, legacyPaperWidthMm } from "@/lib/paper-width";
+import { getPrintLayoutFromConfig } from "@/lib/paper-width";
 import { printKitchenOrderSlip, type KitchenOrderPrintInput } from "@/lib/print-kitchen";
+import type { FleetPrintContext } from "@/lib/print/print-service";
 
 /** Pause between print jobs so the auto-cutter can finish before the kitchen slip. */
-export const SELF_SERVICE_CUT_DELAY_MS = 700;
+export const SELF_SERVICE_CUT_DELAY_MS = 1800;
 
 export type SelfServicePrintResult = {
   ok: boolean;
@@ -31,6 +32,7 @@ export type SelfServicePrintResult = {
 
 export interface SelfServicePrintInput extends KitchenOrderPrintInput {
   outletName?: string;
+  restaurantName?: string;
   gstNumber?: string | null;
   subtotal: number;
   discountAmt?: number;
@@ -44,12 +46,14 @@ export interface SelfServicePrintInput extends KitchenOrderPrintInput {
     quantity: number;
     totalPrice: number;
     gstRate?: number;
+    categoryId?: string | null;
   }>;
 }
 
 function toBillingData(input: SelfServicePrintInput): BillingReceiptData {
   return {
     orderNumber: input.orderNumber,
+    restaurantName: input.restaurantName,
     outletName: input.outletName ?? "",
     gstNumber: input.gstNumber,
     orderType: input.orderType,
@@ -81,24 +85,8 @@ function toHandoffData(input: SelfServicePrintInput): KitchenHandoffSlipData {
   };
 }
 
-function layoutPayload(
-  settings: OutletPrinterSettings,
-  input: SelfServicePrintInput
-): Pick<
-  NativeBillingPrintPayload,
-  "outletId" | "paperWidth" | "paperWidthMm" | "paperColumns" | "columnOffset" | "amountColumnWidth" | "boldTotalLine"
-> {
-  const b = settings.billingPrinter;
-  const { layout } = getPrintLayoutFromConfig(b);
-  return {
-    outletId: input.outletId,
-    paperWidth: legacyPaperWidthMm(layout.paperWidthMm),
-    paperWidthMm: layout.paperWidthMm,
-    paperColumns: layout.columns,
-    columnOffset: b.columnOffset,
-    amountColumnWidth: b.amountColumnWidth,
-    boldTotalLine: b.boldTotalLine,
-  };
+function nativeBridgeOutletOnly(outletId?: string | null): Pick<NativeBillingPrintPayload, "outletId"> {
+  return outletId ? { outletId } : {};
 }
 
 function billingPrinterReady(settings: OutletPrinterSettings): string | null {
@@ -128,11 +116,11 @@ export async function printSelfServiceMainBill(
   const slipData = toBillingData(input);
   const { layout, fontSize } = getPrintLayoutFromConfig(b);
   const escOpts = escPosOptionsFromPrinterConfig(b);
-  const layoutFields = layoutPayload(settings, input);
 
   const posted = postNativeBillingPrint({
-    ...layoutFields,
+    ...nativeBridgeOutletOnly(input.outletId),
     orderNumber: input.orderNumber,
+    restaurantName: input.restaurantName,
     outletName: input.outletName ?? "",
     gstNumber: input.gstNumber,
     orderType: input.orderType,
@@ -176,10 +164,9 @@ export async function printSelfServiceKitchenHandoff(
   const handoff = toHandoffData(input);
   const { layout, fontSize } = getPrintLayoutFromConfig(b);
   const escOpts = escPosOptionsFromPrinterConfig(b);
-  const layoutFields = layoutPayload(settings, input);
 
   const posted = postNativeKitchenHandoffPrint({
-    ...layoutFields,
+    ...nativeBridgeOutletOnly(input.outletId),
     orderNumber: input.orderNumber,
     orderType: input.orderType,
     tableNumber: input.tableNumber,
@@ -216,7 +203,8 @@ export function delayForPrinterCut(ms = SELF_SERVICE_CUT_DELAY_MS): Promise<void
 export async function printSelfServiceOrderSlips(
   settings: OutletPrinterSettings,
   input: SelfServicePrintInput,
-  options?: { printMainBill?: boolean; printKitchenHandoff?: boolean }
+  options?: { printMainBill?: boolean; printKitchenHandoff?: boolean },
+  fleet?: FleetPrintContext | null
 ): Promise<SelfServicePrintResult> {
   const b = settings.billingPrinter;
   const printMain = options?.printMainBill ?? b.selfServicePrintOnOrder;
@@ -243,16 +231,24 @@ export async function printSelfServiceOrderSlips(
   }
 
   if (b.selfServiceKitchenStationCopy) {
-    const r = await printKitchenOrderSlip(settings, {
-      outletId: input.outletId,
-      orderNumber: input.orderNumber,
-      orderType: input.orderType,
-      tableNumber: input.tableNumber,
-      items: input.items.map((i) => ({ name: i.name, quantity: i.quantity })),
-      createdAt: input.createdAt,
-      source: input.source ?? "pos",
-      selfServiceMode: true,
-    });
+    const r = await printKitchenOrderSlip(
+      settings,
+      {
+        outletId: input.outletId,
+        orderNumber: input.orderNumber,
+        orderType: input.orderType,
+        tableNumber: input.tableNumber,
+        items: input.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          categoryId: i.categoryId,
+        })),
+        createdAt: input.createdAt,
+        source: input.source ?? "pos",
+        selfServiceMode: true,
+      },
+      fleet
+    );
     kitchenStationOk = r.ok;
     if (!kitchenStationOk) {
       message = message ? `${message}; ${r.message}` : r.message;

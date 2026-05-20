@@ -38,8 +38,83 @@ export function isNativePrinterBridgeExpected(): boolean {
   return typeof window !== "undefined" && !!window.__BANAOO_NATIVE_PRINTER_BRIDGE__;
 }
 
+/** True when running inside the Banaoo app WebView (APK), with or without the inject flag. */
+export function isNativePrintCapable(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.__BANAOO_NATIVE_PRINTER_BRIDGE__ || window.__BANAOO_NATIVE_APP__) return true;
+  return isReactNativePrintHost();
+}
+
+export const NATIVE_SYNC_SELF_SERVICE_TYPE = "banaoo-native-sync-self-service";
+
+export interface NativeSyncSelfServicePayload {
+  outletId: string;
+  selfServicePrintOnOrder?: boolean;
+  selfServiceBillWithHandoff?: boolean;
+  selfServiceKitchenStationCopy?: boolean;
+}
+
+export function postNativeSyncSelfServiceSettings(payload: NativeSyncSelfServicePayload): boolean {
+  const host = getReactNativeHost();
+  if (!host) return false;
+  host.postMessage(JSON.stringify({ type: NATIVE_SYNC_SELF_SERVICE_TYPE, payload }));
+  return true;
+}
+
+export const NATIVE_SYNC_PRINTER_TYPE = "banaoo-native-sync-printer";
+export const NATIVE_SCAN_BLUETOOTH_TYPE = "banaoo-native-scan-bluetooth";
+export const BT_SCAN_RESULT_EVENT = "banaoo-bt-scan-result";
+
+export interface NativeBluetoothDevice {
+  id: string;
+  name: string;
+}
+
+export interface NativeSyncPrinterPayload {
+  outletId: string;
+  role: "kitchen" | "billing";
+  name: string;
+  transport: "network" | "bluetooth-classic" | "bluetooth-ble";
+  connectionId: string;
+  networkHost?: string;
+  networkPort?: number;
+  serviceUUID?: string;
+  characteristicUUID?: string;
+  enabled?: boolean;
+}
+
+export function postNativeSyncPrinter(payload: NativeSyncPrinterPayload): boolean {
+  const host = getReactNativeHost();
+  if (!host) return false;
+  host.postMessage(JSON.stringify({ type: NATIVE_SYNC_PRINTER_TYPE, payload }));
+  return true;
+}
+
+export function postNativeBluetoothScan(mode: "ble" | "classic"): boolean {
+  const host = getReactNativeHost();
+  if (!host) return false;
+  host.postMessage(JSON.stringify({ type: NATIVE_SCAN_BLUETOOTH_TYPE, mode }));
+  return true;
+}
+
+export function subscribeBluetoothScanResult(
+  listener: (detail: { devices: NativeBluetoothDevice[]; error?: string }) => void
+): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = (event: Event) => {
+    const custom = event as CustomEvent<{ devices?: NativeBluetoothDevice[]; error?: string }>;
+    listener({
+      devices: custom.detail?.devices ?? [],
+      error: custom.detail?.error,
+    });
+  };
+  window.addEventListener(BT_SCAN_RESULT_EVENT, handler);
+  return () => window.removeEventListener(BT_SCAN_RESULT_EVENT, handler);
+}
+
 export interface NativeKitchenPrintPayload {
   outletId?: string | null;
+  printerId?: string;
   paperWidth?: 58 | 80;
   paperWidthMm?: number;
   paperColumns?: number;
@@ -72,10 +147,12 @@ export interface NativeCustomerTokenPrintPayload {
 
 export interface NativeBillingPrintPayload {
   outletId?: string | null;
+  printerId?: string;
   paperWidth?: 58 | 80;
   paperWidthMm?: number;
   paperColumns?: number;
   orderNumber: string;
+  restaurantName?: string;
   outletName: string;
   gstNumber?: string | null;
   orderType: "dine_in" | "takeaway";
@@ -98,6 +175,7 @@ export interface NativeBillingPrintPayload {
 
 export interface NativeKitchenHandoffPrintPayload {
   outletId?: string | null;
+  printerId?: string;
   paperWidth?: 58 | 80;
   paperWidthMm?: number;
   paperColumns?: number;

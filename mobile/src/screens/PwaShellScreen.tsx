@@ -26,6 +26,13 @@ import {
   printKitchenSlip,
 } from "../printer/printer-service";
 import { loadEffectivePrinterSettings } from "../printer/printer-storage";
+import {
+  buildBluetoothScanInjectScript,
+  handleWebSyncPrinter,
+  handleWebSyncSelfServiceSettings,
+  scanBluetoothForWeb,
+  type WebSyncPrinterPayload,
+} from "../printer/web-bridge-handlers";
 import { tokens } from "../theme/tokens";
 
 interface PwaShellScreenProps {
@@ -37,9 +44,15 @@ type KitchenItem = { name: string; quantity: number };
 type BillingItem = { name: string; quantity: number; totalPrice: number; gstRate?: number };
 
 interface BridgeMessage {
-  type: "banaoo-native-print" | "banaoo-native-open-printers";
-  role: BridgeRole;
-  payload: Record<string, unknown>;
+  type:
+    | "banaoo-native-print"
+    | "banaoo-native-open-printers"
+    | "banaoo-native-sync-printer"
+    | "banaoo-native-sync-self-service"
+    | "banaoo-native-scan-bluetooth";
+  role?: BridgeRole;
+  payload?: Record<string, unknown>;
+  mode?: "ble" | "classic";
 }
 
 const OTA_CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -82,6 +95,11 @@ function isValidMessage(data: unknown): data is BridgeMessage {
   if (!data || typeof data !== "object") return false;
   const candidate = data as Partial<BridgeMessage>;
   if (candidate.type === "banaoo-native-open-printers") return true;
+  if (candidate.type === "banaoo-native-sync-printer") return !!candidate.payload;
+  if (candidate.type === "banaoo-native-sync-self-service") return !!candidate.payload;
+  if (candidate.type === "banaoo-native-scan-bluetooth") {
+    return candidate.mode === "ble" || candidate.mode === "classic";
+  }
   return (
     candidate.type === "banaoo-native-print" &&
     (candidate.role === "kitchen" ||
@@ -132,6 +150,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   const [slowLoadHint, setSlowLoadHint] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const firstLoadDoneRef = useRef(false);
+  const webViewRef = useRef<WebView>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [forceUpdateRequired, setForceUpdateRequired] = useState(false);
   const [forceUpdateMessage, setForceUpdateMessage] = useState<string | null>(null);
@@ -274,6 +293,61 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       return;
     }
 
+    if (parsed.type === "banaoo-native-sync-printer") {
+      const p = parsed.payload as Partial<WebSyncPrinterPayload>;
+      if (
+        typeof p.outletId === "string" &&
+        (p.role === "kitchen" || p.role === "billing") &&
+        typeof p.name === "string" &&
+        typeof p.transport === "string" &&
+        typeof p.connectionId === "string"
+      ) {
+        await handleWebSyncPrinter({
+          outletId: p.outletId,
+          role: p.role,
+          name: p.name,
+          transport: p.transport as WebSyncPrinterPayload["transport"],
+          connectionId: p.connectionId,
+          networkHost: typeof p.networkHost === "string" ? p.networkHost : "",
+          networkPort: typeof p.networkPort === "number" ? p.networkPort : 9100,
+          serviceUUID: typeof p.serviceUUID === "string" ? p.serviceUUID : "",
+          characteristicUUID: typeof p.characteristicUUID === "string" ? p.characteristicUUID : "",
+          enabled: p.enabled !== false,
+        });
+      }
+      return;
+    }
+
+    if (parsed.type === "banaoo-native-sync-self-service") {
+      const p = parsed.payload as Record<string, unknown>;
+      if (typeof p.outletId === "string") {
+        await handleWebSyncSelfServiceSettings({
+          outletId: p.outletId,
+          selfServicePrintOnOrder:
+            typeof p.selfServicePrintOnOrder === "boolean" ? p.selfServicePrintOnOrder : undefined,
+          selfServiceBillWithHandoff:
+            typeof p.selfServiceBillWithHandoff === "boolean" ? p.selfServiceBillWithHandoff : undefined,
+          selfServiceKitchenStationCopy:
+            typeof p.selfServiceKitchenStationCopy === "boolean"
+              ? p.selfServiceKitchenStationCopy
+              : undefined,
+        });
+      }
+      return;
+    }
+
+    if (parsed.type === "banaoo-native-scan-bluetooth") {
+      const mode = parsed.mode ?? "classic";
+      try {
+        const devices = await scanBluetoothForWeb(mode);
+        webViewRef.current?.injectJavaScript(buildBluetoothScanInjectScript(devices));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        webViewRef.current?.injectJavaScript(buildBluetoothScanInjectScript([], message));
+      }
+      return;
+    }
+
     const payload = parsed.payload as Record<string, unknown>;
     const outletId = typeof payload.outletId === "string" ? payload.outletId : undefined;
     let settings = await loadEffectivePrinterSettings(outletId);
@@ -310,7 +384,6 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     }
 
     if (parsed.role === "customer_token") {
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw = payload.orderType === "dine_in" || payload.orderType === "takeaway" ? payload.orderType : null;
@@ -332,7 +405,6 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     }
 
     if (parsed.role === "kitchen_handoff") {
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
       const orderNumber = typeof payload.orderNumber === "string" ? payload.orderNumber.slice(0, 80) : "";
       const createdAt = typeof payload.createdAt === "string" ? new Date(payload.createdAt) : null;
       const orderTypeRaw =
@@ -362,11 +434,14 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         return;
       }
 
-      settings = applyRuntimePaperFromPayload(settings, "billing", payload);
+      const selfServiceMainBillOnly = payload.selfServiceMainBillOnly === true;
+
       await printBillingReceipt(
         settings,
         {
           orderNumber,
+          restaurantName:
+            typeof payload.restaurantName === "string" ? payload.restaurantName.slice(0, 120) : undefined,
           outletName,
           gstNumber: typeof payload.gstNumber === "string" ? payload.gstNumber : undefined,
           orderType: orderTypeRaw,
@@ -381,7 +456,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
           grandTotal: typeof payload.grandTotal === "number" ? payload.grandTotal : 0,
           createdAt,
         },
-        { selfServiceMainBillOnly: payload.selfServiceMainBillOnly === true }
+        { selfServiceMainBillOnly }
       );
     }
   };
@@ -425,6 +500,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
         </View>
       ) : null}
       <WebView
+        ref={webViewRef}
         key={`pwa-shell-${reloadKey}`}
         source={{ uri: url }}
         style={styles.webview}
