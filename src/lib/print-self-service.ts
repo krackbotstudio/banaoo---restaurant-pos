@@ -7,6 +7,7 @@ import {
 } from "@/lib/serial-printer";
 import {
   isNativePrinterBridgeExpected,
+  isNativePrintCapable,
   openNativePrinterSettings,
   postNativeBillingPrint,
   postNativeKitchenHandoffPrint,
@@ -117,7 +118,7 @@ export async function printSelfServiceMainBill(
   const { layout, fontSize } = getPrintLayoutFromConfig(b);
   const escOpts = escPosOptionsFromPrinterConfig(b);
 
-  const posted = postNativeBillingPrint({
+  const posted = await postNativeBillingPrint({
     ...nativeBridgeOutletOnly(input.outletId),
     orderNumber: input.orderNumber,
     restaurantName: input.restaurantName,
@@ -136,7 +137,9 @@ export async function printSelfServiceMainBill(
     createdAt: input.createdAt.toISOString(),
     selfServiceMainBillOnly: true,
   });
-  if (posted) return { ok: true };
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Billing print failed" };
+  }
 
   const err = billingPrinterReady(settings);
   if (err) return { ok: false, message: err };
@@ -165,7 +168,7 @@ export async function printSelfServiceKitchenHandoff(
   const { layout, fontSize } = getPrintLayoutFromConfig(b);
   const escOpts = escPosOptionsFromPrinterConfig(b);
 
-  const posted = postNativeKitchenHandoffPrint({
+  const posted = await postNativeKitchenHandoffPrint({
     ...nativeBridgeOutletOnly(input.outletId),
     orderNumber: input.orderNumber,
     orderType: input.orderType,
@@ -173,7 +176,9 @@ export async function printSelfServiceKitchenHandoff(
     items: handoff.items,
     createdAt: input.createdAt.toISOString(),
   } satisfies NativeKitchenHandoffPrintPayload);
-  if (posted) return { ok: true };
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Kitchen handoff print failed" };
+  }
 
   const err = billingPrinterReady(settings);
   if (err) return { ok: false, message: err };

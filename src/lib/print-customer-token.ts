@@ -5,6 +5,7 @@ import {
 } from "@/lib/serial-printer";
 import {
   isNativePrinterBridgeExpected,
+  isNativePrintCapable,
   openNativePrinterSettings,
   postNativeCustomerTokenPrint,
 } from "@/lib/native-print-bridge";
@@ -48,7 +49,7 @@ export async function printCustomerTokenSlip(
     source: input.source,
   };
 
-  const posted = postNativeCustomerTokenPrint({
+  const posted = await postNativeCustomerTokenPrint({
     outletId: input.outletId,
     paperWidth: legacyPaperWidthMm(settings.billingPrinter.paperWidthMm),
     paperWidthMm: settings.billingPrinter.paperWidthMm,
@@ -61,7 +62,9 @@ export async function printCustomerTokenSlip(
     createdAt: input.createdAt.toISOString(),
     source: input.source,
   });
-  if (posted) return { ok: true };
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Customer token print failed" };
+  }
 
   if (isNativePrinterBridgeExpected()) {
     return { ok: false, message: "Native printer bridge unavailable" };

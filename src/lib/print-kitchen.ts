@@ -7,6 +7,7 @@ import {
 } from "@/lib/serial-printer";
 import {
   isNativePrinterBridgeExpected,
+  isNativePrintCapable,
   openNativePrinterSettings,
   postNativeKitchenPrint,
   postNativeKitchenCancelPrint,
@@ -142,50 +143,12 @@ async function printKitchenSerial(
   }
 }
 
-export async function printKitchenOrderSlip(
+async function printKitchenLegacy(
   settings: OutletPrinterSettings,
   input: KitchenOrderPrintInput,
-  fleet?: FleetPrintContext | null
+  slipData: KitchenSlipData
 ): Promise<KitchenPrintResult> {
-  if (fleet && fleet.printers.some((p) => p.enabled)) {
-    const summary = await printRoutedKitchen(
-      fleet,
-      input.items.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        categoryId: i.categoryId,
-      })),
-      {
-        outletId: input.outletId ?? fleet.settings.outlet_id,
-        orderNumber: input.orderNumber,
-        orderType: input.orderType,
-        tableNumber: input.tableNumber,
-        createdAt: input.createdAt,
-        source: input.source,
-        selfServiceMode: input.selfServiceMode,
-      }
-    );
-    if (summary.total === 0) {
-      return { ok: false, message: "No kitchen printers configured or enabled" };
-    }
-    if (summary.ok) return { ok: true };
-    return {
-      ok: false,
-      message: summary.results.find((r) => !r.ok)?.message ?? "Some kitchen prints failed",
-    };
-  }
-
-  const slipData: KitchenSlipData = {
-    orderNumber: input.orderNumber,
-    orderType: input.orderType,
-    tableNumber: input.tableNumber,
-    items: input.items,
-    createdAt: input.createdAt,
-    source: input.source,
-    selfServiceMode: input.selfServiceMode,
-  };
-
-  const posted = postNativeKitchenPrint({
+  const posted = await postNativeKitchenPrint({
     outletId: input.outletId,
     paperWidth: legacyPaperWidthMm(settings.kitchenPrinter.paperWidthMm),
     paperWidthMm: settings.kitchenPrinter.paperWidthMm,
@@ -197,7 +160,9 @@ export async function printKitchenOrderSlip(
     source: input.source,
     selfServiceMode: input.selfServiceMode,
   });
-  if (posted) return { ok: true };
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Kitchen print failed" };
+  }
 
   if (isNativePrinterBridgeExpected()) {
     return { ok: false, message: "Native printer bridge unavailable" };
@@ -226,6 +191,51 @@ export async function printKitchenOrderSlip(
   return printKitchenBrowser(input, k.fontSize, k.paperWidthMm, title);
 }
 
+export async function printKitchenOrderSlip(
+  settings: OutletPrinterSettings,
+  input: KitchenOrderPrintInput,
+  fleet?: FleetPrintContext | null
+): Promise<KitchenPrintResult> {
+  if (fleet && fleet.printers.some((p) => p.enabled)) {
+    const summary = await printRoutedKitchen(
+      fleet,
+      input.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        categoryId: i.categoryId,
+      })),
+      {
+        outletId: input.outletId ?? fleet.settings.outlet_id,
+        orderNumber: input.orderNumber,
+        orderType: input.orderType,
+        tableNumber: input.tableNumber,
+        createdAt: input.createdAt,
+        source: input.source,
+        selfServiceMode: input.selfServiceMode,
+      }
+    );
+    if (summary.total > 0) {
+      if (summary.ok) return { ok: true };
+      return {
+        ok: false,
+        message: summary.results.find((r) => !r.ok)?.message ?? "Some kitchen prints failed",
+      };
+    }
+  }
+
+  const slipData: KitchenSlipData = {
+    orderNumber: input.orderNumber,
+    orderType: input.orderType,
+    tableNumber: input.tableNumber,
+    items: input.items,
+    createdAt: input.createdAt,
+    source: input.source,
+    selfServiceMode: input.selfServiceMode,
+  };
+
+  return printKitchenLegacy(settings, input, slipData);
+}
+
 export async function printKitchenCancelSlip(
   settings: OutletPrinterSettings,
   input: KitchenCancelPrintInput,
@@ -250,9 +260,10 @@ export async function printKitchenCancelSlip(
       },
       { jobType: "kot_cancel", skipAutoPrintCheck: true }
     );
-    if (summary.total === 0) return { ok: false, message: "No kitchen printers configured" };
-    if (summary.ok) return { ok: true };
-    return { ok: false, message: summary.results.find((r) => !r.ok)?.message ?? "Cancel print failed" };
+    if (summary.total > 0) {
+      if (summary.ok) return { ok: true };
+      return { ok: false, message: summary.results.find((r) => !r.ok)?.message ?? "Cancel print failed" };
+    }
   }
 
   return printKitchenCancelSlipLegacy(settings, input);
@@ -271,7 +282,7 @@ async function printKitchenCancelSlipLegacy(
     cancelledAt: input.cancelledAt ?? new Date(),
   };
 
-  const posted = postNativeKitchenCancelPrint({
+  const posted = await postNativeKitchenCancelPrint({
     outletId: input.outletId,
     paperWidth: legacyPaperWidthMm(settings.kitchenPrinter.paperWidthMm),
     paperWidthMm: settings.kitchenPrinter.paperWidthMm,
@@ -282,7 +293,9 @@ async function printKitchenCancelSlipLegacy(
     createdAt: input.createdAt.toISOString(),
     cancelledAt: (input.cancelledAt ?? new Date()).toISOString(),
   });
-  if (posted) return { ok: true };
+  if (isNativePrintCapable()) {
+    return posted.ok ? { ok: true } : { ok: false, message: posted.message ?? "Kitchen cancel print failed" };
+  }
 
   if (isNativePrinterBridgeExpected()) {
     return { ok: false, message: "Native printer bridge unavailable" };

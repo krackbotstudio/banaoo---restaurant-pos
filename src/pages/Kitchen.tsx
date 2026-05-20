@@ -14,7 +14,7 @@ import {
   writeKitchenSoundEnabled,
 } from "@/hooks/use-kitchen-order-sound";
 import { PlatformBadge } from "@/components/integrations";
-import { isNativePrinterBridgeExpected, openNativePrinterSettings, postNativeKitchenPrint } from "@/lib/native-print-bridge";
+import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 import { isSelfServiceMode, isOnlineOrderSource } from "@/lib/outlet-operation";
 import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
@@ -70,85 +70,35 @@ export default function Kitchen() {
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
-  const printKitchenSlip = (order: KitchenOrder) => {
-    const orderType = order.order_type === "dine_in" ? "dine_in" : "takeaway";
-    const postedToNative = postNativeKitchenPrint({
-      outletId: currentOutlet?.id,
-      orderNumber: order.order_number,
-      orderType,
-      tableNumber: order.table_number || undefined,
-      items: order.order_items
-        .filter((i) => i.status !== "cancelled")
-        .map((i) => ({ name: i.item_name, quantity: i.quantity })),
-      createdAt: new Date(order.created_at).toISOString(),
-      source: order.source,
-      selfServiceMode: selfService,
-    });
-    if (postedToNative) {
-      toast({ title: "Kitchen slip sent to native printer bridge" });
+  const printKitchenSlip = async (order: KitchenOrder) => {
+    const result = await printKitchenOrderSlip(
+      printerSettings,
+      {
+        outletId: currentOutlet?.id,
+        orderNumber: order.order_number,
+        orderType: order.order_type === "dine_in" ? "dine_in" : "takeaway",
+        tableNumber: order.table_number || undefined,
+        items: order.order_items
+          .filter((i) => i.status !== "cancelled")
+          .map((i) => ({ name: i.item_name, quantity: i.quantity })),
+        createdAt: new Date(order.created_at),
+        source: order.source,
+        selfServiceMode: selfService,
+      },
+      fleetContext
+    );
+    if (result.ok) {
+      toast({ title: "Kitchen slip printed" });
       return;
     }
+    toast({
+      title: "Kitchen print failed",
+      description: result.message,
+      variant: "destructive",
+    });
     if (isNativePrinterBridgeExpected()) {
-      toast({ title: "Native printer bridge unavailable. Open Native Printer Settings and try again." });
       openNativePrinterSettings();
-      return;
     }
-
-    const time = new Date(order.created_at).toLocaleTimeString("en-IN", {
-      hour: "2-digit", minute: "2-digit", hour12: true,
-    });
-    const typeLabel = order.order_type === "dine_in"
-      ? `Table T${order.table_number || "—"}`
-      : order.order_type === "delivery" ? "Delivery" : "Takeaway";
-
-    const itemRows = order.order_items
-      .filter((i) => i.status !== "cancelled")
-      .map((item) => `
-        <tr>
-          <td style="padding:3px 4px 3px 0;font-size:13pt">${item.item_name}</td>
-          <td style="text-align:right;padding:3px 0;font-weight:bold;font-size:15pt">x${item.quantity}</td>
-        </tr>`)
-      .join("");
-
-    const printWindow = window.open("", "_blank", "width=220,height=500");
-    if (!printWindow) return;
-    printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Kitchen #${order.order_number}</title>
-  <meta name="color-scheme" content="light"/>
-  <style>
-    @page { size: 58mm auto; margin: 0; }
-    html, body { margin:0; padding:0; width:58mm; background:#fff !important;
-      font-family:'Courier New',Courier,monospace; font-size:13pt; color:#000 !important; }
-    *, *::before, *::after { color:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    table { border-collapse:collapse; width:100%; }
-    .dash { border-top:1px dashed #000; margin:4px 0; }
-  </style>
-</head>
-<body>
-  <div style="text-align:center;font-weight:bold;font-size:15pt;margin-bottom:3mm">** KITCHEN ORDER **</div>
-  <div class="dash"></div>
-  <table>
-    <tr><td style="font-weight:bold">Order #</td><td style="text-align:right;font-weight:bold">${order.order_number}</td></tr>
-    <tr><td>Time</td><td style="text-align:right">${time}</td></tr>
-    <tr><td style="font-weight:bold">${order.order_type === "dine_in" ? "Table" : "Type"}</td>
-        <td style="text-align:right;font-weight:bold">${typeLabel}</td></tr>
-  </table>
-  <div class="dash"></div>
-  <table>
-    <thead><tr style="font-weight:bold;font-size:12pt"><td>ITEM</td><td style="text-align:right">QTY</td></tr></thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-  <div class="dash"></div>
-  <div style="text-align:center;font-size:11pt;margin-top:2mm">— Kitchen Copy —</div>
-  <div style="height:10mm"></div>
-</body>
-</html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
   };
 
   // Unlock ringtone after first tap anywhere on Kitchen (browser autoplay policy)

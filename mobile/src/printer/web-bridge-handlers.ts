@@ -84,3 +84,12 @@ export function buildBluetoothScanInjectScript(
   const detail = JSON.stringify({ devices, error: error ?? undefined });
   return `(function(){try{var d=${detail};window.dispatchEvent(new CustomEvent('banaoo-bt-scan-result',{detail:d}));}catch(e){}})();true;`;
 }
+
+export function buildPrintResultInjectScript(result: {
+  requestId: string;
+  ok: boolean;
+  message?: string;
+}): string {
+  const detail = JSON.stringify(result);
+  return `(function(){try{var d=${detail};window.dispatchEvent(new CustomEvent('banaoo-native-print-result',{detail:d}));}catch(e){}})();true;`;
+}
