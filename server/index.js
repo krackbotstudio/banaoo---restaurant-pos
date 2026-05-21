@@ -22,6 +22,7 @@ import {
   normalizeAddonQuantity,
   assertWithinOutletLimit,
 } from './entitlements.js';
+import { registerCustomerOrderRoutes } from './customer-orders.js';
 
 dotenv.config();
 
@@ -838,6 +839,10 @@ app.put('/api/profile', async (req, res) => {
     if (brand_color !== undefined){ fields.push(`brand_color = $${idx++}`);  values.push(brand_color); }
     if (logo_url !== undefined)   { fields.push(`logo_url = $${idx++}`);     values.push(logo_url); }
     if (app_theme !== undefined)  { fields.push(`app_theme = $${idx++}`);    values.push(app_theme); }
+    if (req.body.upi_vpa !== undefined) { fields.push(`upi_vpa = $${idx++}`); values.push(req.body.upi_vpa?.trim() || null); }
+    if (req.body.upi_display_name !== undefined) { fields.push(`upi_display_name = $${idx++}`); values.push(req.body.upi_display_name?.trim() || null); }
+    if (req.body.upi_qr_url !== undefined) { fields.push(`upi_qr_url = $${idx++}`); values.push(req.body.upi_qr_url?.trim() || null); }
+    if (req.body.online_payments_enabled !== undefined) { fields.push(`online_payments_enabled = $${idx++}`); values.push(!!req.body.online_payments_enabled); }
 
     if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
     values.push(req.user.id);
@@ -2036,6 +2041,8 @@ app.post('/api/webhooks/zomato', async (req, res) => {
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
+
+registerCustomerOrderRoutes(app, { requireAuth });
 
 ensureMobileAppLeadsTable()
   .catch((err) => {

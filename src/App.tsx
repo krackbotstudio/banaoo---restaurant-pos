@@ -25,6 +25,7 @@ const Menu = lazy(() => import("./pages/Menu"));
 const Orders = lazy(() => import("./pages/Orders"));
 const NewOrder = lazy(() => import("./pages/NewOrder"));
 const Kitchen = lazy(() => import("./pages/Kitchen"));
+const Payments = lazy(() => import("./pages/Payments"));
 const Staff = lazy(() => import("./pages/Staff"));
 const About = lazy(() => import("./pages/About"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -32,6 +33,8 @@ const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Refund = lazy(() => import("./pages/Refund"));
 const Shipping = lazy(() => import("./pages/Shipping"));
+const Docs = lazy(() => import("./pages/Docs"));
+const DocsArticle = lazy(() => import("./pages/DocsArticle"));
 const Affiliate = lazy(() => import("./pages/Affiliate"));
 const AffiliateAuth = lazy(() => import("./pages/affiliate/AffiliateAuth"));
 const AffiliateDashboard = lazy(() => import("./pages/affiliate/AffiliateDashboard"));
@@ -91,6 +94,8 @@ const App = () => (
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/refund" element={<Refund />} />
                   <Route path="/shipping" element={<Shipping />} />
+                  <Route path="/docs" element={<Docs />} />
+                  <Route path="/docs/:slug" element={<DocsArticle />} />
                   <Route path="/affiliate" element={<Affiliate />} />
                   <Route path="/affiliate/auth" element={<AffiliateAuth />} />
 
@@ -142,6 +147,7 @@ const App = () => (
                   <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
                   <Route path="/orders/new" element={<ProtectedRoute><NewOrder /></ProtectedRoute>} />
                   <Route path="/kitchen" element={<ProtectedRoute><Kitchen /></ProtectedRoute>} />
+                  <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
                   <Route path="/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
                   <Route path="/my-menus" element={<ProtectedRoute><MyMenus /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

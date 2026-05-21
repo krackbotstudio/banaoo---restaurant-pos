@@ -14,6 +14,7 @@ import {
   BarChart2,
   UserCog,
   Boxes,
+  IndianRupee,
 } from "lucide-react";
 import { useFeatureGating } from "@/hooks/use-feature-gating";
 import type { FeatureKey } from "@/hooks/use-feature-gating";
@@ -55,6 +56,7 @@ const operationsItems: {
   feature?: FeatureKey;
 }[] = [
   { title: "Orders",        url: "/orders",        icon: ShoppingCart, key: "orders"        },
+  { title: "Payments",      url: "/payments",      icon: IndianRupee,  key: "payments"      },
   { title: "Order History", url: "/order-history", icon: History,      key: "order-history" },
   { title: "Customers",     url: "/customers",     icon: Users,        key: "customers"     },
   { title: "Analytics",     url: "/analytics",     icon: BarChart2,    key: "analytics"     },
