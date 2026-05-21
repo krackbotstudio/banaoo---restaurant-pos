@@ -29,9 +29,6 @@ import {
   Clock,
   Loader2,
   Trash2,
-  Link2,
-  Copy,
-  ExternalLink,
   Palette,
   Upload,
   Sun,
@@ -86,6 +83,8 @@ import {
 } from "@/components/ui/select";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
+import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
+import { UpiQrUpload } from "@/components/payments/UpiQrUpload";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -147,6 +146,12 @@ export default function Settings() {
   const [logoPreview, setLogoPreview] = useState<string | null>(profile?.logo_url || null);
   const [savingBranding, setSavingBranding] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [upiVpa, setUpiVpa] = useState((profile as { upi_vpa?: string })?.upi_vpa || "");
+  const [upiDisplayName, setUpiDisplayName] = useState((profile as { upi_display_name?: string })?.upi_display_name || "");
+  const [upiQrUrl, setUpiQrUrl] = useState((profile as { upi_qr_url?: string })?.upi_qr_url || "");
+  const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(
+    (profile as { online_payments_enabled?: boolean })?.online_payments_enabled !== false
+  );
 
   // ── Outlets tab state ───────────────────────────────────────────────────────
   interface OutletItem { id: string; name: string; address: string | null; phone: string | null; is_active: boolean; }
@@ -176,6 +181,10 @@ export default function Settings() {
       setBrandName(profile.brand_name || "");
       setBrandColor(profile.brand_color || "#f97316");
       setLogoPreview(profile.logo_url || null);
+      setUpiVpa(profile.upi_vpa || "");
+      setUpiDisplayName(profile.upi_display_name || "");
+      setUpiQrUrl(profile.upi_qr_url || "");
+      setOnlinePaymentsEnabled(profile.online_payments_enabled !== false);
     }
   }, [profile]);
 
@@ -246,7 +255,14 @@ export default function Settings() {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand_name: brandName || null, brand_color: brandColor }),
+        body: JSON.stringify({
+          brand_name: brandName || null,
+          brand_color: brandColor,
+          upi_vpa: upiVpa.trim() || null,
+          upi_display_name: upiDisplayName.trim() || null,
+          upi_qr_url: upiQrUrl.trim() || null,
+          online_payments_enabled: onlinePaymentsEnabled,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to save branding");
@@ -509,39 +525,6 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            {/* Online Ordering Link */}
-            {profile?.ordering_slug && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Link2 className="h-5 w-5" />
-                    Online Ordering Link
-                  </CardTitle>
-                  <CardDescription>
-                    Share this link with your customers. It shows all your outlets with GPS-based distance sorting.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-                    <span className="text-sm font-mono text-primary truncate flex-1">
-                      {window.location.origin}/order/{profile.ordering_slug}
-                    </span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
-                      onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/order/${profile.ordering_slug}`); toast.success("Link copied!"); }}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
-                      onClick={() => window.open(`/order/${profile.ordering_slug}`, "_blank")}>
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    To update outlet locations for GPS sorting, go to <strong>Outlets → Edit</strong> and pin the location on the map.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
             <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive">
@@ -608,6 +591,17 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+
+            {currentOutlet && (
+              <CustomerOrderingLinkCard
+                outletId={currentOutlet.id}
+                outletName={currentOutlet.name}
+                brandName={profile?.brand_name}
+                orderingSlug={profile?.ordering_slug}
+                manageHref={`/outlets/${currentOutlet.id}`}
+              />
+            )}
+
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -900,6 +894,43 @@ export default function Settings() {
                 <Button onClick={handleSaveBranding} disabled={savingBranding}>
                   {savingBranding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Save Color
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer UPI payments (default)</CardTitle>
+                <CardDescription>
+                  Used for all outlets unless overridden on an outlet. Razorpay remains for subscriptions only.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Enable UPI for online orders</Label>
+                  <Switch checked={onlinePaymentsEnabled} onCheckedChange={setOnlinePaymentsEnabled} />
+                </div>
+                <div className="space-y-2">
+                  <Label>UPI ID (VPA)</Label>
+                  <Input
+                    placeholder="yourname@paytm"
+                    value={upiVpa}
+                    onChange={(e) => setUpiVpa(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Display name on UPI apps</Label>
+                  <Input
+                    value={upiDisplayName}
+                    onChange={(e) => setUpiDisplayName(e.target.value)}
+                    placeholder={brandName || "Your restaurant"}
+                  />
+                </div>
+                <UpiQrUpload value={upiQrUrl} onChange={setUpiQrUrl} />
+                <Button onClick={handleSaveBranding} disabled={savingBranding}>
+                  {savingBranding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save UPI settings
                 </Button>
               </CardContent>
             </Card>

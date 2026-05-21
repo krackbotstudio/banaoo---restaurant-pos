@@ -2,15 +2,19 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/cart-context";
 import { useCustomer } from "@/context/customer-context";
-import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, CreditCard, Banknote, MapPin, Edit2, Truck } from "lucide-react";
+import { CustomerTablePicker } from "@/components/customer/CustomerTablePicker";
+import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, MapPin, Edit2, Truck, Smartphone } from "lucide-react";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 interface Outlet {
   id: string;
   name: string;
+}
+
+interface PaymentSettings {
+  online_payments_enabled: boolean;
+  upi_vpa: string | null;
 }
 
 export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
@@ -24,95 +28,96 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
   const [name, setName] = useState(customer?.name ?? "");
   const [phone] = useState(customer?.phone ?? "");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("dine_in");
+  const [tableId, setTableId] = useState<string | undefined>();
   const [tableNumber, setTableNumber] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState(defaultAddr?.address_text ?? "");
   const [editingAddress, setEditingAddress] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "upi">("cod");
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Sync if customer changes
   useEffect(() => {
     if (customer?.name && !name) setName(customer.name);
     if (defaultAddr?.address_text && !deliveryAddress) setDeliveryAddress(defaultAddr.address_text);
   }, [customer]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/public/outlets/${outlet.id}/payment-settings`)
+      .then((r) => r.json())
+      .then((s: PaymentSettings) => {
+        setPaymentSettings(s);
+        if (!s.upi_vpa || !s.online_payments_enabled) setPaymentMethod("cod");
+      })
+      .catch(() => setPaymentSettings({ online_payments_enabled: false, upi_vpa: null }));
+  }, [outlet.id]);
 
   if (itemCount === 0) {
     navigate(resolvedBase);
     return null;
   }
 
+  const upiAvailable =
+    paymentSettings?.online_payments_enabled && !!paymentSettings?.upi_vpa;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (!name.trim()) { setError("Please enter your name"); return; }
-    if (orderType === "dine_in" && !tableNumber.trim()) { setError("Please enter your table number"); return; }
+    if (orderType === "dine_in" && !tableId) { setError("Please select your table"); return; }
     if (orderType === "delivery" && !deliveryAddress.trim()) { setError("Please enter a delivery address"); return; }
+    if (paymentMethod === "upi" && !upiAvailable) {
+      setError("UPI payment is not available. Choose pay at counter.");
+      return;
+    }
 
     setLoading(true);
     try {
-      // If name changed, update customer profile
       if (customer && name.trim() !== customer.name) {
         await saveCustomer(customer.phone, name.trim());
       }
 
-      // Generate order number and calculate total
-      const orderNumber = `ONL-${Date.now().toString(36).toUpperCase()}`;
-      const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-
-      // Insert order directly (created_by is nullable for customer orders)
-      const { data: order, error: orderError } = await db
-        .from("orders")
-        .insert({
+      const res = await fetch(`${API_URL}/api/public/customer-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           outlet_id: outlet.id,
-          order_number: orderNumber,
           order_type: orderType,
-          table_number: orderType === "dine_in" ? tableNumber.trim() : null,
+          table_id: orderType === "dine_in" ? tableId : null,
+          table_number: orderType === "dine_in" ? tableNumber : null,
           delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
-          subtotal,
-          total: subtotal,
-          notes: notes.trim() || null,
-          status: "pending",
-          source: "online",
           customer_name: name.trim(),
           customer_phone: phone || null,
-        })
-        .select("id, order_number")
-        .single();
+          notes: notes.trim() || null,
+          payment_method: paymentMethod,
+          items: items.map((item) => ({
+            menu_item_id: item.menu_item_id,
+            item_name: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            notes: item.notes || null,
+          })),
+        }),
+      });
 
-      if (orderError || !order) {
-        console.error("Order insert error:", orderError);
-        throw new Error("Failed to create order");
-      }
-
-      // Insert order items
-      const orderItems = items.map((item) => ({
-        order_id: order.id,
-        menu_item_id: item.menu_item_id,
-        item_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.unit_price * item.quantity,
-        notes: item.notes || null,
-      }));
-
-      const { error: itemsError } = await db.from("order_items").insert(orderItems);
-
-      if (itemsError) {
-        console.error("Order items error:", itemsError);
-        await db.from("orders").delete().eq("id", order.id);
-        throw new Error("Failed to save order items");
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create order");
 
       clearCart();
+
+      if (json.requires_upi) {
+        navigate(`${resolvedBase}/payment/${json.order_id}`, { replace: true });
+        return;
+      }
+
       navigate(`${resolvedBase}/confirmed`, {
         state: {
-          order_number: order.order_number,
-          order_id: order.id,
-          total: subtotal,
-          payment_method: paymentMethod,
+          order_number: json.order_number,
+          order_id: json.order_id,
+          total: json.total,
+          payment_method: "cod",
         },
         replace: true,
       });
@@ -125,16 +130,14 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Back header */}
       <div className="flex items-center gap-2 px-4 py-3 bg-white border-b border-gray-100">
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100">
+        <button type="button" onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100">
           <ArrowLeft className="h-5 w-5 text-gray-700" />
         </button>
         <h2 className="font-bold text-base text-gray-900">Checkout</h2>
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 px-4 py-4 space-y-4">
-        {/* Customer Details */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
           <h3 className="font-semibold text-sm text-gray-900">Your Details</h3>
           <div>
@@ -158,7 +161,6 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           </div>
         </div>
 
-        {/* Order Type */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
           <h3 className="font-semibold text-sm text-gray-900">Order Type</h3>
           <div className="grid grid-cols-3 gap-2">
@@ -185,16 +187,14 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           </div>
 
           {orderType === "dine_in" && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Table Number *</label>
-              <input
-                type="text"
-                placeholder="e.g. T5 or 12"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
+            <CustomerTablePicker
+              outletId={outlet.id}
+              selectedTableId={tableId}
+              onSelectTable={(id, num) => {
+                setTableId(id);
+                setTableNumber(num);
+              }}
+            />
           )}
 
           {orderType === "delivery" && (
@@ -220,7 +220,10 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
                 />
               ) : (
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setEditingAddress(true)}
+                  onKeyDown={(e) => e.key === "Enter" && setEditingAddress(true)}
                   className={`flex items-start gap-2 border rounded-lg px-3 py-2.5 cursor-pointer ${
                     deliveryAddress ? "border-gray-200 bg-gray-50" : "border-dashed border-gray-300"
                   }`}
@@ -235,9 +238,8 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           )}
         </div>
 
-        {/* Payment Method */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
-          <h3 className="font-semibold text-sm text-gray-900">Payment Method</h3>
+          <h3 className="font-semibold text-sm text-gray-900">Payment</h3>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -248,23 +250,26 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
                   : "border-gray-200 text-gray-600"
               }`}
             >
-              <Banknote className="h-4 w-4" /> Cash
+              <Banknote className="h-4 w-4" /> Pay at counter
             </button>
             <button
               type="button"
-              onClick={() => setPaymentMethod("online")}
+              onClick={() => upiAvailable && setPaymentMethod("upi")}
+              disabled={!upiAvailable}
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                paymentMethod === "online"
+                paymentMethod === "upi"
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-gray-200 text-gray-600"
-              }`}
+              } ${!upiAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
-              <CreditCard className="h-4 w-4" /> Online
+              <Smartphone className="h-4 w-4" /> UPI now
             </button>
           </div>
+          {!upiAvailable && (
+            <p className="text-xs text-gray-500">UPI not set up for this restaurant — pay at counter only.</p>
+          )}
         </div>
 
-        {/* Notes */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <label className="text-xs text-gray-500 mb-1 block">Special Instructions (optional)</label>
           <textarea
@@ -276,7 +281,6 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           />
         </div>
 
-        {/* Order Summary */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-2">
           <h3 className="font-semibold text-sm text-gray-900 mb-2">Order Summary</h3>
           {items.map((item) => (
@@ -298,9 +302,9 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
         )}
       </form>
 
-      {/* Place Order Button */}
       <div className="sticky bottom-16 px-4 pb-3 bg-gray-50 pt-2">
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={loading}
           className="w-full bg-primary text-white font-bold py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60"
@@ -308,7 +312,9 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           {loading ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Placing Order...</>
           ) : (
-            <>Place Order · ₹{total.toFixed(0)}</>
+            <>
+              {paymentMethod === "upi" ? "Continue to UPI" : "Place Order"} · ₹{total.toFixed(0)}
+            </>
           )}
         </button>
       </div>

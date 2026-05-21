@@ -433,6 +433,9 @@ export type Database = {
           status: string
           subtotal: number
           table_number: string | null
+          table_id: string | null
+          payment_method: string | null
+          payment_status: string
           total: number
           updated_at: string
         }

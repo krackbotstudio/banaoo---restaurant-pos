@@ -33,6 +33,8 @@ interface TableGridViewProps {
   selectedTableId?: string;
   onSelectTable?: (tableId: string, tableNumber: string) => void;
   showStatusFilter?: boolean;
+  /** When true, only available tables (no live order) are selectable */
+  selectableOnlyAvailable?: boolean;
   className?: string;
 }
 
@@ -41,6 +43,7 @@ export function TableGridView({
   selectedTableId,
   onSelectTable,
   showStatusFilter = false,
+  selectableOnlyAvailable = false,
   className,
 }: TableGridViewProps) {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
@@ -193,6 +196,10 @@ export function TableGridView({
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {filteredTables.map((table) => {
           const liveOrder = liveOrderMap.get(table.table_number);
+          const isAvailable =
+            table.status === "available" && !liveOrder;
+          const canSelect =
+            !selectableOnlyAvailable || isAvailable;
           return (
             <TableCard
               key={table.id}
@@ -210,7 +217,12 @@ export function TableGridView({
               isSelected={selectedTableId === table.id}
               liveOrderStatus={liveOrder?.status}
               liveOrderNumber={liveOrder?.order_number}
-              onClick={() => onSelectTable?.(table.id, table.table_number)}
+              onClick={
+                canSelect
+                  ? () => onSelectTable?.(table.id, table.table_number)
+                  : undefined
+              }
+              className={!canSelect ? "opacity-50 cursor-not-allowed" : undefined}
             />
           );
         })}

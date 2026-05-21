@@ -2,7 +2,7 @@
 
 **Purpose:** Single living document for frontend, backend, mobile, and ops. Update this file whenever we ship or plan a change (add a dated entry under [Change log](#change-log)).
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-20
 
 ---
 
@@ -12,6 +12,15 @@
 2. List **Frontend**, **Backend**, **Mobile**, **DB**, and **Deploy** bullets.
 3. Move completed backend TODOs to **Done**; add new items under **Backend team TODO**.
 4. Do not edit the attached Cursor plan files — only this file.
+5. **Public docs:** For user-visible changes, update `src/content/docs/articles/*.md` and bump `lastUpdated` in `src/content/docs/registry.ts` (see `.cursor/rules/public-docs.mdc`).
+
+---
+
+## Public documentation (`/docs`)
+
+- **URL:** `/docs` and `/docs/:slug` on the marketing site
+- **Source:** `src/content/docs/` (manifest + markdown articles)
+- **Release checklist:** `[ ]` Public docs updated when shipping owner-facing features
 
 ---
 
@@ -28,6 +37,18 @@ Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo
 ---
 
 ## Change log
+
+### 2026-05-20 — Public documentation site
+
+**Summary:** Customer-facing docs at `/docs` with footer and navbar links; Cursor rule to keep articles in sync with product changes.
+
+| Area | Changes |
+|------|---------|
+| **Frontend** | `src/pages/Docs.tsx`, `DocsArticle.tsx`, `src/components/docs/*`, `src/content/docs/articles/*.md`, routes in `App.tsx`, Footer + Navbar links, `@tailwindcss/typography` for prose |
+| **Deps** | `react-markdown`, `remark-gfm` |
+| **Docs process** | `.cursor/rules/public-docs.mdc`, `src/content/docs/README.md` |
+
+**Deploy:** Ship web to `banaoo.in` so `/docs` is live.
 
 ### 2026-05-19 — Android package `com.banaoo` (Play Store)
 

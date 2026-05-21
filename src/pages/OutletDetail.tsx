@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Link2, Copy, ExternalLink, Navigation, Receipt, Percent } from "lucide-react";
+import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Navigation, Receipt, Percent } from "lucide-react";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { isSelfServiceMode, type OutletOperationMode } from "@/lib/outlet-operation";
 import {
@@ -29,8 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { OrderingQRCode } from "@/components/customer/OrderingQRCode";
-import { FeatureGate } from "@/components/FeatureGate";
+import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
+import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -584,70 +584,15 @@ export default function OutletDetail() {
             )}
             </div>
 
-            {/* Online Ordering Link */}
-            <FeatureGate feature="customerOrdering" showUpgradePrompt>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Link2 className="h-4 w-4 text-muted-foreground" />
-                  Customer Ordering Link
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">Share this link with your customers so they can order online from their phones.</p>
+            <CustomerOrderingLinkCard
+              outletId={outlet.id}
+              outletName={outlet.name}
+              brandName={profile?.brand_name}
+              orderingSlug={profile?.ordering_slug}
+              hasGpsLocation={!!outlet.latitude}
+            />
 
-                {/* Brand link (primary — shows all outlets with GPS) */}
-                {profile?.ordering_slug && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-foreground">Brand Ordering Page <span className="text-muted-foreground font-normal">(recommended — shows all outlets with GPS)</span></p>
-                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-                      <span className="text-sm font-mono text-primary truncate flex-1">
-                        {window.location.origin}/order/{profile.ordering_slug}
-                      </span>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0"
-                        onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/order/${profile.ordering_slug}`); toast({ title: "Brand link copied!" }); }}>
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0"
-                        onClick={() => window.open(`/order/${profile.ordering_slug}`, "_blank")}>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Direct outlet link */}
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-foreground">Direct Outlet Link <span className="text-muted-foreground font-normal">(goes straight to this outlet)</span></p>
-                  <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
-                    <span className="text-sm font-mono text-muted-foreground truncate flex-1">
-                      {window.location.origin}/r/{outlet.id}
-                    </span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0"
-                      onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/r/${outlet.id}`); toast({ title: "Link copied!" }); }}>
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0"
-                      onClick={() => window.open(`/r/${outlet.id}`, "_blank")}>
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                    <OrderingQRCode
-                      url={`${window.location.origin}/r/${outlet.id}`}
-                      restaurantName={profile?.brand_name || outlet.name}
-                      outletName={outlet.name}
-                    />
-                  </div>
-                </div>
-
-                {!outlet.latitude && (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                    No GPS location set — customers won't see distance. Click Edit → Pin on map to add it.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            </FeatureGate>
+            <OutletPaymentSettings outletId={outlet.id} outletName={outlet.name} />
 
             {/* Quick Actions */}
             <Card>

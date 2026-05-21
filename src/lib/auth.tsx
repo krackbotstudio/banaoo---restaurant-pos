@@ -41,6 +41,10 @@ interface Profile {
   app_theme: string | null;
   account_status: "pending" | "approved" | "rejected" | null;
   is_admin: boolean | null;
+  upi_vpa?: string | null;
+  upi_display_name?: string | null;
+  upi_qr_url?: string | null;
+  online_payments_enabled?: boolean | null;
 }
 
 interface AuthContextType {

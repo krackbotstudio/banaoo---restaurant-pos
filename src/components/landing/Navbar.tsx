@@ -109,6 +109,9 @@ export function Navbar() {
           <Link to={pricingHref} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Pricing
           </Link>
+          <Link to="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            Docs
+          </Link>
           <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             About
           </Link>
@@ -178,6 +181,13 @@ export function Navbar() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Pricing
+            </Link>
+            <Link
+              to="/docs"
+              className="text-sm font-medium py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Docs
             </Link>
             <Link 
               to="/about" 

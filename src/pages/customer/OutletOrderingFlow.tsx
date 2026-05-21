@@ -14,6 +14,7 @@ import MenuPage from "./MenuPage";
 import CartPage from "./CartPage";
 import CheckoutPage from "./CheckoutPage";
 import OrderConfirmedPage from "./OrderConfirmedPage";
+import UpiPaymentPage from "./UpiPaymentPage";
 import PhoneEntryPage from "./PhoneEntryPage";
 import CustomerSetupPage from "./CustomerSetupPage";
 import CustomerOrdersPage from "./CustomerOrdersPage";
@@ -140,9 +141,10 @@ function AppShell({
       {/* Routes */}
       <main className="flex-1 pb-16 overflow-y-auto">
         <Routes>
-          <Route index element={<MenuPage outlet={outlet} />} />
+          <Route index element={<MenuPage outlet={outlet} basePath={basePath} />} />
           <Route path="cart" element={<CartPage outlet={outlet} />} />
           <Route path="checkout" element={<CheckoutPage outlet={outlet} basePath={basePath} />} />
+          <Route path="payment/:orderId" element={<UpiPaymentPage outlet={outlet} basePath={basePath} />} />
           <Route path="confirmed" element={<OrderConfirmedPage outlet={outlet} basePath={basePath} />} />
           <Route path="orders" element={<CustomerOrdersPage outletId={outlet.id} />} />
           <Route

@@ -1,0 +1,41 @@
+---
+description: Keep public product documentation in sync when changing user-facing features
+globs: src/pages/**/*.tsx,src/components/**/*.tsx,src/lib/**/*.ts,mobile/src/**/*.tsx
+alwaysApply: false
+---
+
+# Public documentation (banaoo.in/docs)
+
+Customer-facing docs live under `src/content/docs/`:
+
+- **Manifest:** `src/content/docs/registry.ts` — titles, slugs, `lastUpdated`
+- **Articles:** `src/content/docs/articles/<slug>.md` — markdown body
+- **Routes:** `/docs`, `/docs/:slug` — do not break slugs without redirects
+
+## When to update docs
+
+If your change affects something a restaurant owner would see or configure, update the matching article **in the same task/PR**:
+
+| Area changed | Update article |
+|--------------|----------------|
+| Auth, onboarding, account | `getting-started.md` |
+| Outlets, menu, QR menus | `outlets-and-menu.md` |
+| Orders, POS, self-service, discounts | `orders-and-pos.md` |
+| Kitchen KDS, sounds, statuses | `kitchen.md` |
+| Bills, GST, reprints | `billing-and-receipts.md` |
+| Printer fleet, native print, ESC/POS, routing | `printers.md` |
+| Android APK, Bluetooth, permissions | `mobile-app.md` |
+| Errors, support flows | `faq-troubleshooting.md` |
+
+## How to update
+
+1. Edit the relevant `.md` file — plain language for owners, no secrets or internal paths.
+2. Bump `lastUpdated` for that article in `registry.ts` (ISO date `YYYY-MM-DD`).
+3. If you add a new topic, add a `DOC_ARTICLES` entry and create `articles/<slug>.md`.
+
+## Checklist (team releases)
+
+- [ ] Public docs updated: `src/content/docs/articles/...`
+- [ ] `lastUpdated` bumped in `registry.ts`
+
+Do not put `.env`, API keys, or full internal changelogs in public docs.

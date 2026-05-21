@@ -12,7 +12,8 @@ interface LocationState {
   order_number: string;
   order_id: string;
   total: number;
-  payment_method: "cod" | "online";
+  payment_method: "cod" | "upi";
+  awaiting_confirmation?: boolean;
 }
 
 export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
@@ -29,7 +30,7 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
     const poll = async () => {
       const { data } = await supabase
         .from("orders")
-        .select("status")
+        .select("status, payment_status")
         .eq("id", state.order_id)
         .single();
       if (data?.status) setStatus(data.status);
@@ -62,8 +63,14 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
       </div>
 
       <div>
-        <h2 className="text-xl font-bold text-gray-900">Order Placed!</h2>
-        <p className="text-gray-500 text-sm mt-1">Your order has been sent to {outlet.name}</p>
+        <h2 className="text-xl font-bold text-gray-900">
+          {state.awaiting_confirmation ? "Payment submitted" : "Order Placed!"}
+        </h2>
+        <p className="text-gray-500 text-sm mt-1">
+          {state.awaiting_confirmation
+            ? `${outlet.name} will confirm your UPI payment shortly. Kitchen starts after confirmation.`
+            : `Your order has been sent to ${outlet.name}`}
+        </p>
       </div>
 
       <div className="bg-white w-full rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3 text-left">
@@ -78,7 +85,11 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
         <div className="flex justify-between items-center">
           <span className="text-xs text-gray-500 font-medium">Payment</span>
           <span className="font-semibold text-gray-700 text-sm">
-            {state.payment_method === "cod" ? "Cash on Delivery" : "Online Payment"}
+            {state.payment_method === "cod"
+              ? "Pay at counter"
+              : state.awaiting_confirmation
+                ? "UPI — awaiting confirmation"
+                : "UPI"}
           </span>
         </div>
         <div className="border-t border-gray-100 pt-3">

@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/context/cart-context";
 import {
   Plus, Minus, Leaf, Flame, Search, X,
   Mic, MicOff, Loader2, CheckCircle2, AlertCircle, Sparkles, Star,
+  ShoppingBag,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -472,8 +474,44 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
   );
 }
 
+/** Sticky bar when cart has items — place order without switching to Cart tab first */
+function MenuPlaceOrderBar({ basePath }: { basePath: string }) {
+  const navigate = useNavigate();
+  const { itemCount, total } = useCart();
+
+  if (itemCount === 0) return null;
+
+  return (
+    <div className="fixed bottom-16 left-0 right-0 z-40 max-w-lg mx-auto w-full px-4 pb-2 pointer-events-none">
+      <div className="pointer-events-auto bg-white rounded-2xl shadow-lg border border-gray-200 p-2.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate(`${basePath}/cart`)}
+          className="flex flex-col items-start justify-center min-w-0 flex-1 px-2 py-1 rounded-xl hover:bg-gray-50 transition-colors text-left"
+          aria-label="View cart"
+        >
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+            <ShoppingBag className="h-3 w-3" />
+            {itemCount} item{itemCount !== 1 ? "s" : ""} in cart
+          </span>
+          <span className="text-sm font-bold text-gray-900">₹{total.toFixed(0)}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate(`${basePath}/checkout`)}
+          className="shrink-0 bg-primary text-white font-bold text-sm px-5 py-3.5 rounded-xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md"
+        >
+          Place Order
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main MenuPage ──────────────────────────────────────────────────────────────
-export default function MenuPage({ outlet }: { outlet: Outlet }) {
+export default function MenuPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
+  const resolvedBase = basePath ?? `/r/${outlet.id}`;
+  const { itemCount } = useCart();
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -597,7 +635,7 @@ export default function MenuPage({ outlet }: { outlet: Outlet }) {
         )}
 
         {/* Menu Items */}
-        <div className="px-4 py-3 space-y-6">
+        <div className={`px-4 py-3 space-y-6 ${itemCount > 0 ? "pb-28" : "pb-4"}`}>
           {search || activeCategory !== "all" ? (
             <>
               {filtered.length === 0 ? (
@@ -626,11 +664,15 @@ export default function MenuPage({ outlet }: { outlet: Outlet }) {
         </div>
       </div>
 
+      <MenuPlaceOrderBar basePath={resolvedBase} />
+
       {/* AI Voice Order floating button */}
       {!voiceOpen && (
         <button
           onClick={() => setVoiceOpen(true)}
-          className="fixed bottom-20 right-4 z-40 flex items-center gap-2 bg-primary text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-primary/90 active:scale-95 transition-all"
+          className={`fixed right-4 z-30 flex items-center gap-2 bg-primary text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-primary/90 active:scale-95 transition-all ${
+            itemCount > 0 ? "bottom-36" : "bottom-20"
+          }`}
           title="Voice Order"
         >
           <div className="relative"><Mic className="h-5 w-5" /></div>
