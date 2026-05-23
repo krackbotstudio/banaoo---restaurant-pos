@@ -61,12 +61,28 @@ export const BASE_PRICES: Record<PaidPlanId, number> = {
   professional: 699,
 };
 
+/** Allowed subscription / add-on billing lengths (1-month removed). */
+export const BILLING_PERIOD_MONTHS = [3, 6, 12] as const;
+export type BillingPeriodMonths = (typeof BILLING_PERIOD_MONTHS)[number];
+export const DEFAULT_BILLING_PERIOD_MONTHS: BillingPeriodMonths = 3;
+
 export const DISCOUNTS: Record<number, number> = {
-  1: 0,
   3: 0.05,
   6: 0.1,
   12: 0.2,
 };
+
+export function isValidBillingPeriodMonths(months: number): months is BillingPeriodMonths {
+  return (BILLING_PERIOD_MONTHS as readonly number[]).includes(months);
+}
+
+export function billingPeriodLabel(months: number): string {
+  if (months === 3) return "3 Months";
+  if (months === 6) return "6 Months";
+  if (months === 12) return "12 Months";
+  if (months === 1) return "1 Month";
+  return `${months} months`;
+}
 
 export const ADDON_PRICES = {
   extraOutletPerMonth: 250,

@@ -6,7 +6,10 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useFeatureGating } from "@/hooks/use-feature-gating";
 import { LimitIndicator } from "@/components/FeatureGate";
 import {
+  BILLING_PERIOD_MONTHS,
+  DEFAULT_BILLING_PERIOD_MONTHS,
   DISCOUNTS,
+  billingPeriodLabel,
   calcPlanTotal,
   calcPlanSavings,
   getPlanDisplayName,
@@ -132,7 +135,7 @@ export default function Settings() {
   };
 
   // Subscription / plan state
-  const [planMonths, setPlanMonths] = useState(1);
+  const [planMonths, setPlanMonths] = useState(DEFAULT_BILLING_PERIOD_MONTHS);
   const [payingPlan, setPayingPlan] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [openingNativePrinters, setOpeningNativePrinters] = useState(false);
@@ -1148,7 +1151,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Select Duration</p>
                   <div className="flex gap-2 flex-wrap">
-                    {([1, 3, 6, 12] as const).map((m) => {
+                    {BILLING_PERIOD_MONTHS.map((m) => {
                       const disc = DISCOUNTS[m];
                       return (
                         <button
@@ -1160,7 +1163,7 @@ export default function Settings() {
                               : "bg-background border-border hover:border-primary/50"
                           }`}
                         >
-                          {m === 1 ? "1 Month" : m === 3 ? "3 Months" : m === 6 ? "6 Months" : "12 Months"}
+                          {billingPeriodLabel(m)}
                           {disc > 0 && (
                             <span className={`ml-1.5 text-[10px] font-bold ${planMonths === m ? "text-primary-foreground/80" : "text-green-600"}`}>
                               -{disc * 100}%
@@ -1188,7 +1191,7 @@ export default function Settings() {
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
-                          <span className="text-muted-foreground text-sm"> / {planMonths === 1 ? "month" : `${planMonths} months`}</span>
+                          <span className="text-muted-foreground text-sm"> / {planMonths} months</span>
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">
@@ -1232,7 +1235,7 @@ export default function Settings() {
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
-                          <span className="text-muted-foreground text-sm"> / {planMonths === 1 ? "month" : `${planMonths} months`}</span>
+                          <span className="text-muted-foreground text-sm"> / {planMonths} months</span>
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">

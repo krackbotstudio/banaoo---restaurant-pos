@@ -225,7 +225,7 @@ export function calcAddonAmount(addonType, quantity, months) {
   const monthly = ADDON_MONTHLY_PRICES[addonType];
   if (!monthly) throw new Error(`Unknown add-on: ${addonType}`);
   const qty = STACKABLE_ADDONS.has(addonType) ? Math.max(1, Number(quantity) || 1) : 1;
-  const DISCOUNTS = { 1: 0, 3: 0.05, 6: 0.1, 12: 0.2 };
+  const DISCOUNTS = { 3: 0.05, 6: 0.1, 12: 0.2 };
   const discount = DISCOUNTS[months] ?? 0;
   return Math.round(monthly * qty * months * (1 - discount));
 }

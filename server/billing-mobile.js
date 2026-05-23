@@ -68,9 +68,9 @@ export function registerBillingMobileRoutes(app, { requireAuth }) {
         if (!['starter', 'professional'].includes(plan_type)) {
           return res.status(400).json({ error: 'Invalid plan_type' });
         }
-        const months = Number(period_months) || 1;
-        if (![1, 3, 6, 12].includes(months)) {
-          return res.status(400).json({ error: 'Invalid period_months' });
+        const months = Number(period_months);
+        if (![3, 6, 12].includes(months)) {
+          return res.status(400).json({ error: 'Invalid period_months. Choose 3, 6, or 12 months.' });
         }
         payload = { kind, plan_type, period_months: months };
       } else {
@@ -86,9 +86,9 @@ export function registerBillingMobileRoutes(app, { requireAuth }) {
         if (!allowedAddons.includes(addon_type)) {
           return res.status(400).json({ error: 'Invalid addon_type' });
         }
-        const months = Number(period_months) || 1;
-        if (![1, 3, 6, 12].includes(months)) {
-          return res.status(400).json({ error: 'Invalid period_months' });
+        const months = Number(period_months);
+        if (![3, 6, 12].includes(months)) {
+          return res.status(400).json({ error: 'Invalid period_months. Choose 3, 6, or 12 months.' });
         }
         payload = {
           kind,

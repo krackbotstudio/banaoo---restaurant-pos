@@ -1157,12 +1157,21 @@ const BASE_PRICES = {
   professional: 699,
 };
 
+const BILLING_PERIOD_MONTHS = [3, 6, 12];
+
 const DISCOUNTS = {
-  1: 0,
   3: 0.05,
   6: 0.10,
   12: 0.20,
 };
+
+function assertValidBillingPeriod(months) {
+  const m = Number(months);
+  if (!BILLING_PERIOD_MONTHS.includes(m)) {
+    throw new Error('Invalid period_months. Choose 3, 6, or 12 months.');
+  }
+  return m;
+}
 
 function calcAmount(planType, months) {
   const base = BASE_PRICES[planType];
@@ -1176,11 +1185,12 @@ app.post('/api/payments/create-order', async (req, res) => {
   const { plan_type, period_months } = req.body;
 
   try {
+    const months = assertValidBillingPeriod(period_months);
     const KEY_ID = process.env.RAZORPAY_KEY_ID;
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     if (!KEY_ID || !KEY_SECRET) return res.status(500).json({ error: 'Razorpay credentials not configured' });
 
-    const amountRupees = calcAmount(plan_type, period_months);
+    const amountRupees = calcAmount(plan_type, months);
     const amountPaise = amountRupees * 100;
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
@@ -1196,7 +1206,7 @@ app.post('/api/payments/create-order', async (req, res) => {
         notes: {
           user_id: req.user.id,
           plan_type,
-          period_months: String(period_months),
+          period_months: String(months),
         },
       }),
     });
@@ -1224,6 +1234,7 @@ app.post('/api/payments/verify-payment', async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan_type, period_months } = req.body;
 
   try {
+    const months = assertValidBillingPeriod(period_months);
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
@@ -1236,7 +1247,7 @@ app.post('/api/payments/verify-payment', async (req, res) => {
     }
 
     const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + Number(period_months));
+    expiresAt.setMonth(expiresAt.getMonth() + months);
 
     const startDate = new Date();
     
@@ -1248,16 +1259,16 @@ app.post('/api/payments/verify-payment', async (req, res) => {
        status = EXCLUDED.status,
        expires_at = EXCLUDED.expires_at,
        razorpay_payment_id = EXCLUDED.razorpay_payment_id`,
-      [req.user.id, plan_type, 'active', period_months, expiresAt, razorpay_order_id, razorpay_payment_id, startDate, expiresAt, null]
+      [req.user.id, plan_type, 'active', months, expiresAt, razorpay_order_id, razorpay_payment_id, startDate, expiresAt, null]
     );
 
     // Send subscription confirmation email (non-blocking)
-    const amount = calcAmount(plan_type, Number(period_months));
+    const amount = calcAmount(plan_type, months);
     sendSubscriptionConfirmation({
       email: req.user.email,
       customerName: req.user.full_name || req.user.email,
       planType: plan_type,
-      periodMonths: Number(period_months),
+      periodMonths: months,
       amount,
       startDate,
       expiresAt,
@@ -1271,9 +1282,10 @@ app.post('/api/payments/verify-payment', async (req, res) => {
 
 app.post('/api/payments/create-addon-order', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  const { addon_type, quantity = 1, period_months = 1 } = req.body || {};
+  const { addon_type, quantity = 1, period_months } = req.body || {};
 
   try {
+    const months = assertValidBillingPeriod(period_months);
     const KEY_ID = process.env.RAZORPAY_KEY_ID;
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     if (!KEY_ID || !KEY_SECRET) {
@@ -1281,7 +1293,6 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
     }
 
     const qty = normalizeAddonQuantity(addon_type, quantity);
-    const months = Number(period_months) || 1;
     const amountRupees = calcAddonAmount(addon_type, qty, months);
     const amountPaise = amountRupees * 100;
 
@@ -1331,10 +1342,11 @@ app.post('/api/payments/verify-addon-payment', async (req, res) => {
     razorpay_signature,
     addon_type,
     quantity = 1,
-    period_months = 1,
+    period_months,
   } = req.body || {};
 
   try {
+    const months = assertValidBillingPeriod(period_months);
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
@@ -1347,7 +1359,6 @@ app.post('/api/payments/verify-addon-payment', async (req, res) => {
     }
 
     const qty = normalizeAddonQuantity(addon_type, quantity);
-    const months = Number(period_months) || 1;
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + months);
 

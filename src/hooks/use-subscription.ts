@@ -8,7 +8,11 @@ import {
   type PlanLimitsApi,
 } from "@/lib/entitlements";
 import type { PlanLimits, AddonType } from "@/lib/plans";
-import { ADDON_CATALOG, getAddonCatalogItem } from "@/lib/plans";
+import {
+  ADDON_CATALOG,
+  getAddonCatalogItem,
+  isValidBillingPeriodMonths,
+} from "@/lib/plans";
 import {
   BILLING_COMPLETE_EVENT,
   createMobileBillingLink,
@@ -301,6 +305,10 @@ export function useSubscription() {
         toast.error("Please log in first");
         return false;
       }
+      if (!isValidBillingPeriodMonths(periodMonths)) {
+        toast.error("Choose a billing period of 3, 6, or 12 months");
+        return false;
+      }
       if (isBanaooNativeApp()) {
         try {
           const url = await createMobileBillingLink({
@@ -391,6 +399,10 @@ export function useSubscription() {
       const item = getAddonCatalogItem(addonType);
       if (!item) {
         toast.error("Unknown add-on");
+        return false;
+      }
+      if (!isValidBillingPeriodMonths(periodMonths)) {
+        toast.error("Choose a billing period of 3, 6, or 12 months");
         return false;
       }
       if (isBanaooNativeApp()) {

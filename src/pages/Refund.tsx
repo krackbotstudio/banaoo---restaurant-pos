@@ -35,22 +35,22 @@ export default function Refund() {
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold">2. Monthly Subscription Refunds</h2>
+              <h2 className="text-lg font-semibold">2. 3-Month Subscription Refunds</h2>
               <p className="text-muted-foreground">
-                If you are on a monthly plan and are not satisfied, you may request a full refund within{" "}
+                If you are on a 3-month plan and are not satisfied, you may request a full refund within{" "}
                 <strong className="text-foreground">7 days of your first paid charge</strong>. After 7 days,
-                no refunds will be issued for the current billing cycle. Your access will continue until the
+                no refunds will be issued for the current billing period. Your access will continue until the
                 end of the paid period.
               </p>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold">3. Annual Subscription Refunds</h2>
+              <h2 className="text-lg font-semibold">3. 6- and 12-Month Subscription Refunds</h2>
               <p className="text-muted-foreground">
-                For annual plans, we offer a <strong className="text-foreground">prorated refund</strong> for
+                For 6- and 12-month plans, we offer a <strong className="text-foreground">prorated refund</strong> for
                 unused complete months if you cancel within the first{" "}
-                <strong className="text-foreground">30 days</strong> of your annual subscription. After 30
-                days, no refunds will be issued for annual plans. The refund will be calculated as:
+                <strong className="text-foreground">30 days</strong> of your subscription term. After 30
+                days, no refunds will be issued for those plans. The refund will be calculated as:
               </p>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
                 <p className="font-mono">
@@ -87,14 +87,14 @@ export default function Refund() {
               <p className="text-muted-foreground">The following are not eligible for refunds:</p>
               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
                 <li>
-                  Charges after the 7-day (monthly) or 30-day (annual) refund window has passed.
+                  Charges after the 7-day (3-month) or 30-day (6- and 12-month) refund window has passed.
                 </li>
                 <li>
                   Add-on services, custom integrations, or one-time setup fees already rendered.
                 </li>
                 <li>Subscription fees for accounts suspended due to Terms of Service violations.</li>
                 <li>
-                  Partial months — we do not issue prorated refunds for mid-cycle cancellations on monthly
+                  Partial months — we do not issue prorated refunds for mid-cycle cancellations on 3-month
                   plans.
                 </li>
               </ul>

@@ -70,8 +70,8 @@ export default function Terms() {
               <h2 className="text-lg font-semibold">4. Subscription and Payment</h2>
               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
                 <li>
-                  Subscription fees are charged in advance on a monthly or annual basis, depending on the plan
-                  you choose.
+                  Subscription fees are charged in advance for 3, 6, or 12 months, depending on the term you
+                  choose.
                 </li>
                 <li>
                   All prices are listed in Indian Rupees (INR) and are exclusive of applicable GST unless

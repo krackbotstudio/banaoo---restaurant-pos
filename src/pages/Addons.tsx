@@ -7,7 +7,10 @@ import { LimitIndicator } from "@/components/FeatureGate";
 import type { SubscriptionAddons } from "@/lib/entitlements";
 import {
   ADDON_CATALOG,
+  BILLING_PERIOD_MONTHS,
+  DEFAULT_BILLING_PERIOD_MONTHS,
   DISCOUNTS,
+  billingPeriodLabel,
   calcAddonTotal,
   getPlanDisplayName,
   type AddonType,
@@ -56,7 +59,7 @@ export default function Addons() {
     isNativeAppBilling,
   } = useSubscription();
   const { limits, usage } = useFeatureGating();
-  const [periodMonths, setPeriodMonths] = useState(1);
+  const [periodMonths, setPeriodMonths] = useState(DEFAULT_BILLING_PERIOD_MONTHS);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [paying, setPaying] = useState<string | null>(null);
 
@@ -132,9 +135,9 @@ export default function Addons() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[1, 3, 6, 12].map((m) => (
+              {BILLING_PERIOD_MONTHS.map((m) => (
                 <SelectItem key={m} value={String(m)}>
-                  {m} month{m > 1 ? "s" : ""}
+                  {billingPeriodLabel(m)}
                   {(DISCOUNTS[m] ?? 0) > 0
                     ? ` (${Math.round((DISCOUNTS[m] ?? 0) * 100)}% off)`
                     : ""}

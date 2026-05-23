@@ -59,6 +59,14 @@ serve(async (req) => {
       });
     }
 
+    const months = Number(period_months);
+    if (![3, 6, 12].includes(months)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid period_months. Choose 3, 6, or 12 months." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!KEY_SECRET) throw new Error("Razorpay credentials not configured");
 
@@ -75,7 +83,7 @@ serve(async (req) => {
 
     // Signature valid — calculate expiry and activate subscription
     const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + Number(period_months));
+    expiresAt.setMonth(expiresAt.getMonth() + months);
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -90,7 +98,7 @@ serve(async (req) => {
           user_id: user.id,
           plan_type,
           status: "active",
-          period_months,
+          period_months: months,
           expires_at: expiresAt.toISOString(),
           razorpay_order_id,
           razorpay_payment_id,
