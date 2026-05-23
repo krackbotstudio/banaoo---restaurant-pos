@@ -18,8 +18,8 @@ const systemPrompt = `You are the banaoo.in support assistant. banaoo.in is a re
 - Analytics & Reports - Track sales, orders, and performance
 
 **Pricing Plans:**
-- Launcher: ₹499/month (1 outlet, up to 5 staff, order/menu/KDS/analytics/table management, email support; no mobile app)
-- Growth: ₹699/month (Most Popular — same as Launcher plus mobile app access and priority support)
+- Launcher: ₹499/month (1 outlet, 1 staff account, order/menu/KDS/analytics/table management, email support; no mobile app)
+- Growth: ₹699/month (Most Popular — 1 outlet, 2 staff accounts, all Launcher features plus mobile app access and priority support)
 - Expand: Custom pricing (unlimited outlets, flexible staff, custom integrations, multi-branch management, dedicated support)
 - Add-ons on Launcher/Growth: extra outlet ₹300/month, extra staff ₹150/month per account
 

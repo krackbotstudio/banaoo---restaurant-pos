@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
+import * as WebBrowser from "expo-web-browser";
 import * as Updates from "expo-updates";
 import Constants from "expo-constants";
 import { APP_VERSION } from "../lib/app-version";
@@ -51,11 +52,13 @@ interface BridgeMessage {
   type:
     | "banaoo-native-print"
     | "banaoo-native-open-printers"
+    | "banaoo-native-open-billing"
     | "banaoo-native-sync-printer"
     | "banaoo-native-sync-self-service"
     | "banaoo-native-scan-bluetooth";
   role?: BridgeRole;
   requestId?: string;
+  url?: string;
   payload?: Record<string, unknown>;
   mode?: "ble" | "classic";
 }
@@ -67,6 +70,8 @@ const PAGE_READY_FAILSAFE_MS = 22_000;
 
 const INJECT_BEFORE_LOAD = `(function(){window.__BANAOO_NATIVE_PRINTER_BRIDGE__=true;window.__BANAOO_NATIVE_APP__=true;})();true;`;
 const INJECT_AFTER_LOAD = `(function(){try{Object.defineProperty(navigator,'serial',{value:undefined,configurable:true});}catch(e){}})();true;`;
+
+const INJECT_BILLING_COMPLETE = `(function(){try{window.dispatchEvent(new Event('banaoo-billing-complete'));}catch(e){}})();true;`;
 
 /** Chrome-like UA so PWAs that sniff WebView do not block the shell (Android). */
 const ANDROID_WEBVIEW_UA = `Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36 BanaooApp/${APP_VERSION}`;
@@ -100,6 +105,9 @@ function isValidMessage(data: unknown): data is BridgeMessage {
   if (!data || typeof data !== "object") return false;
   const candidate = data as Partial<BridgeMessage>;
   if (candidate.type === "banaoo-native-open-printers") return true;
+  if (candidate.type === "banaoo-native-open-billing") {
+    return typeof candidate.url === "string" && candidate.url.length > 0;
+  }
   if (candidate.type === "banaoo-native-sync-printer") return !!candidate.payload;
   if (candidate.type === "banaoo-native-sync-self-service") return !!candidate.payload;
   if (candidate.type === "banaoo-native-scan-bluetooth") {
@@ -239,6 +247,9 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     const onUrl = ({ url: incomingUrl }: { url: string }) => {
       if (incomingUrl.toLowerCase().startsWith("banaoo://")) {
         setLoadError(null);
+        if (incomingUrl.toLowerCase().includes("billing")) {
+          webViewRef.current?.injectJavaScript(INJECT_BILLING_COMPLETE);
+        }
         setReloadKey((prev) => prev + 1);
       }
     };
@@ -282,6 +293,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
       if (state === "active") {
         void checkForOtaUpdate();
         void checkForceUpdatePolicy();
+        webViewRef.current?.injectJavaScript(INJECT_BILLING_COMPLETE);
       }
     });
     return () => {
@@ -300,6 +312,18 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
     if (!isValidMessage(parsed)) return;
     if (parsed.type === "banaoo-native-open-printers") {
       onOpenPrinters();
+      return;
+    }
+
+    if (parsed.type === "banaoo-native-open-billing" && parsed.url) {
+      try {
+        await WebBrowser.openBrowserAsync(parsed.url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          showInRecents: true,
+        });
+      } catch {
+        await Linking.openURL(parsed.url);
+      }
       return;
     }
 

@@ -5,7 +5,13 @@ import { useStaffPermissions } from "@/lib/use-staff-permissions";
 import { Loader2 } from "lucide-react";
 
 // Routes that don't require onboarding to be done
-const ONBOARDING_EXEMPT_ROUTES = ["/onboarding", "/settings", "/account-pending", "/admin/accounts"];
+const ONBOARDING_EXEMPT_ROUTES = [
+  "/onboarding",
+  "/settings",
+  "/account-pending",
+  "/admin/accounts",
+  "/billing/checkout",
+];
 
 /** Maps a URL pathname to the permission key needed to access it (staff only). */
 function getRoutePermissionKey(pathname: string): string | null {
@@ -81,8 +87,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Pending accounts wait for admin approval
-    if (profile.account_status === "pending" && location.pathname !== "/account-pending") {
+    // Pending accounts wait for admin approval (except browser billing checkout)
+    if (
+      profile.account_status === "pending" &&
+      location.pathname !== "/account-pending" &&
+      !location.pathname.startsWith("/billing/checkout")
+    ) {
       navigate("/account-pending");
       return;
     }

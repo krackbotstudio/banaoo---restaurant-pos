@@ -6,7 +6,10 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useFeatureGating } from "@/hooks/use-feature-gating";
 import { LimitIndicator } from "@/components/FeatureGate";
 import {
+  BILLING_PERIOD_MONTHS,
+  DEFAULT_BILLING_PERIOD_MONTHS,
   DISCOUNTS,
+  billingPeriodLabel,
   calcPlanTotal,
   calcPlanSavings,
   getPlanDisplayName,
@@ -82,6 +85,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
+import { isBanaooNativeApp, openBillingSettingsInBrowser } from "@/lib/native-app-bridge";
 import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
 import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
 import { UpiQrUpload } from "@/components/payments/UpiQrUpload";
@@ -98,6 +102,7 @@ export default function Settings() {
     daysUntilExpiry,
     createOrder,
     cancelSubscription,
+    isNativeAppBilling,
   } = useSubscription();
   const { isWithinLimit, usage, getUpgradeMessage } = useFeatureGating();
   const { 
@@ -112,10 +117,25 @@ export default function Settings() {
   
   const { theme, setTheme } = useTheme();
   const { currentOutlet, outlets, setCurrentOutlet, canSwitchOutlets } = useOutlet();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab") || "profile";
+    if (isBanaooNativeApp() && tab === "subscription") return "profile";
+    return tab;
+  });
+
+  const handleSettingsTabChange = (nextTab: string) => {
+    if (isNativeAppBilling && nextTab === "subscription") {
+      void openBillingSettingsInBrowser("subscription").catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Could not open browser");
+      });
+      return;
+    }
+    setActiveTab(nextTab);
+    if (nextTab === "outlets") void fetchOutletsList();
+  };
 
   // Subscription / plan state
-  const [planMonths, setPlanMonths] = useState(1);
+  const [planMonths, setPlanMonths] = useState(DEFAULT_BILLING_PERIOD_MONTHS);
   const [payingPlan, setPayingPlan] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [openingNativePrinters, setOpeningNativePrinters] = useState(false);
@@ -171,6 +191,12 @@ export default function Settings() {
 
   useEffect(() => {
     if (searchParams.get("tab") === "outlets") fetchOutletsList();
+    if (isNativeAppBilling && searchParams.get("tab") === "subscription") {
+      void openBillingSettingsInBrowser("subscription").catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Could not open browser");
+      });
+      navigate("/settings?tab=profile", { replace: true });
+    }
   }, []);
 
   useEffect(() => {
@@ -379,20 +405,11 @@ export default function Settings() {
 
         <Tabs
           value={activeTab}
-          onValueChange={(nextTab) => {
-            setActiveTab(nextTab);
-            if (nextTab === "outlets") void fetchOutletsList();
-          }}
+          onValueChange={handleSettingsTabChange}
           className="space-y-6"
         >
           <div className="sm:hidden sticky top-14 z-40 border-b border-border bg-background/95 py-3 px-3 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-background/85">
-            <Select
-              value={activeTab}
-              onValueChange={(nextTab) => {
-                setActiveTab(nextTab);
-                if (nextTab === "outlets") void fetchOutletsList();
-              }}
-            >
+            <Select value={activeTab} onValueChange={handleSettingsTabChange}>
               <SelectTrigger className="h-11 min-h-[44px] w-full rounded-lg border-border bg-background text-left font-medium">
                 <SelectValue placeholder="Select settings section" />
               </SelectTrigger>
@@ -400,14 +417,18 @@ export default function Settings() {
                 <SelectItem value="profile">Profile</SelectItem>
                 <SelectItem value="outlets">Outlets</SelectItem>
                 <SelectItem value="branding">Branding</SelectItem>
-                <SelectItem value="subscription">Subscription</SelectItem>
+                {!isNativeAppBilling && <SelectItem value="subscription">Subscription</SelectItem>}
                 <SelectItem value="notifications">Notifications</SelectItem>
                 <SelectItem value="preferences">Security</SelectItem>
                 <SelectItem value="printers">Printers</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <TabsList className="hidden h-auto min-h-12 w-full gap-1.5 p-1.5 sm:grid sm:grid-cols-7">
+          <TabsList
+            className={`hidden h-auto min-h-12 w-full gap-1.5 p-1.5 sm:grid ${
+              isNativeAppBilling ? "sm:grid-cols-6" : "sm:grid-cols-7"
+            }`}
+          >
             <TabsTrigger value="profile" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>
@@ -420,10 +441,12 @@ export default function Settings() {
               <Palette className="h-4 w-4" />
               <span className="hidden sm:inline">Branding</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="gap-1.5 px-2 py-2.5 sm:px-3">
-              <CreditCard className="h-4 w-4" />
-              <span className="hidden sm:inline">Subscription</span>
-            </TabsTrigger>
+            {!isNativeAppBilling && (
+              <TabsTrigger value="subscription" className="gap-1.5 px-2 py-2.5 sm:px-3">
+                <CreditCard className="h-4 w-4" />
+                <span className="hidden sm:inline">Subscription</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="notifications" className="relative gap-1.5 px-2 py-2.5 sm:px-3">
               <Bell className="h-4 w-4" />
               <span className="hidden sm:inline">Notifications</span>
@@ -524,6 +547,35 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+
+            {isNativeAppBilling && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                    Subscription & billing
+                  </CardTitle>
+                  <CardDescription>
+                    Renew or change your plan in your browser (required for Play Store billing). Add-ons
+                    stay in the app under Add-ons.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => {
+                      void openBillingSettingsInBrowser("subscription").catch((err) => {
+                        toast.error(err instanceof Error ? err.message : "Could not open browser");
+                      });
+                    }}
+                  >
+                    Manage subscription in browser
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to="/addons">Add-ons</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border-destructive/50">
               <CardHeader>
@@ -975,7 +1027,8 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          {/* Subscription Tab */}
+          {/* Subscription Tab (web only — native app opens browser) */}
+          {!isNativeAppBilling && (
           <TabsContent value="subscription" className="space-y-6">
 
             {/* Current Plan Status */}
@@ -1086,9 +1139,11 @@ export default function Settings() {
                   {hasActiveSubscription ? "Renew or Change Plan" : "Choose a Plan"}
                 </CardTitle>
                 <CardDescription>
-                  {hasActiveSubscription
-                    ? "Renew your current plan or switch to a different one. Payment extends from today."
-                    : "Select a plan and duration to activate your subscription via Razorpay."}
+                  {isNativeAppBilling
+                    ? "Subscription payment opens in your browser (Play Store policy). Return to the app after paying."
+                    : hasActiveSubscription
+                      ? "Renew your current plan or switch to a different one. Payment extends from today."
+                      : "Select a plan and duration to activate your subscription via Razorpay."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1096,7 +1151,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Select Duration</p>
                   <div className="flex gap-2 flex-wrap">
-                    {([1, 3, 6, 12] as const).map((m) => {
+                    {BILLING_PERIOD_MONTHS.map((m) => {
                       const disc = DISCOUNTS[m];
                       return (
                         <button
@@ -1108,7 +1163,7 @@ export default function Settings() {
                               : "bg-background border-border hover:border-primary/50"
                           }`}
                         >
-                          {m === 1 ? "1 Month" : m === 3 ? "3 Months" : m === 6 ? "6 Months" : "12 Months"}
+                          {billingPeriodLabel(m)}
                           {disc > 0 && (
                             <span className={`ml-1.5 text-[10px] font-bold ${planMonths === m ? "text-primary-foreground/80" : "text-green-600"}`}>
                               -{disc * 100}%
@@ -1136,11 +1191,11 @@ export default function Settings() {
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
-                          <span className="text-muted-foreground text-sm"> / {planMonths === 1 ? "month" : `${planMonths} months`}</span>
+                          <span className="text-muted-foreground text-sm"> / {planMonths} months</span>
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">
-                          {["1 Outlet", "Up to 5 staff accounts", "Order, menu, kitchen & table management", "Analytics & reports", "Email support"].map((f) => (
+                          {["1 Outlet", "1 staff account", "Order, menu, kitchen & table management", "Analytics & reports", "Email support"].map((f) => (
                             <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                           ))}
                         </ul>
@@ -1150,7 +1205,13 @@ export default function Settings() {
                           disabled={!!payingPlan}
                           onClick={() => handlePay("starter")}
                         >
-                          {payingPlan === "starter" ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Opening…</> : `Pay ₹${total.toLocaleString("en-IN")}`}
+                          {payingPlan === "starter" ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Opening…</>
+                          ) : isNativeAppBilling ? (
+                            `Continue in browser · ₹${total.toLocaleString("en-IN")}`
+                          ) : (
+                            `Pay ₹${total.toLocaleString("en-IN")}`
+                          )}
                         </Button>
                       </div>
                     );
@@ -1174,11 +1235,11 @@ export default function Settings() {
                         </div>
                         <div>
                           <span className="text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
-                          <span className="text-muted-foreground text-sm"> / {planMonths === 1 ? "month" : `${planMonths} months`}</span>
+                          <span className="text-muted-foreground text-sm"> / {planMonths} months</span>
                           {savings > 0 && <p className="text-xs text-green-600 font-medium mt-0.5">Save ₹{savings.toLocaleString("en-IN")}</p>}
                         </div>
                         <ul className="space-y-1.5 flex-1 text-sm">
-                          {["1 Outlet", "Up to 5 staff accounts", "All Launcher features", "Mobile app access", "Priority support"].map((f) => (
+                          {["1 Outlet", "2 staff accounts", "All Launcher features", "Mobile app access", "Priority support"].map((f) => (
                             <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                           ))}
                         </ul>
@@ -1187,7 +1248,13 @@ export default function Settings() {
                           disabled={!!payingPlan}
                           onClick={() => handlePay("professional")}
                         >
-                          {payingPlan === "professional" ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Opening…</> : `Pay ₹${total.toLocaleString("en-IN")}`}
+                          {payingPlan === "professional" ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Opening…</>
+                          ) : isNativeAppBilling ? (
+                            `Continue in browser · ₹${total.toLocaleString("en-IN")}`
+                          ) : (
+                            `Pay ₹${total.toLocaleString("en-IN")}`
+                          )}
                         </Button>
                       </div>
                     );
@@ -1215,6 +1282,7 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
 
           {/* Notifications Tab */}
           <TabsContent value="notifications" className="space-y-6">

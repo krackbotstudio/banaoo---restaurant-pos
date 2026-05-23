@@ -12,9 +12,10 @@ const BASE_PRICES: Record<string, number> = {
   professional: 699,
 };
 
+const BILLING_PERIOD_MONTHS = [3, 6, 12];
+
 // Discount by duration
 const DISCOUNTS: Record<number, number> = {
-  1: 0,
   3: 0.05,
   6: 0.10,
   12: 0.20,
@@ -65,11 +66,19 @@ serve(async (req) => {
       });
     }
 
+    const months = Number(period_months);
+    if (!BILLING_PERIOD_MONTHS.includes(months)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid period_months. Choose 3, 6, or 12 months." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID");
     const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!KEY_ID || !KEY_SECRET) throw new Error("Razorpay credentials not configured");
 
-    const amountRupees = calcAmount(plan_type, period_months);
+    const amountRupees = calcAmount(plan_type, months);
     const amountPaise = amountRupees * 100;
 
     // Create Razorpay order
@@ -86,7 +95,7 @@ serve(async (req) => {
         notes: {
           user_id: user.id,
           plan_type,
-          period_months: String(period_months),
+          period_months: String(months),
         },
       }),
     });

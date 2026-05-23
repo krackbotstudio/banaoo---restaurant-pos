@@ -7,7 +7,10 @@ import { LimitIndicator } from "@/components/FeatureGate";
 import type { SubscriptionAddons } from "@/lib/entitlements";
 import {
   ADDON_CATALOG,
+  BILLING_PERIOD_MONTHS,
+  DEFAULT_BILLING_PERIOD_MONTHS,
   DISCOUNTS,
+  billingPeriodLabel,
   calcAddonTotal,
   getPlanDisplayName,
   type AddonType,
@@ -25,6 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Package, CheckCircle2, ArrowLeft } from "lucide-react";
+import { NativeBillingLinkButton } from "@/components/billing/NativeBillingLinkButton";
+import { isBanaooNativeApp } from "@/lib/native-app-bridge";
 
 function addonOwnedLabel(type: AddonType, addons: SubscriptionAddons): string | null {
   if (type === "extra_outlet" && addons.extra_outlets > 0) {
@@ -51,9 +56,10 @@ export default function Addons() {
     hasActiveSubscription,
     purchaseAddon,
     addons,
+    isNativeAppBilling,
   } = useSubscription();
   const { limits, usage } = useFeatureGating();
-  const [periodMonths, setPeriodMonths] = useState(1);
+  const [periodMonths, setPeriodMonths] = useState(DEFAULT_BILLING_PERIOD_MONTHS);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [paying, setPaying] = useState<string | null>(null);
 
@@ -80,7 +86,7 @@ export default function Addons() {
       <div className="max-w-4xl mx-auto space-y-6 pb-10">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild>
-            <Link to="/settings?tab=subscription">
+            <Link to={isBanaooNativeApp() ? "/settings" : "/settings?tab=subscription"}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -90,7 +96,8 @@ export default function Addons() {
               Add-ons
             </h1>
             <p className="text-sm text-muted-foreground">
-              Extend your {getPlanDisplayName(subscription?.plan_type)} plan with extra capacity and integrations
+              Extend your {getPlanDisplayName(subscription?.plan_type)} plan with extra capacity and integrations.
+              {isNativeAppBilling && " Purchases open in your browser — return to the app when done."}
             </p>
           </div>
         </div>
@@ -99,9 +106,13 @@ export default function Addons() {
           <Card className="border-amber-500/40 bg-amber-500/5">
             <CardContent className="p-4 text-sm">
               You need an active subscription before purchasing add-ons.{" "}
-              <Link to="/settings?tab=subscription" className="text-primary font-medium underline">
+              <NativeBillingLinkButton
+                webTo="/settings?tab=subscription"
+                variant="link"
+                className="h-auto p-0 text-primary font-medium underline"
+              >
                 Choose a plan
-              </Link>
+              </NativeBillingLinkButton>
             </CardContent>
           </Card>
         )}
@@ -124,9 +135,9 @@ export default function Addons() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[1, 3, 6, 12].map((m) => (
+              {BILLING_PERIOD_MONTHS.map((m) => (
                 <SelectItem key={m} value={String(m)}>
-                  {m} month{m > 1 ? "s" : ""}
+                  {billingPeriodLabel(m)}
                   {(DISCOUNTS[m] ?? 0) > 0
                     ? ` (${Math.round((DISCOUNTS[m] ?? 0) * 100)}% off)`
                     : ""}
@@ -221,6 +232,8 @@ export default function Addons() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : alreadyHas && !item.stackable ? (
                       "Already active"
+                    ) : isNativeAppBilling ? (
+                      `Continue in browser — ₹${total.toLocaleString("en-IN")}`
                     ) : (
                       `Purchase — ₹${total.toLocaleString("en-IN")}`
                     )}

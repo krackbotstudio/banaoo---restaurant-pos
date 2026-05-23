@@ -8,7 +8,17 @@ import {
   type PlanLimitsApi,
 } from "@/lib/entitlements";
 import type { PlanLimits, AddonType } from "@/lib/plans";
-import { ADDON_CATALOG, getAddonCatalogItem } from "@/lib/plans";
+import {
+  ADDON_CATALOG,
+  getAddonCatalogItem,
+  isValidBillingPeriodMonths,
+} from "@/lib/plans";
+import {
+  BILLING_COMPLETE_EVENT,
+  createMobileBillingLink,
+  isBanaooNativeApp,
+  openBillingInExternalBrowser,
+} from "@/lib/native-app-bridge";
 
 export interface Subscription {
   id: string;
@@ -202,6 +212,14 @@ export function useSubscription() {
     }
   }, [fetchSubscription, profileLoading]);
 
+  useEffect(() => {
+    const onBillingComplete = () => {
+      void fetchSubscription();
+    };
+    window.addEventListener(BILLING_COMPLETE_EVENT, onBillingComplete);
+    return () => window.removeEventListener(BILLING_COMPLETE_EVENT, onBillingComplete);
+  }, [fetchSubscription]);
+
   const expiresAt = subscription?.expires_at
     ? new Date(subscription.expires_at)
     : subscription?.trial_ends_at
@@ -287,6 +305,29 @@ export function useSubscription() {
         toast.error("Please log in first");
         return false;
       }
+      if (!isValidBillingPeriodMonths(periodMonths)) {
+        toast.error("Choose a billing period of 3, 6, or 12 months");
+        return false;
+      }
+      if (isBanaooNativeApp()) {
+        try {
+          const url = await createMobileBillingLink({
+            kind: "subscription",
+            plan_type: planType,
+            period_months: periodMonths,
+          });
+          openBillingInExternalBrowser(url);
+          toast.info(
+            "Opening your browser to complete payment. Return to the app when finished."
+          );
+          return true;
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Could not open browser checkout"
+          );
+          return false;
+        }
+      }
       try {
         const API_URL = import.meta.env.VITE_API_URL ?? "";
         const res = await fetch(`${API_URL}/api/payments/create-order`, {
@@ -359,6 +400,30 @@ export function useSubscription() {
       if (!item) {
         toast.error("Unknown add-on");
         return false;
+      }
+      if (!isValidBillingPeriodMonths(periodMonths)) {
+        toast.error("Choose a billing period of 3, 6, or 12 months");
+        return false;
+      }
+      if (isBanaooNativeApp()) {
+        try {
+          const url = await createMobileBillingLink({
+            kind: "addon",
+            addon_type: addonType,
+            quantity,
+            period_months: periodMonths,
+          });
+          openBillingInExternalBrowser(url);
+          toast.info(
+            "Opening your browser to complete payment. Return to the app when finished."
+          );
+          return true;
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Could not open browser checkout"
+          );
+          return false;
+        }
       }
       try {
         const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -471,5 +536,6 @@ export function useSubscription() {
     cancelSubscription,
     refetch: fetchSubscription,
     addonCatalog: ADDON_CATALOG,
+    isNativeAppBilling: isBanaooNativeApp(),
   };
 }

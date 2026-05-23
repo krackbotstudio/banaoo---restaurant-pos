@@ -61,12 +61,28 @@ export const BASE_PRICES: Record<PaidPlanId, number> = {
   professional: 699,
 };
 
+/** Allowed subscription / add-on billing lengths (1-month removed). */
+export const BILLING_PERIOD_MONTHS = [3, 6, 12] as const;
+export type BillingPeriodMonths = (typeof BILLING_PERIOD_MONTHS)[number];
+export const DEFAULT_BILLING_PERIOD_MONTHS: BillingPeriodMonths = 3;
+
 export const DISCOUNTS: Record<number, number> = {
-  1: 0,
   3: 0.05,
   6: 0.1,
   12: 0.2,
 };
+
+export function isValidBillingPeriodMonths(months: number): months is BillingPeriodMonths {
+  return (BILLING_PERIOD_MONTHS as readonly number[]).includes(months);
+}
+
+export function billingPeriodLabel(months: number): string {
+  if (months === 3) return "3 Months";
+  if (months === 6) return "6 Months";
+  if (months === 12) return "12 Months";
+  if (months === 1) return "1 Month";
+  return `${months} months`;
+}
 
 export const ADDON_PRICES = {
   extraOutletPerMonth: 250,
@@ -132,7 +148,7 @@ export const PLANS: PlanDefinition[] = [
     ctaAction: "auth",
     highlights: [
       "1 Outlet",
-      "Up to 5 staff accounts",
+      "1 staff account",
       "Order, menu, kitchen & table management",
       "Analytics & reports",
       "Email support",
@@ -148,7 +164,7 @@ export const PLANS: PlanDefinition[] = [
     ctaAction: "auth",
     highlights: [
       "1 Outlet",
-      "Up to 5 staff accounts",
+      "2 staff accounts",
       "All Launcher features",
       "Mobile app access",
       "Priority support",
@@ -176,7 +192,7 @@ export const PLANS: PlanDefinition[] = [
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   starter: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 1,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,
@@ -191,7 +207,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   },
   professional: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 2,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,
@@ -262,8 +278,8 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: "Staff Accounts Included",
-    starter: { kind: "text", value: "Up to 5 Staff" },
-    professional: { kind: "text", value: "Up to 5 Staff" },
+    starter: { kind: "text", value: "1 Staff" },
+    professional: { kind: "text", value: "2 Staff" },
     enterprise: { kind: "text", value: "Flexible Scaling" },
   },
   { label: "Order Management", starter: { kind: "check" }, professional: { kind: "check" }, enterprise: { kind: "check" } },
