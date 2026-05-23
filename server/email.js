@@ -3,11 +3,11 @@
 const PLAN_DETAILS = {
   starter: {
     name: 'Launcher',
-    features: ['1 outlet', 'Up to 5 staff', 'Order, menu, kitchen & table management', 'Analytics & reports', 'Email support'],
+    features: ['1 outlet', '1 staff account', 'Order, menu, kitchen & table management', 'Analytics & reports', 'Email support'],
   },
   professional: {
     name: 'Growth',
-    features: ['1 outlet', 'Up to 5 staff', 'All Launcher features', 'Mobile app access', 'Priority support'],
+    features: ['1 outlet', '2 staff accounts', 'All Launcher features', 'Mobile app access', 'Priority support'],
   },
   enterprise: {
     name: 'Expand',

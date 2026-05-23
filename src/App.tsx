@@ -26,6 +26,7 @@ const Orders = lazy(() => import("./pages/Orders"));
 const NewOrder = lazy(() => import("./pages/NewOrder"));
 const Kitchen = lazy(() => import("./pages/Kitchen"));
 const Payments = lazy(() => import("./pages/Payments"));
+const BillingCheckout = lazy(() => import("./pages/BillingCheckout"));
 const Staff = lazy(() => import("./pages/Staff"));
 const About = lazy(() => import("./pages/About"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -113,6 +114,7 @@ const App = () => (
 
                   {/* OAuth callback — silent redirect handler, no landing page */}
                   <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="/billing/checkout" element={<ProtectedRoute><BillingCheckout /></ProtectedRoute>} />
 
                   {/* Account pending — requires auth, exempt from all checks */}
                   <Route path="/account-pending" element={<ProtectedRoute><AccountPending /></ProtectedRoute>} />

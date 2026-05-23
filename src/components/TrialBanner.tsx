@@ -1,8 +1,7 @@
-import { Link } from "react-router-dom";
 import { AlertCircle, Clock, CreditCard, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useState } from "react";
+import { NativeBillingLinkButton } from "@/components/billing/NativeBillingLinkButton";
 
 export function TrialBanner() {
   const { hasActiveSubscription, daysUntilExpiry, loading } = useSubscription();
@@ -23,12 +22,15 @@ export function TrialBanner() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" className="shrink-0 h-7 text-xs" asChild>
-              <Link to="/settings?tab=subscription">
-                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-                Renew Now
-              </Link>
-            </Button>
+            <NativeBillingLinkButton
+              webTo="/settings?tab=subscription"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 h-7 text-xs"
+            >
+              <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+              Renew Now
+            </NativeBillingLinkButton>
             <button
               onClick={() => setIsDismissed(true)}
               className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -54,12 +56,15 @@ export function TrialBanner() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" className="shrink-0 h-7 text-xs" asChild>
-              <Link to="/settings?tab=subscription">
-                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-                Renew Now
-              </Link>
-            </Button>
+            <NativeBillingLinkButton
+              webTo="/settings?tab=subscription"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 h-7 text-xs"
+            >
+              <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+              Renew Now
+            </NativeBillingLinkButton>
             <button
               onClick={() => setIsDismissed(true)}
               className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -84,12 +89,15 @@ export function TrialBanner() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" className="shrink-0 h-7 text-xs" asChild>
-            <Link to="/settings?tab=subscription">
-              <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-              Renew Plan
-            </Link>
-          </Button>
+          <NativeBillingLinkButton
+            webTo="/settings?tab=subscription"
+            size="sm"
+            variant="secondary"
+            className="shrink-0 h-7 text-xs"
+          >
+            <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+            Renew Plan
+          </NativeBillingLinkButton>
           <button
             onClick={() => setIsDismissed(true)}
             className="p-1 hover:bg-white/10 rounded transition-colors"

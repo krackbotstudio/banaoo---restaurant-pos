@@ -7,25 +7,29 @@ import { Target, Heart, Lightbulb, Users, ArrowRight } from "lucide-react";
 
 const values = [
   {
-    icon: Target,
-    title: "Mission-Driven",
-    description: "We're on a mission to make restaurant management accessible and efficient for everyone."
+    icon: Heart,
+    title: "Customer-Centric",
+    description:
+      "Our customers, their problems, and the product experience they deserve sit at the centre of every decision we make.",
   },
   {
-    icon: Heart,
-    title: "Customer-First",
-    description: "Every feature we build starts with understanding our customers' real needs."
+    icon: Target,
+    title: "Problem Solvers",
+    description:
+      "We listen first, then build. Every feature exists to remove a real friction point restaurant teams face every day.",
   },
   {
     icon: Lightbulb,
-    title: "Innovation",
-    description: "We constantly push boundaries to bring the latest technology to your restaurant."
+    title: "Emerging Tech",
+    description:
+      "We embrace modern tools and thoughtful engineering to craft software that is fast, reliable, and built for how food businesses actually work.",
   },
   {
     icon: Users,
-    title: "Community",
-    description: "We believe in building a strong community of restaurant owners helping each other."
-  }
+    title: "Food Industry at Heart",
+    description:
+      "We have always been drawn to the food industry—its pace, its people, and the complex operational puzzles behind every great meal served.",
+  },
 ];
 
 export default function About() {
@@ -40,7 +44,7 @@ export default function About() {
             About banaoo.io
           </h1>
           <p className="text-muted-foreground text-lg">
-            We're building the future of restaurant management, one feature at a time.
+            Passionate problem solvers building meaningful technology for restaurants and food businesses.
           </p>
         </div>
       </section>
@@ -52,16 +56,23 @@ export default function About() {
             <h2 className="text-2xl md:text-3xl font-bold">Our Story</h2>
             <div className="text-muted-foreground space-y-4 text-left md:text-center">
               <p>
-                banaoo.io was born out of frustration. As restaurant owners ourselves, we struggled 
-                with clunky, expensive, and outdated POS systems that didn't meet our needs.
+                banaoo.io began with a simple obsession: the food industry is full of talented
+                people held back by messy tools, fragmented workflows, and software that was never
+                designed around how a real service floor actually runs.
               </p>
               <p>
-                In 2023, we decided to build something better. A system that's intuitive, affordable, 
-                and powerful enough to handle everything from a small café to a multi-outlet restaurant chain.
+                We are passionate problem solvers who have always been keen on this space. We love
+                untangling complex operational challenges and turning them into clear, effective
+                product experiences powered by emerging technology.
               </p>
               <p>
-                Today, banaoo.io serves hundreds of restaurants across the country, helping them 
-                streamline operations, delight customers, and grow their businesses.
+                Our product thinking, roadmap, and day-to-day work revolve around one question: what
+                problem is our customer facing right now, and how do we solve it in a way that feels
+                simple on the surface and dependable underneath?
+              </p>
+              <p>
+                banaoo.io helps restaurants run orders, kitchens, billing, and customer-facing flows
+                with software that stays customer-centric—because your success is the measure of ours.
               </p>
             </div>
           </div>
@@ -119,7 +130,7 @@ export default function About() {
             Ready to Join Us?
           </h2>
           <p className="text-primary-foreground/80 max-w-xl mx-auto">
-            Start your free trial today and see why hundreds of restaurants trust banaoo.io.
+            Start your free trial today and see how a product built around your problems can work for your restaurant.
           </p>
           <Button size="lg" variant="secondary" asChild className="gap-2">
             <Link to="/auth">

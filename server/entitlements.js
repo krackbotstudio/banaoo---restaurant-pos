@@ -3,7 +3,7 @@ import pool from './db.js';
 const PLAN_LIMITS = {
   starter: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 1,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,
@@ -18,7 +18,7 @@ const PLAN_LIMITS = {
   },
   professional: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 2,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,

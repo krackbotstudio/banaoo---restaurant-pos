@@ -132,7 +132,7 @@ export const PLANS: PlanDefinition[] = [
     ctaAction: "auth",
     highlights: [
       "1 Outlet",
-      "Up to 5 staff accounts",
+      "1 staff account",
       "Order, menu, kitchen & table management",
       "Analytics & reports",
       "Email support",
@@ -148,7 +148,7 @@ export const PLANS: PlanDefinition[] = [
     ctaAction: "auth",
     highlights: [
       "1 Outlet",
-      "Up to 5 staff accounts",
+      "2 staff accounts",
       "All Launcher features",
       "Mobile app access",
       "Priority support",
@@ -176,7 +176,7 @@ export const PLANS: PlanDefinition[] = [
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   starter: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 1,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,
@@ -191,7 +191,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   },
   professional: {
     outlets: 1,
-    staffAccounts: 5,
+    staffAccounts: 2,
     kitchenDisplay: true,
     analytics: true,
     tableManagement: true,
@@ -262,8 +262,8 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: "Staff Accounts Included",
-    starter: { kind: "text", value: "Up to 5 Staff" },
-    professional: { kind: "text", value: "Up to 5 Staff" },
+    starter: { kind: "text", value: "1 Staff" },
+    professional: { kind: "text", value: "2 Staff" },
     enterprise: { kind: "text", value: "Flexible Scaling" },
   },
   { label: "Order Management", starter: { kind: "check" }, professional: { kind: "check" }, enterprise: { kind: "check" } },
