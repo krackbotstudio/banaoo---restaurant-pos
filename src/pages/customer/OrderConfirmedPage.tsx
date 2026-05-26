@@ -106,7 +106,7 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
 
       <button
         onClick={() => navigate(resolvedBase)}
-        className="w-full flex items-center justify-center gap-2 bg-primary text-white font-semibold py-3 rounded-xl text-sm"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-3 rounded-xl text-sm"
       >
         <UtensilsCrossed className="h-4 w-4" />
         Order More Items

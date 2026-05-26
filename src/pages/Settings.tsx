@@ -15,6 +15,7 @@ import {
   getPlanDisplayName,
   type PaidPlanId,
 } from "@/lib/plans";
+import { BUSINESS_TYPES } from "@/lib/business-types";
 import { useNotifications } from "@/hooks/use-notifications";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -521,12 +522,12 @@ export default function Settings() {
                       <SelectValue placeholder="Select your business type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="restaurant">Restaurant — Dine-in & takeaway</SelectItem>
-                      <SelectItem value="hotel">Hotel — Hotel dining & room service</SelectItem>
-                      <SelectItem value="cloud_kitchen">Cloud Kitchen — Delivery-only kitchen</SelectItem>
-                      <SelectItem value="cafe">Cafe — Coffee shop & cafe</SelectItem>
-                      <SelectItem value="qsr">QSR — Quick service restaurant</SelectItem>
-                      <SelectItem value="bar">Bar & Lounge — Bar, pub & lounge</SelectItem>
+                      {BUSINESS_TYPES.map(({ id, label, description, comingSoon }) => (
+                        <SelectItem key={id} value={id} disabled={comingSoon}>
+                          {label} — {description}
+                          {comingSoon && " (Coming soon)"}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

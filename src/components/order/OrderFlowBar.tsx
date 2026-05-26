@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { Utensils, Package, ChevronLeft, Store } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getOrderModeBadge } from "@/lib/business-types";
 
 interface OrderFlowBarProps {
   flowStep: "menu" | "review";
@@ -8,7 +9,15 @@ interface OrderFlowBarProps {
   tableNumber: string;
   onChangeType: () => void;
   selfService?: boolean;
+  /** Owner's profile.business_type (drives the chip label/icon). */
+  businessType?: string | null;
 }
+
+const VARIANT_CLASSES: Record<"primary" | "warning" | "info", string> = {
+  primary: "border-primary/40 bg-primary/10 text-primary",
+  warning: "border-orange-400/50 bg-orange-50 text-orange-700",
+  info: "border-blue-400/50 bg-blue-50 text-blue-700",
+};
 
 export function OrderFlowBar({
   flowStep,
@@ -16,14 +25,16 @@ export function OrderFlowBar({
   tableNumber,
   onChangeType,
   selfService = false,
+  businessType,
 }: OrderFlowBarProps) {
-  const typeLabel = selfService
-    ? "Self Service"
-    : orderType === "dine_in"
-      ? tableNumber
-        ? `Dine In · Table ${tableNumber}`
-        : "Dine In"
-      : "Takeaway";
+  const badge = getOrderModeBadge(businessType, selfService, orderType);
+  const Icon = badge.icon;
+
+  // Dine-in includes the table number when one's been picked.
+  const typeLabel =
+    !selfService && orderType === "dine_in" && tableNumber
+      ? `${badge.label} · Table ${tableNumber}`
+      : badge.label;
 
   const stepLabel = selfService
     ? flowStep === "menu"
@@ -49,20 +60,10 @@ export function OrderFlowBar({
       <div
         className={cn(
           "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border",
-          selfService
-            ? "border-orange-400/50 bg-orange-50 text-orange-700"
-            : orderType === "dine_in"
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-orange-400/50 bg-orange-50 text-orange-700"
+          VARIANT_CLASSES[badge.variant]
         )}
       >
-        {selfService ? (
-          <Store className="h-3.5 w-3.5" />
-        ) : orderType === "dine_in" ? (
-          <Utensils className="h-3.5 w-3.5" />
-        ) : (
-          <Package className="h-3.5 w-3.5" />
-        )}
+        <Icon className="h-3.5 w-3.5" />
         {typeLabel}
       </div>
       <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

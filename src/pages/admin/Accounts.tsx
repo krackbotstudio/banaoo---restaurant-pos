@@ -21,7 +21,16 @@ import {
   Smartphone,
   Wallet,
   Ban,
+  ShieldCheck,
+  ShieldAlert,
+  Info,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +48,10 @@ interface Account {
   account_status: string;
   onboarding_completed: boolean;
   created_at: string;
+  terms_accepted_at: string | null;
+  terms_version: string | null;
+  terms_accepted_ip: string | null;
+  terms_accepted_user_agent: string | null;
 }
 
 interface MobileAppLead {
@@ -456,6 +469,58 @@ export default function AdminAccounts() {
                                 <p className="text-xs text-muted-foreground">
                                   Registered {format(new Date(account.created_at), "MMM d, yyyy 'at' h:mm a")}
                                 </p>
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  {account.terms_accepted_at ? (
+                                    <>
+                                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                      <span className="text-muted-foreground">
+                                        T&amp;C accepted{" "}
+                                        {format(new Date(account.terms_accepted_at), "MMM d, yyyy")}
+                                        {account.terms_version
+                                          ? ` · v${account.terms_version}`
+                                          : ""}
+                                      </span>
+                                      {(account.terms_accepted_ip || account.terms_accepted_user_agent) && (
+                                        <TooltipProvider delayDuration={150}>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <button
+                                                type="button"
+                                                className="text-muted-foreground hover:text-foreground"
+                                                aria-label="View acceptance details"
+                                              >
+                                                <Info className="h-3.5 w-3.5" />
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" align="start" className="max-w-xs text-xs">
+                                              <p className="font-medium mb-1">Acceptance audit</p>
+                                              {account.terms_accepted_ip && (
+                                                <p><span className="text-muted-foreground">IP:</span> {account.terms_accepted_ip}</p>
+                                              )}
+                                              {account.terms_accepted_user_agent && (
+                                                <p className="break-words">
+                                                  <span className="text-muted-foreground">UA:</span>{" "}
+                                                  {account.terms_accepted_user_agent}
+                                                </p>
+                                              )}
+                                              <p className="mt-1">
+                                                <span className="text-muted-foreground">At:</span>{" "}
+                                                {format(new Date(account.terms_accepted_at), "MMM d, yyyy 'at' h:mm:ss a")}
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" />
+                                      <Badge variant="destructive" className="h-5 text-[10px] px-1.5">
+                                        T&amp;C not accepted
+                                      </Badge>
+                                    </>
+                                  )}
+                                </div>
                               </div>
 
                               {account.account_status === "pending" && (

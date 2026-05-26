@@ -12,6 +12,7 @@ import {
   Loader2, UtensilsCrossed, MapPin, Navigation, ChevronRight, Clock,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { brandColorCssVars } from "@/lib/brand-color";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -127,13 +128,14 @@ function OutletSelectorPage({
 
   const brandDisplayName = brand.brand_name || brand.full_name;
   const hasCoords = outlets.some((o) => o.latitude && o.longitude);
+  const brandVars = brandColorCssVars(brand.brand_color);
   const mapCenter: [number, number] =
     sortedOutlets[0]?.latitude && sortedOutlets[0]?.longitude
       ? [sortedOutlets[0].latitude!, sortedOutlets[0].longitude!]
       : [20.5937, 78.9629];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto">
+    <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto" style={brandVars}>
       {/* Header */}
       <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-5">
         {brand.logo_url ? (
@@ -143,11 +145,8 @@ function OutletSelectorPage({
             className="h-14 w-14 mx-auto mb-3 rounded-xl object-contain"
           />
         ) : (
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary mx-auto mb-3"
-            style={brand.brand_color ? { backgroundColor: brand.brand_color } : undefined}
-          >
-            <UtensilsCrossed className="h-6 w-6 text-white" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary mx-auto mb-3">
+            <UtensilsCrossed className="h-6 w-6 text-primary-foreground" />
           </div>
         )}
         <h1 className="font-bold text-xl text-gray-900 text-center">{brandDisplayName}</h1>
@@ -231,7 +230,7 @@ function OutletSelectorPage({
               }`}
             >
               <UtensilsCrossed
-                className={`h-5 w-5 ${idx === 0 && gpsStatus === "done" ? "text-white" : "text-gray-500"}`}
+                className={`h-5 w-5 ${idx === 0 && gpsStatus === "done" ? "text-primary-foreground" : "text-gray-500"}`}
               />
             </div>
             <div className="flex-1 min-w-0">

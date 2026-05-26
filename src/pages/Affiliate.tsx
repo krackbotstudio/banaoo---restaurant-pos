@@ -19,6 +19,7 @@ import {
   Gift,
   ArrowRight,
 } from "lucide-react";
+import { SEO, StructuredData, buildBreadcrumbList, buildFaqPage } from "@/components/seo/SEO";
 
 export default function Affiliate() {
   const benefits = [
@@ -107,6 +108,18 @@ export default function Affiliate() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Affiliate Program — earn 10% recurring commission"
+        description="Refer restaurants to banaoo and earn 10% recurring commission on every subscription. Real-time dashboard, lifetime tracking, monthly payouts."
+        path="/affiliate"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Affiliate Program", path: "/affiliate" },
+        ])}
+      />
+      <StructuredData data={buildFaqPage(faqs)} />
       <Navbar />
 
       {/* Hero Section */}

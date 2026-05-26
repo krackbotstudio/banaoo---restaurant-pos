@@ -24,6 +24,8 @@ import {
 } from './entitlements.js';
 import { registerCustomerOrderRoutes } from './customer-orders.js';
 import { registerBillingMobileRoutes } from './billing-mobile.js';
+import { getDefaultOperationMode } from './business-types.js';
+import { CURRENT_TERMS_VERSION, extractClientIp } from './legal.js';
 
 dotenv.config();
 
@@ -209,76 +211,122 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'PLACEHOLDE
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/auth/google/callback"
-  }, async (accessToken, refreshToken, profile, done) => {
+    callbackURL: "/auth/google/callback",
+    // passReqToCallback exposes the Express `req` so we can read the
+    // pre-redirect T&C acceptance the client stashed via /auth/google/prepare.
+    passReqToCallback: true,
+  }, async (req, accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails[0].value;
       const { rows } = await pool.query('SELECT * FROM public.users WHERE google_id = $1 OR email = $2', [profile.id, email]);
       let user = rows[0];
 
+      // Pull the acceptance that the client stashed before redirect (signup
+      // tab). For login-tab Google clicks this is undefined — we treat that
+      // as implicit acceptance (`oauth-implicit`) so we never end up with a
+      // NULL row that would block the new user.
+      const pending = req?.session?.pending_terms;
+      if (req?.session) delete req.session.pending_terms;
+
       if (!user) {
-        // Create new user
         const { rows: newUsers } = await pool.query(
           'INSERT INTO public.users (email, google_id) VALUES ($1, $2) RETURNING *',
           [email, profile.id]
         );
         user = newUsers[0];
 
-        // Create profile — new users start as pending until admin approves
+        // New profile — record T&C acceptance.
         await pool.query(
-          'INSERT INTO public.profiles (user_id, full_name, role, account_status) VALUES ($1, $2, $3, $4)',
-          [user.id, profile.displayName, 'owner', 'pending']
+          `INSERT INTO public.profiles
+             (user_id, full_name, role, account_status,
+              terms_accepted_at, terms_version,
+              terms_accepted_ip, terms_accepted_user_agent)
+           VALUES ($1, $2, 'owner', 'pending', now(), $3, $4, $5)`,
+          [
+            user.id,
+            profile.displayName,
+            pending?.version || 'oauth-implicit',
+            pending?.ip || extractClientIp(req) || null,
+            pending?.user_agent || (req?.get && req.get('user-agent')) || null,
+          ]
         );
       } else if (!user.google_id) {
-        // Link google account
         const { rows: updatedUsers } = await pool.query(
           'UPDATE public.users SET google_id = $1 WHERE id = $2 RETURNING *',
           [profile.id, user.id]
         );
         user = updatedUsers[0];
+
+        // Existing user linking Google — if they never had T&C recorded,
+        // backfill it now with the same implicit marker used for legacy users.
+        await pool.query(
+          `UPDATE public.profiles
+              SET terms_accepted_at        = COALESCE(terms_accepted_at, now()),
+                  terms_version            = COALESCE(terms_version, $1),
+                  terms_accepted_ip        = COALESCE(terms_accepted_ip, $2),
+                  terms_accepted_user_agent = COALESCE(terms_accepted_user_agent, $3)
+            WHERE user_id = $4`,
+          [
+            pending?.version || 'oauth-implicit',
+            pending?.ip || extractClientIp(req) || null,
+            pending?.user_agent || (req?.get && req.get('user-agent')) || null,
+            user.id,
+          ]
+        );
       }
 
       return done(null, user);
     } catch (err) {
       console.error('Error in Google OAuth strategy:', err);
-        
+
       // If there's a foreign key violation, try to create the profile separately
       if (err.code === '23503') { // Foreign key violation
         console.log('Foreign key violation detected. User might exist without profile.');
-          
-        // Try to find the user and create profile separately
+
         const email = profile.emails[0].value;
         const { rows: existingUsers } = await pool.query(
-          'SELECT * FROM public.users WHERE google_id = $1 OR email = $2', 
+          'SELECT * FROM public.users WHERE google_id = $1 OR email = $2',
           [profile.id, email]
         );
-          
+
         if (existingUsers.length > 0) {
           const existingUser = existingUsers[0];
           console.log('Found existing user, checking profile...');
-            
+
           const { rows: existingProfiles } = await pool.query(
             'SELECT * FROM public.profiles WHERE user_id = $1',
             [existingUser.id]
           );
-            
+
           if (existingProfiles.length === 0) {
             console.log('Creating missing profile for existing user...');
             try {
+              const pendingFallback = req?.session?.pending_terms;
+              if (req?.session) delete req.session.pending_terms;
               await pool.query(
-                'INSERT INTO public.profiles (user_id, full_name, role, account_status) VALUES ($1, $2, $3, $4)',
-                [existingUser.id, profile.displayName, 'owner', 'pending']
+                `INSERT INTO public.profiles
+                   (user_id, full_name, role, account_status,
+                    terms_accepted_at, terms_version,
+                    terms_accepted_ip, terms_accepted_user_agent)
+                 VALUES ($1, $2, 'owner', 'pending', now(), $3, $4, $5)`,
+                [
+                  existingUser.id,
+                  profile.displayName,
+                  pendingFallback?.version || 'oauth-implicit',
+                  pendingFallback?.ip || extractClientIp(req) || null,
+                  pendingFallback?.user_agent || (req?.get && req.get('user-agent')) || null,
+                ]
               );
               console.log('Profile created successfully');
             } catch (profileErr) {
               console.error('Still failed to create profile:', profileErr);
             }
           }
-            
+
           return done(null, existingUser);
         }
       }
-        
+
       return done(err);
     }
   }));
@@ -356,7 +404,7 @@ function generateAffiliateReferralCode(name = 'AFF') {
 // --- Auth Routes ---
 
 app.post('/auth/register', async (req, res) => {
-  const { email, password, fullName, phone } = req.body;
+  const { email, password, fullName, phone, terms_version } = req.body;
   if (!email || !password || !fullName || !phone) {
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -365,6 +413,18 @@ app.post('/auth/register', async (req, res) => {
   if (!phoneRegex.test(phone)) {
     return res.status(400).json({ error: 'Please enter a valid phone number (at least 10 digits)' });
   }
+
+  // T&C acceptance is mandatory at signup. Any non-empty version string is
+  // accepted so older clients keep working, but the server records the
+  // current version when the client doesn't send one.
+  if (terms_version === undefined || terms_version === null) {
+    return res
+      .status(400)
+      .json({ error: 'You must accept the Terms & Policies to create an account' });
+  }
+  const acceptedVersion = String(terms_version || '').trim() || CURRENT_TERMS_VERSION;
+  const acceptedIp = extractClientIp(req);
+  const acceptedUserAgent = req.get('user-agent') || null;
 
   console.log('Registration attempt for:', email, 'Name:', fullName, 'Phone:', phone);
   try {
@@ -382,10 +442,14 @@ app.post('/auth/register', async (req, res) => {
 
     console.log('Inserting into public.profiles...');
     await pool.query(
-      'INSERT INTO public.profiles (user_id, full_name, phone, role, account_status) VALUES ($1, $2, $3, $4, $5)',
-      [user.id, fullName, phone, 'owner', 'pending']
+      `INSERT INTO public.profiles
+         (user_id, full_name, phone, role, account_status,
+          terms_accepted_at, terms_version,
+          terms_accepted_ip, terms_accepted_user_agent)
+       VALUES ($1, $2, $3, 'owner', 'pending', now(), $4, $5, $6)`,
+      [user.id, fullName, phone, acceptedVersion, acceptedIp, acceptedUserAgent]
     );
-    console.log('Profile created.');
+    console.log('Profile created with terms acceptance v' + acceptedVersion);
 
     console.log('Logging in user...');
     req.login(user, (err) => {
@@ -432,6 +496,28 @@ app.post('/auth/login', (req, res, next) => {
       });
     });
   })(req, res, next);
+});
+
+// Stash T&C acceptance in the session BEFORE the Google OAuth redirect, so
+// the Google strategy callback can persist it onto the new profile.
+app.post('/auth/google/prepare', (req, res) => {
+  const { terms_version } = req.body || {};
+  if (!terms_version) {
+    return res.status(400).json({ error: 'Terms acceptance required' });
+  }
+  req.session.pending_terms = {
+    version: String(terms_version).trim() || CURRENT_TERMS_VERSION,
+    ip: extractClientIp(req),
+    user_agent: req.get('user-agent') || null,
+    accepted_at: new Date().toISOString(),
+  };
+  req.session.save((err) => {
+    if (err) {
+      console.error('Failed to save Google T&C prepare session:', err);
+      return res.status(500).json({ error: 'Could not record acceptance' });
+    }
+    res.json({ ok: true });
+  });
 });
 
 app.get('/auth/google', (req, res, next) => {
@@ -780,17 +866,35 @@ app.get('/api/outlets', async (req, res) => {
 app.post('/api/outlets', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   if (req.user.isStaff) return res.status(403).json({ error: 'Only owners can create outlets' });
-  const { name, address, phone } = req.body || {};
+  const { name, address, phone, operation_mode: requestedMode } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Outlet name is required' });
   }
   try {
     await assertWithinOutletLimit(req.user.id);
+
+    // If the client didn't pass operation_mode, derive it from the owner's
+    // business_type so the new outlet matches the rest of their fleet.
+    let operationMode = requestedMode;
+    if (operationMode !== 'standard' && operationMode !== 'self_service') {
+      const { rows: profileRows } = await pool.query(
+        'SELECT business_type FROM public.profiles WHERE user_id = $1',
+        [req.user.id]
+      );
+      operationMode = getDefaultOperationMode(profileRows[0]?.business_type);
+    }
+
     const { rows } = await pool.query(
-      `INSERT INTO public.outlets (owner_id, name, address, phone)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, address, phone, is_active, created_at`,
-      [req.user.id, name.trim(), address ? String(address).trim() || null : null, phone ? String(phone).trim() || null : null]
+      `INSERT INTO public.outlets (owner_id, name, address, phone, operation_mode)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, address, phone, is_active, operation_mode, created_at`,
+      [
+        req.user.id,
+        name.trim(),
+        address ? String(address).trim() || null : null,
+        phone ? String(phone).trim() || null : null,
+        operationMode,
+      ]
     );
     res.status(201).json({ outlet: rows[0] });
   } catch (err) {
@@ -860,7 +964,9 @@ app.put('/api/profile', async (req, res) => {
   }
 });
 
-// Complete onboarding — sets business info, creates first outlet, marks onboarding_completed = true
+// Complete onboarding — sets business info, creates first outlet (if none exist),
+// marks onboarding_completed = true. Idempotent: running it again will only
+// update the profile and will NOT create another outlet.
 app.post('/api/onboarding/complete', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const { business_type, brand_name, ordering_slug, phone, city } = req.body;
@@ -872,11 +978,37 @@ app.post('/api/onboarding/complete', async (req, res) => {
        WHERE user_id = $5`,
       [business_type || null, brand_name || null, ordering_slug || null, phone || null, req.user.id]
     );
+
     if (brand_name) {
-      await pool.query(
-        'INSERT INTO public.outlets (name, phone, address, owner_id) VALUES ($1, $2, $3, $4)',
-        [brand_name.trim(), phone || null, city || null, req.user.id]
+      // Only seed the first outlet if the owner doesn't already have any.
+      // Protects against onboarding being submitted twice (duplicate request,
+      // re-entering the onboarding page after completion, etc.).
+      const { rows: existing } = await pool.query(
+        'SELECT id, name FROM public.outlets WHERE owner_id = $1 ORDER BY created_at ASC LIMIT 1',
+        [req.user.id]
       );
+
+      const operationMode = getDefaultOperationMode(business_type);
+
+      if (existing.length === 0) {
+        await pool.query(
+          `INSERT INTO public.outlets (name, phone, address, owner_id, operation_mode)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [brand_name.trim(), phone || null, city || null, req.user.id, operationMode]
+        );
+      } else {
+        // Owner already has an outlet (legacy 'My Restaurant' sample row, or
+        // an earlier onboarding attempt). Update it in place instead of
+        // silently creating a duplicate. Only rewrite the name if it's still
+        // the default placeholder so we never overwrite a real name.
+        await pool.query(
+          `UPDATE public.outlets
+             SET name           = CASE WHEN name = 'My Restaurant' THEN $1 ELSE name END,
+                 operation_mode = $2
+           WHERE id = $3`,
+          [brand_name.trim(), operationMode, existing[0].id]
+        );
+      }
     }
     res.json({ success: true });
   } catch (err) {
@@ -940,8 +1072,10 @@ app.get('/api/admin/accounts', isAdmin, async (req, res) => {
     const { status } = req.query;
     
     let query = `
-      SELECT p.id, p.user_id, p.full_name, p.phone, p.business_type, p.role, 
+      SELECT p.id, p.user_id, p.full_name, p.phone, p.business_type, p.role,
              p.account_status, p.is_admin, p.onboarding_completed, p.created_at,
+             p.terms_accepted_at, p.terms_version,
+             p.terms_accepted_ip, p.terms_accepted_user_agent,
              u.email
       FROM public.profiles p
       JOIN public.users u ON p.user_id = u.id

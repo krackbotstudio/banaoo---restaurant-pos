@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Target, Heart, Lightbulb, Users, ArrowRight } from "lucide-react";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 const values = [
   {
@@ -35,6 +36,17 @@ const values = [
 export default function About() {
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="About banaoo"
+        description="Meet the team behind banaoo — restaurant operators and engineers building a modern POS and management platform for Indian restaurants, cloud kitchens, QSRs and self-service counters."
+        path="/about"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "About", path: "/about" },
+        ])}
+      />
       <Navbar />
       
       {/* Hero */}
@@ -133,7 +145,7 @@ export default function About() {
             Start your free trial today and see how a product built around your problems can work for your restaurant.
           </p>
           <Button size="lg" variant="secondary" asChild className="gap-2">
-            <Link to="/auth">
+            <Link to="/auth?mode=signup">
               Get Started Free
               <ArrowRight className="h-4 w-4" />
             </Link>

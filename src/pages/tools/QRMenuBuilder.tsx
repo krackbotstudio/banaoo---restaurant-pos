@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 import { MenuBuilderForm } from "@/components/tools/qr-menu/MenuBuilderForm";
 import { MenuPreview } from "@/components/tools/qr-menu/MenuPreview";
 import { QRCodeDisplay } from "@/components/tools/qr-menu/QRCodeDisplay";
@@ -145,6 +146,25 @@ export default function QRMenuBuilder() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <SEO
+        title="Free QR Menu Builder for Restaurants"
+        description="Build a beautiful digital menu with QR code in minutes. Free QR menu builder for restaurants, cafes, cloud kitchens — no app to install, share via WhatsApp."
+        path="/tools/qr-menu-builder"
+        keywords={[
+          "QR menu builder",
+          "free QR menu maker",
+          "digital restaurant menu",
+          "QR code menu generator",
+          "restaurant menu QR code",
+        ]}
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Tools", path: "/tools/qr-menu-builder" },
+          { name: "QR Menu Builder", path: "/tools/qr-menu-builder" },
+        ])}
+      />
       <Navbar />
       
       <main className="flex-1 container py-8">

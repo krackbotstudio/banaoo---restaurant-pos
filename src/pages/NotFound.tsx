@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChefHat, Home } from "lucide-react";
+import { SEO } from "@/components/seo/SEO";
 
 export default function NotFound() {
   const location = useLocation();
@@ -12,6 +13,7 @@ export default function NotFound() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background relative overflow-hidden">
+      <SEO title="Page not found" description="The page you are looking for could not be found." noindex />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse-slow" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse-slow" />

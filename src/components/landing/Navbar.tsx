@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, QrCode } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -32,8 +32,6 @@ const tools = [
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, loading } = useAuth();
-  const location = useLocation();
-  const pricingHref = location.pathname === "/" ? "/#pricing" : "/pricing";
 
   // Brand name typing animation
   const [typedBrand, setTypedBrand] = useState("banaoo");
@@ -71,9 +69,15 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="banaoo.io" className="h-9 w-9 object-contain" />
-          <span className="text-xl font-bold min-w-[5rem] inline-block">
+        <Link to="/" className="flex items-center gap-2" aria-label="banaoo home">
+          <img src="/logo.png" alt="" className="h-9 w-9 object-contain" />
+          {/* Canonical brand text for crawlers, screen readers and social-card scrapers */}
+          <span className="sr-only">banaoo</span>
+          {/* Decorative animated text — hidden from accessibility tree */}
+          <span
+            className="text-xl font-bold min-w-[5rem] inline-block"
+            aria-hidden="true"
+          >
             {typedBrand}
             <span className="inline-block w-0.5 h-4 bg-foreground ml-0.5 align-middle animate-pulse" />
           </span>
@@ -106,9 +110,6 @@ export function Navbar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Link to={pricingHref} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Pricing
-          </Link>
           <Link to="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Docs
           </Link>
@@ -127,10 +128,10 @@ export function Navbar() {
           ) : (
             <>
               <Button variant="ghost" asChild>
-                <Link to="/auth">Sign In</Link>
+                <Link to="/auth?mode=login">Sign In</Link>
               </Button>
               <Button asChild>
-                <Link to="/auth">Get Started</Link>
+                <Link to="/auth?mode=signup">Get Started</Link>
               </Button>
             </>
           )}
@@ -176,13 +177,6 @@ export function Navbar() {
             </div>
 
             <Link
-              to={pricingHref}
-              className="text-sm font-medium py-2"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Pricing
-            </Link>
-            <Link
               to="/docs"
               className="text-sm font-medium py-2"
               onClick={() => setMobileMenuOpen(false)}
@@ -206,10 +200,10 @@ export function Navbar() {
               ) : (
                 <>
                   <Button variant="outline" asChild>
-                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
+                    <Link to="/auth?mode=login" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
                   </Button>
                   <Button asChild>
-                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+                    <Link to="/auth?mode=signup" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
                   </Button>
                 </>
               )}

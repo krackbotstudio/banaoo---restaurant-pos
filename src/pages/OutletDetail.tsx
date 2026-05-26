@@ -22,6 +22,44 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Navigation, Receipt, Percent } from "lucide-react";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { isSelfServiceMode, type OutletOperationMode } from "@/lib/outlet-operation";
+import { getBusinessCapabilities, getBusinessType } from "@/lib/business-types";
+
+/**
+ * Derives the user-facing operation-mode label from BOTH `business_type` and
+ * the outlet's `operation_mode`. Cloud kitchens always show "Cloud Kitchen",
+ * QSRs show "QSR (counter service)", and everything else falls back to the
+ * outlet's own operation_mode label.
+ */
+function getOperationModeDisplay(
+  businessType: string | null | undefined,
+  operationMode: string | null | undefined
+): { label: string; description: string } {
+  if (businessType === "cloud_kitchen") {
+    return {
+      label: "Cloud Kitchen",
+      description:
+        "Online & aggregator orders only. No table service or counter walk-ins.",
+    };
+  }
+  if (businessType === "qsr") {
+    return {
+      label: "QSR (counter service)",
+      description:
+        "Orders taken at the billing counter. Kitchen bill + customer token printed on order.",
+    };
+  }
+  if (isSelfServiceMode(operationMode)) {
+    return {
+      label: "Self service (billing counter)",
+      description:
+        "New orders print kitchen bill + customer token. Online orders show platform label on kitchen slips.",
+    };
+  }
+  return {
+    label: "Standard (table service)",
+    description: "Table flow with kitchen slips and full bills at payment.",
+  };
+}
 import {
   Select,
   SelectContent,
@@ -112,6 +150,11 @@ export default function OutletDetail() {
   const { user, profile } = useAuth();
   const { currentOutlet, setCurrentOutlet } = useOutlet();
   const { toast } = useToast();
+  // Cloud kitchens, food carts, etc. don't use a table floor plan.
+  const capabilities = getBusinessCapabilities(profile?.business_type);
+  const showTableEditor = capabilities.hasTables;
+  const businessTypeDef = getBusinessType(profile?.business_type);
+  const isCloudKitchen = profile?.business_type === "cloud_kitchen";
   const [outlet, setOutlet] = useState<Outlet | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -273,13 +316,20 @@ export default function OutletDetail() {
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold">{outlet.name}</h1>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  outlet.is_active 
-                    ? "bg-accent/20 text-accent" 
-                    : "bg-muted text-muted-foreground"
-                }`}>
-                  {outlet.is_active ? "Active" : "Inactive"}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    outlet.is_active
+                      ? "bg-accent/20 text-accent"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {outlet.is_active ? "Active" : "Inactive"}
+                  </span>
+                  {businessTypeDef && (
+                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-primary/10 text-primary">
+                      {businessTypeDef.label}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -442,24 +492,33 @@ export default function OutletDetail() {
                     <p className="text-xs text-muted-foreground">Tap on the map or drag the pin to set location</p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label>Operation mode</Label>
-                  <Select
-                    value={editOperationMode}
-                    onValueChange={(v) => setEditOperationMode(v as OutletOperationMode)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standard">Standard (table service)</SelectItem>
-                      <SelectItem value="self_service">Self service (billing counter)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Self service prints a kitchen bill and customer token when orders are placed at the counter.
-                  </p>
-                </div>
+                {isCloudKitchen ? (
+                  <div className="space-y-1 p-3 rounded-lg bg-muted/50 border border-border/50">
+                    <p className="text-sm font-medium">Operation mode: Cloud Kitchen</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cloud kitchens only take online / aggregator orders, so this is locked to delivery-only.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Operation mode</Label>
+                    <Select
+                      value={editOperationMode}
+                      onValueChange={(v) => setEditOperationMode(v as OutletOperationMode)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard (table service)</SelectItem>
+                        <SelectItem value="self_service">Self service (billing counter)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Self service prints a kitchen bill and customer token when orders are placed at the counter.
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <span className="text-sm font-medium">Active Status</span>
                   <Switch checked={editIsActive} onCheckedChange={setEditIsActive} />
@@ -476,12 +535,14 @@ export default function OutletDetail() {
 
         {/* Tabs for Details and Table Editor */}
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className={`grid w-full mb-4 ${showTableEditor ? "grid-cols-2" : "grid-cols-1"}`}>
             <TabsTrigger value="details">Outlet Details</TabsTrigger>
-            <TabsTrigger value="floor-plan" className="gap-2">
-              <LayoutGrid className="h-4 w-4" />
-              Table Editor
-            </TabsTrigger>
+            {showTableEditor && (
+              <TabsTrigger value="floor-plan" className="gap-2">
+                <LayoutGrid className="h-4 w-4" />
+                Table Editor
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details" className="space-y-4">
@@ -529,16 +590,15 @@ export default function OutletDetail() {
                   <CardTitle className="text-base">Operation mode</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="font-medium">
-                    {isSelfServiceMode(outlet.operation_mode)
-                      ? "Self service (billing counter)"
-                      : "Standard (table service)"}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {isSelfServiceMode(outlet.operation_mode)
-                      ? "New orders print kitchen bill + customer token. Online orders show platform label on kitchen slips."
-                      : "Table flow with kitchen slips and full bills at payment."}
-                  </p>
+                  {(() => {
+                    const m = getOperationModeDisplay(profile?.business_type, outlet.operation_mode);
+                    return (
+                      <>
+                        <p className="font-medium">{m.label}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{m.description}</p>
+                      </>
+                    );
+                  })()}
                 </CardContent>
               </Card>
               <Card>
@@ -619,9 +679,11 @@ export default function OutletDetail() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="floor-plan">
-            <FloorPlanEditor outletId={id!} />
-          </TabsContent>
+          {showTableEditor && (
+            <TabsContent value="floor-plan">
+              <FloorPlanEditor outletId={id!} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppLayout>

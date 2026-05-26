@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, KeyRound, AlertTriangle } from "lucide-react";
+import { SEO } from "@/components/seo/SEO";
 
 const STAFF_EMAIL_DOMAIN = "banaoo-staff.app";
 const PIN_PREFIX = "bn_";
@@ -90,6 +91,7 @@ export default function StaffLogin() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center p-4">
+      <SEO title="Staff PIN Login" path="/staff-login" noindex />
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="text-center space-y-2">
@@ -174,7 +176,7 @@ export default function StaffLogin() {
         {/* Back to owner login */}
         <div className="text-center">
           <Link
-            to="/auth"
+            to="/auth?mode=login"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />

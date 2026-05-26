@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 export default function Privacy() {
   const updated = new Date().toLocaleDateString("en-IN", {
@@ -10,6 +11,17 @@ export default function Privacy() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Privacy Policy"
+        description="banaoo's Privacy Policy: what data we collect, how we use it, who we share it with, and your rights as a customer or restaurant owner."
+        path="/privacy"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Privacy Policy", path: "/privacy" },
+        ])}
+      />
       <Navbar />
 
       <main className="flex-1 py-12 md:py-20">
