@@ -346,7 +346,7 @@ export default function Landing() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden min-h-[92vh] flex items-center">
+      <section className="relative overflow-hidden min-h-[calc(100svh-4rem)] flex items-center bg-black">
         {/* Looping video background — rotates between clips on each play-through */}
         <video
           key={videoIndex}
