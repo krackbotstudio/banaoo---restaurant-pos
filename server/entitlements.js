@@ -64,6 +64,12 @@ const DEFAULT_LIMITS = {
   qrMenus: 0,
 };
 
+// Internal test accounts that should always get full feature access.
+// Keep this list small and explicit.
+const INTERNAL_FULL_ACCESS_EMAILS = new Set([
+  "krackbotstudio@gmail.com",
+]);
+
 export const ADDON_MONTHLY_PRICES = {
   extra_outlet: 250,
   extra_staff: 150,
@@ -203,6 +209,58 @@ export async function fetchUsage(userId) {
 }
 
 export async function buildEntitlementsPayload(userId) {
+  // Special-case internal test account(s) so UI feature gates are stable
+  // even if their real billing/subscription rows are incomplete/expired.
+  const { rows: userRows } = await pool.query(
+    "SELECT email FROM public.users WHERE id = $1",
+    [userId]
+  );
+  const email = userRows?.[0]?.email?.toLowerCase?.() ?? null;
+  if (email && INTERNAL_FULL_ACCESS_EMAILS.has(email)) {
+    // Subscription fields are used by the frontend to compute "days remaining"
+    // and to decide whether to show renewal banners.
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 365);
+
+    const subscription = {
+      id: `test-enterprise-${userId}`,
+      user_id: userId,
+      plan_type: "enterprise",
+      status: "active",
+      trial_ends_at: null,
+      expires_at: expiresAt.toISOString(),
+      period_months: 12,
+      razorpay_subscription_id: null,
+      razorpay_order_id: null,
+      razorpay_payment_id: null,
+      current_period_start: now.toISOString(),
+      current_period_end: expiresAt.toISOString(),
+      cancelled_at: null,
+      created_at: now.toISOString(),
+    };
+
+    // Addons are mostly informational in the UI; feature gating is driven by limits.
+    const addons = {
+      extra_outlets: 0,
+      extra_staff: 0,
+      swiggy: true,
+      zomato: true,
+      customer_ordering: true,
+      inventory: true,
+    };
+
+    const usage = await fetchUsage(userId);
+
+    return {
+      subscription,
+      addons,
+      effective_limits: serializeLimits(PLAN_LIMITS.enterprise),
+      usage,
+      has_active_subscription: true,
+    };
+  }
+
   const subscription = await fetchActiveSubscription(userId);
   const hasActiveSubscription = isSubscriptionActive(subscription);
   const addons = await fetchActiveAddons(userId);

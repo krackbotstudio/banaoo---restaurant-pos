@@ -10,6 +10,7 @@ import { UtensilsCrossed, ShoppingCart, ClipboardList, Menu as MenuIcon, UserCir
 import { useAuth } from "@/lib/auth";
 import { InstallAppBanner } from "@/components/customer/InstallAppBanner";
 import { useDynamicManifest } from "@/hooks/use-dynamic-manifest";
+import { brandColorCssVars } from "@/lib/brand-color";
 import MenuPage from "./MenuPage";
 import CartPage from "./CartPage";
 import CheckoutPage from "./CheckoutPage";
@@ -91,7 +92,6 @@ function AppShell({
   const { customer, clearCustomer } = useCustomer();
   const { getImageUrl } = useAuth();
   const navigate = useNavigate();
-  const accentColor = branding?.brand_color || undefined;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto">
@@ -114,11 +114,8 @@ function AppShell({
                 className="h-9 w-9 rounded-lg object-contain flex-shrink-0"
               />
             ) : (
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-lg flex-shrink-0 bg-primary"
-                style={accentColor ? { backgroundColor: accentColor } : undefined}
-              >
-                <UtensilsCrossed className="h-5 w-5 text-white" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg flex-shrink-0 bg-primary">
+                <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
               </div>
             )
           )}
@@ -230,6 +227,7 @@ export function OutletOrderingFlow({
   }, [customer]);
 
   const restaurantName = branding?.brand_name || outlet.name;
+  const brandVars = brandColorCssVars(branding?.brand_color);
 
   useDynamicManifest({
     name: restaurantName,
@@ -239,29 +237,31 @@ export function OutletOrderingFlow({
 
   if (step === "phone") {
     return (
-      <>
+      <div style={brandVars}>
         <InstallAppBanner restaurantName={restaurantName} />
         <PhoneEntryPage
           outlet={outlet}
           onCustomerReady={() => setStep("ready")}
           onNeedSetup={(phone) => { setPendingPhone(phone); setStep("setup"); }}
         />
-      </>
+      </div>
     );
   }
 
   if (step === "setup") {
     return (
-      <>
+      <div style={brandVars}>
         <InstallAppBanner restaurantName={restaurantName} />
         <CustomerSetupPage phone={pendingPhone} onDone={() => setStep("ready")} />
-      </>
+      </div>
     );
   }
 
   return (
-    <CartProvider outletId={outlet.id}>
-      <AppShell outlet={outlet} basePath={basePath} onChangeOutlet={onChangeOutlet} branding={branding} />
-    </CartProvider>
+    <div style={brandVars}>
+      <CartProvider outletId={outlet.id}>
+        <AppShell outlet={outlet} basePath={basePath} onChangeOutlet={onChangeOutlet} branding={branding} />
+      </CartProvider>
+    </div>
   );
 }

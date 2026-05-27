@@ -3,20 +3,37 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "@/lib/auth";
 import { API_URL } from "@/lib/api-url";
+import { CURRENT_TERMS_VERSION } from "@/lib/legal";
+import { SEO } from "@/components/seo/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  Eye,
+  EyeOff,
+  Receipt,
+  Smartphone,
+  ChefHat,
+  Bike,
+  Sparkles,
+} from "lucide-react";
 
 const emailSchema = z.string().email("Please enter a valid email");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
-const phoneSchema = z.string()
+const phoneSchema = z
+  .string()
   .min(10, "Phone number must be at least 10 digits")
   .regex(/^[+]?[0-9\s\-]{10,}$/, "Please enter a valid phone number");
 
+type AuthMode = "login" | "signup";
 type AuthView = "main" | "forgot-password";
 
 export default function Auth() {
@@ -26,63 +43,80 @@ export default function Auth() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [view, setView] = useState<AuthView>("main");
-  
-  // Clear orphaned sessions on mount
+  const [mode, setMode] = useState<AuthMode>("login");
+
   useEffect(() => {
     const clearOrphanedSession = async () => {
       try {
         const res = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
-        
         if (res.status === 401) {
-          // Session exists but user not authenticated - might be orphaned
-          console.log('Detected potential orphaned session, clearing...');
-          await fetch(`${API_URL}/auth/clear-session`, { 
-            method: 'POST',
-            credentials: 'include'
+          await fetch(`${API_URL}/auth/clear-session`, {
+            method: "POST",
+            credentials: "include",
           });
         }
       } catch (err) {
-        console.error('Error checking/clearing session:', err);
+        console.error("Error checking/clearing session:", err);
       }
     };
-    
     clearOrphanedSession();
   }, []);
-  
+
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [signupAcceptedTerms, setSignupAcceptedTerms] = useState(false);
 
   const [resetEmail, setResetEmail] = useState("");
 
-  const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (isSignupContext = false) => {
+    if (isSignupContext && !signupAcceptedTerms) {
+      toast({
+        variant: "destructive",
+        title: "Please accept the Terms & Policies",
+        description: "Tick the box below to continue with Google sign up.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      console.log('Initiating Google sign-in...');
+      if (isSignupContext) {
+        try {
+          const prep = await fetch(`${API_URL}/auth/google/prepare`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ terms_version: CURRENT_TERMS_VERSION }),
+          });
+          if (!prep.ok) {
+            const data = await prep.json().catch(() => ({}));
+            throw new Error(data.error || "Could not record Terms acceptance");
+          }
+        } catch (err) {
+          setIsSubmitting(false);
+          toast({
+            variant: "destructive",
+            title: "Google Sign-Up Failed",
+            description: err instanceof Error ? err.message : "Unknown error",
+          });
+          return;
+        }
+      }
+
       const callbackUrl = `${window.location.origin}/auth/callback`;
       const googleUrl = `${API_URL}/auth/google?redirect_uri=${encodeURIComponent(callbackUrl)}`;
-      console.log('Redirecting to:', googleUrl);
-      
-      // Test if the endpoint exists first
-      try {
-        const testResponse = await fetch(googleUrl, { method: 'GET', redirect: 'manual' });
-        console.log('Google endpoint response:', testResponse.status);
-      } catch (fetchError) {
-        console.warn('Could not test endpoint (this is OK for redirects):', fetchError.message);
-      }
-      
-      // Use window.location instead of returning from function
       window.location.href = googleUrl;
-      
-      // Don't reset submitting - page will redirect
     } catch (error) {
-      console.error('Google sign-in error:', error);
+      console.error("Google sign-in error:", error);
       setIsSubmitting(false);
       toast({
         variant: "destructive",
@@ -92,11 +126,14 @@ export default function Auth() {
     }
   };
 
-  // Capture referral code from URL and store in localStorage
   useEffect(() => {
     const refCode = searchParams.get("ref");
     if (refCode) {
       localStorage.setItem("banaoo_referral_code", refCode);
+    }
+    const mParam = searchParams.get("mode");
+    if (mParam === "signup" || mParam === "login") {
+      setMode(mParam);
     }
   }, [searchParams]);
 
@@ -108,7 +145,7 @@ export default function Auth() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(loginEmail);
       passwordSchema.parse(loginPassword);
@@ -117,7 +154,7 @@ export default function Auth() {
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: err.errors[0].message
+          description: err.errors[0].message,
         });
         return;
       }
@@ -131,59 +168,70 @@ export default function Auth() {
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error.message
+        description: error.message,
       });
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!signupName.trim()) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please enter your name"
+        description: "Please enter your name",
+      });
+      return;
+    }
+
+    if (!signupAcceptedTerms) {
+      toast({
+        variant: "destructive",
+        title: "Please accept the Terms & Policies",
+        description: "Tick the box at the bottom of the form to continue.",
       });
       return;
     }
 
     try {
       emailSchema.parse(signupEmail);
-     phoneSchema.parse(signupPhone);
+      phoneSchema.parse(signupPhone);
       passwordSchema.parse(signupPassword);
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: err.errors[0].message
+          description: err.errors[0].message,
         });
         return;
       }
     }
 
     setIsSubmitting(true);
-    const { error } = await signUp(signupEmail, signupPassword, signupName, signupPhone);
+    const { error } = await signUp(signupEmail, signupPassword, signupName, signupPhone, {
+      terms_version: CURRENT_TERMS_VERSION,
+    });
     setIsSubmitting(false);
 
     if (error) {
       toast({
         variant: "destructive",
         title: "Signup Failed",
-        description: error.message
+        description: error.message,
       });
     } else {
       toast({
         title: "Account Created!",
-        description: "Welcome! Please choose a plan to get started."
+        description: "Welcome! Please choose a plan to get started.",
       });
     }
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(resetEmail);
     } catch (err) {
@@ -191,7 +239,7 @@ export default function Auth() {
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: err.errors[0].message
+          description: err.errors[0].message,
         });
         return;
       }
@@ -205,13 +253,13 @@ export default function Auth() {
       toast({
         variant: "destructive",
         title: "Feature Not Available",
-        description: "Password reset via email is not yet implemented in the custom backend. Please contact support."
+        description:
+          "Password reset via email is not yet implemented in the custom backend. Please contact support.",
       });
     } else {
-      // This path is currently unreachable given the placeholder in auth.tsx
       toast({
         title: "Success",
-        description: "Password reset request processed."
+        description: "Password reset request processed.",
       });
       setView("main");
       setResetEmail("");
@@ -226,301 +274,520 @@ export default function Auth() {
     );
   }
 
+  const GoogleIcon = () => (
+    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse-slow" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: "2s" }} />
-      </div>
-
-      <div className="w-full max-w-md space-y-8 relative z-10 animate-fade-in">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          asChild
-          className="absolute top-0 left-0 -translate-y-2"
-        >
-          <Link to="/" className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
+    <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+      <SEO
+        title={mode === "signup" ? "Create your account" : "Sign in"}
+        description="Sign in to your banaoo restaurant account or create a new one to start managing your restaurant in minutes."
+        path="/auth"
+        noindex
+      />
+      {/* LEFT: Form column */}
+      <div className="flex flex-col px-6 py-8 sm:px-10 lg:px-14 xl:px-20">
+        {/* Top bar */}
+        <header className="flex items-center justify-between gap-4">
+          <Link to="/" className="inline-flex items-center gap-2 group">
+            <span className="flex items-center justify-center h-9 w-9 rounded-xl gradient-warm shadow-warm">
+              <img
+                src="/logo.png"
+                alt=""
+                className="h-5 w-5 object-contain brightness-0 invert"
+              />
+            </span>
+            <span className="font-display text-lg font-bold tracking-tight">
+              banaoo
+            </span>
           </Link>
-        </Button>
 
-        {/* Logo & Branding */}
-        <div className="flex flex-col items-center space-y-4 pt-8">
-          <div className="flex items-center justify-center h-20 w-20 rounded-2xl gradient-warm glow-primary animate-float">
-            <img src="/logo.png" alt="Banaoo" className="h-10 w-10 object-contain brightness-0 invert" />
-          </div>
-          <div className="text-center">
-            <h1 className="font-display text-4xl font-bold tracking-tight">banaoo.io</h1>
-            <p className="text-muted-foreground mt-2 flex items-center justify-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              One App to Run Your Restaurant
-            </p>
-          </div>
-        </div>
+          <Link
+            to="/"
+            className="hidden sm:inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </Link>
+        </header>
 
-        {/* Auth Card */}
-        <Card className="glass-strong border-border/50 shadow-warm">
-          {view === "main" ? (
-            <>
-              <CardHeader className="space-y-1 pb-4 text-center">
-                <CardTitle className="font-display text-2xl">Welcome</CardTitle>
-                <CardDescription>
-                  Sign in or create your account
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="login" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/50 p-1">
-                    <TabsTrigger value="login" className="font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
-                      Login
-                    </TabsTrigger>
-                    <TabsTrigger value="signup" className="font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
-                      Sign Up
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="login" className="space-y-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-12 text-base font-medium border-border/60 bg-background/50 hover:bg-muted/50 flex items-center gap-3"
-                      onClick={handleGoogleSignIn}
-                      disabled={isSubmitting}
-                    >
-                      <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                      </svg>
-                      Continue with Google
-                    </Button>
+        {/* Centered form area */}
+        <div className="flex-1 flex items-center justify-center py-10">
+          <div className="w-full max-w-sm">
+            {view === "main" ? (
+              <>
+                {/* Heading */}
+                <div className="space-y-1.5 mb-8">
+                  <h1 className="font-display text-3xl sm:text-[2rem] font-bold tracking-tight leading-tight">
+                    {mode === "login" ? "Sign In" : "Create your account"}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {mode === "login"
+                      ? "Welcome back. Let's get you to your kitchen."
+                      : "Start running your restaurant in minutes — no card needed."}
+                  </p>
+                </div>
 
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-border/40" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-card px-2 text-muted-foreground">or continue with email</span>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
+                {mode === "login" ? (
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="login-email" className="text-sm font-medium">
+                        Email
+                      </Label>
+                      <div className="relative">
+                        <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="login-email"
                           type="email"
                           placeholder="you@example.com"
                           value={loginEmail}
                           onChange={(e) => setLoginEmail(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 h-12"
                           autoComplete="email"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="login-password" className="text-sm font-medium">Password</Label>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="login-password" className="text-sm font-medium">
+                        Password
+                      </Label>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="login-password"
-                          type="password"
+                          type={showLoginPassword ? "text" : "password"}
                           placeholder="••••••••"
                           value={loginPassword}
                           onChange={(e) => setLoginPassword(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 pr-10 h-12"
                           autoComplete="current-password"
                         />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="p-0 h-auto text-sm text-muted-foreground hover:text-primary"
-                        onClick={() => setView("forgot-password")}
-                      >
-                        Forgot password?
-                      </Button>
-                      <Button 
-                        type="submit" 
-                        className="w-full h-12 text-base font-semibold gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity"
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Signing in...
-                          </>
-                        ) : (
-                          "Sign In"
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-
-                  <TabsContent value="signup" className="space-y-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-12 text-base font-medium border-border/60 bg-background/50 hover:bg-muted/50 flex items-center gap-3"
-                      onClick={handleGoogleSignIn}
-                      disabled={isSubmitting}
-                    >
-                      <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                      </svg>
-                      Continue with Google
-                    </Button>
-
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-border/40" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-card px-2 text-muted-foreground">or sign up with email</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassword((s) => !s)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                          tabIndex={-1}
+                        >
+                          {showLoginPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
                       </div>
                     </div>
 
-                    <form onSubmit={handleSignup} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-name" className="text-sm font-medium">Full Name <span className="text-destructive">*</span></Label>
+                    <div className="flex justify-end -mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setView("forgot-password")}
+                        className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full h-12 text-base font-semibold gradient-warm text-primary-foreground border-0 glow-primary hover:opacity-90 transition-opacity"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in…
+                        </>
+                      ) : (
+                        "Log In"
+                      )}
+                    </Button>
+
+                    <div className="relative py-1">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border/60" />
+                      </div>
+                      <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                        <span className="bg-background px-3 text-muted-foreground">or</span>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-12 text-base font-medium gap-3"
+                      onClick={() => handleGoogleSignIn(false)}
+                      disabled={isSubmitting}
+                    >
+                      <GoogleIcon />
+                      Continue with Google
+                    </Button>
+
+                    <p className="text-center text-sm text-muted-foreground pt-2">
+                      Don't have an account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => setMode("signup")}
+                        className="font-semibold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Sign up
+                      </button>
+                    </p>
+                  </form>
+                ) : (
+                  <form onSubmit={handleSignup} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="signup-name" className="text-sm font-medium">
+                        Full name
+                      </Label>
+                      <div className="relative">
+                        <User className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="signup-name"
                           type="text"
-                          placeholder="Your Name"
+                          placeholder="Your name"
                           value={signupName}
                           onChange={(e) => setSignupName(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 h-12"
                           autoComplete="name"
                           required
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-email" className="text-sm font-medium">Email <span className="text-destructive">*</span></Label>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="signup-email" className="text-sm font-medium">
+                        Email
+                      </Label>
+                      <div className="relative">
+                        <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="signup-email"
                           type="email"
                           placeholder="you@example.com"
                           value={signupEmail}
                           onChange={(e) => setSignupEmail(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 h-12"
                           autoComplete="email"
                           required
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-phone" className="text-sm font-medium">Phone Number <span className="text-destructive">*</span></Label>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="signup-phone" className="text-sm font-medium">
+                        Phone number
+                      </Label>
+                      <div className="relative">
+                        <Phone className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="signup-phone"
                           type="tel"
                           placeholder="+91 98765 43210"
                           value={signupPhone}
                           onChange={(e) => setSignupPhone(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 h-12"
                           autoComplete="tel"
                           required
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="signup-password" className="text-sm font-medium">Password <span className="text-destructive">*</span></Label>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="signup-password" className="text-sm font-medium">
+                        Password
+                      </Label>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="signup-password"
-                          type="password"
-                          placeholder="••••••••"
+                          type={showSignupPassword ? "text" : "password"}
+                          placeholder="At least 6 characters"
                           value={signupPassword}
                           onChange={(e) => setSignupPassword(e.target.value)}
-                          className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          className="pl-10 pr-10 h-12"
                           autoComplete="new-password"
                           required
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowSignupPassword((s) => !s)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showSignupPassword ? "Hide password" : "Show password"}
+                          tabIndex={-1}
+                        >
+                          {showSignupPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
                       </div>
-                      <Button 
-                        type="submit" 
-                        className="w-full h-12 text-base font-semibold gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity"
-                        disabled={isSubmitting}
+                    </div>
+
+                    <div className="flex items-start gap-2.5 pt-1">
+                      <Checkbox
+                        id="accept-terms"
+                        checked={signupAcceptedTerms}
+                        onCheckedChange={(v) => setSignupAcceptedTerms(v === true)}
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor="accept-terms"
+                        className="text-xs text-muted-foreground leading-relaxed font-normal cursor-pointer"
                       >
-                        {isSubmitting ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Creating account...
-                          </>
-                        ) : (
-                          "Create Account"
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </>
-          ) : (
-            <>
-              <CardHeader className="space-y-1 pb-4">
-                <Button
+                        I have read and agree to the{" "}
+                        <Link
+                          to="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 text-foreground hover:text-primary"
+                        >
+                          Terms of Service
+                        </Link>
+                        ,{" "}
+                        <Link
+                          to="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 text-foreground hover:text-primary"
+                        >
+                          Privacy Policy
+                        </Link>
+                        , and{" "}
+                        <Link
+                          to="/refund"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 text-foreground hover:text-primary"
+                        >
+                          Refund Policy
+                        </Link>
+                        .
+                      </Label>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full h-12 text-base font-semibold gradient-warm text-primary-foreground border-0 glow-primary hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isSubmitting || !signupAcceptedTerms}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating account…
+                        </>
+                      ) : (
+                        "Create Account"
+                      )}
+                    </Button>
+
+                    <div className="relative py-1">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border/60" />
+                      </div>
+                      <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                        <span className="bg-background px-3 text-muted-foreground">or</span>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-12 text-base font-medium gap-3"
+                      onClick={() => handleGoogleSignIn(true)}
+                      disabled={isSubmitting || !signupAcceptedTerms}
+                      title={
+                        !signupAcceptedTerms
+                          ? "Please accept the Terms & Policies first"
+                          : undefined
+                      }
+                    >
+                      <GoogleIcon />
+                      Sign up with Google
+                    </Button>
+
+                    <p className="text-center text-sm text-muted-foreground pt-2">
+                      Already have an account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => setMode("login")}
+                        className="font-semibold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Log in
+                      </button>
+                    </p>
+                  </form>
+                )}
+              </>
+            ) : (
+              <>
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-fit -ml-2 mb-2"
                   onClick={() => setView("main")}
+                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
                 >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
-                </Button>
-                <CardTitle className="font-display text-2xl">Reset Password</CardTitle>
-                <CardDescription>
-                  Enter your email and we'll send you a reset link
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to sign in
+                </button>
+
+                <div className="space-y-1.5 mb-8">
+                  <h1 className="font-display text-3xl font-bold tracking-tight leading-tight">
+                    Reset password
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    Enter your email and we'll send you a reset link.
+                  </p>
+                </div>
+
                 <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reset-email" className="text-sm font-medium">Email</Label>
-                    <Input
-                      id="reset-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      className="h-12 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                      autoComplete="email"
-                    />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reset-email" className="text-sm font-medium">
+                      Email
+                    </Label>
+                    <div className="relative">
+                      <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="reset-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        className="pl-10 h-12"
+                        autoComplete="email"
+                      />
+                    </div>
                   </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full h-12 text-base font-semibold gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity"
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold gradient-warm text-primary-foreground border-0 glow-primary hover:opacity-90 transition-opacity"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending...
+                        Sending…
                       </>
                     ) : (
-                      "Send Reset Link"
+                      "Send reset link"
                     )}
                   </Button>
                 </form>
-              </CardContent>
-            </>
-          )}
-        </Card>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Powered by AI • Made for Restaurant Owners
-        </p>
-
-        <div className="text-center">
-          <Link
-            to="/staff-login"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-          >
-            Staff member? Login with your PIN
-          </Link>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Footer */}
+        <footer className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link to="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </Link>
+            <Link to="/refund" className="hover:text-foreground transition-colors">
+              Refund
+            </Link>
+            <Link to="/staff-login" className="hover:text-foreground transition-colors">
+              Staff PIN login
+            </Link>
+          </div>
+          <span>© {new Date().getFullYear()} Banaoo</span>
+        </footer>
       </div>
+
+      {/* RIGHT: Brand panel */}
+      <aside className="relative hidden lg:flex overflow-hidden text-white">
+        <div className="absolute inset-0 gradient-warm" />
+        {/* Decorative blurs */}
+        <div className="absolute -top-32 -right-24 h-96 w-96 rounded-full bg-white/15 blur-3xl" />
+        <div className="absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-72 w-72 rounded-full bg-white/5 blur-2xl" />
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-between w-full p-12 xl:p-16">
+          <div>
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-xs font-medium tracking-wide border border-white/20">
+              <Sparkles className="h-3.5 w-3.5" />
+              One App to Run Your Restaurant
+            </span>
+          </div>
+
+          <div className="space-y-8">
+            <div className="space-y-4 max-w-md">
+              <h2 className="font-display text-4xl xl:text-5xl font-bold leading-[1.1] tracking-tight">
+                POS, online orders &amp; kitchen — in one place.
+              </h2>
+              <p className="text-white/85 text-base xl:text-lg leading-relaxed">
+                Built for Indian restaurants, cloud kitchens, QSRs and self-service counters.
+                Set up in minutes. No setup fee.
+              </p>
+            </div>
+
+            {/* Feature pills */}
+            <div className="grid grid-cols-2 gap-3 max-w-md">
+              <FeaturePill icon={Receipt} label="Live KOT printing" />
+              <FeaturePill icon={Smartphone} label="UPI & card payments" />
+              <FeaturePill icon={ChefHat} label="Self-serve kiosks" />
+              <FeaturePill icon={Bike} label="Cloud kitchen ready" />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 text-sm text-white/80">
+            <div>
+              <div className="font-display font-bold text-2xl text-white">3 mo</div>
+              <div className="text-xs">starting plan</div>
+            </div>
+            <div className="h-10 w-px bg-white/20" />
+            <div>
+              <div className="font-display font-bold text-2xl text-white">10+</div>
+              <div className="text-xs">business types</div>
+            </div>
+            <div className="h-10 w-px bg-white/20" />
+            <div>
+              <div className="font-display font-bold text-2xl text-white">24×7</div>
+              <div className="text-xs">support</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function FeaturePill({
+  icon: Icon,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/15 text-sm font-medium">
+      <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/15 shrink-0">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="leading-tight">{label}</span>
     </div>
   );
 }

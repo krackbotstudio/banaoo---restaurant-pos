@@ -8,6 +8,7 @@ import {
 } from "@/content/docs/registry";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 export default function DocsArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -20,7 +21,49 @@ export default function DocsArticle() {
   const prev = index > 0 ? DOC_ARTICLES[index - 1] : null;
   const next = index >= 0 && index < DOC_ARTICLES.length - 1 ? DOC_ARTICLES[index + 1] : null;
 
+  const articleUrl = `https://banaoo.io/docs/${article.slug}`;
+
   return (
+    <>
+      <SEO
+        title={article.title}
+        description={article.description}
+        path={`/docs/${article.slug}`}
+        type="article"
+        publishedTime={article.lastUpdated}
+        modifiedTime={article.lastUpdated}
+        author="banaoo"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Documentation", path: "/docs" },
+          { name: article.title, path: `/docs/${article.slug}` },
+        ])}
+      />
+      <StructuredData
+        data={{
+          "@context": "https://schema.org",
+          "@type": "TechArticle",
+          headline: article.title,
+          description: article.description,
+          datePublished: article.lastUpdated,
+          dateModified: article.lastUpdated,
+          author: { "@type": "Organization", name: "banaoo", url: "https://banaoo.io" },
+          publisher: {
+            "@type": "Organization",
+            name: "banaoo",
+            url: "https://banaoo.io",
+            logo: {
+              "@type": "ImageObject",
+              url: "https://banaoo.io/logo.png",
+            },
+          },
+          mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+          inLanguage: "en",
+          articleSection: article.sectionTitle,
+        }}
+      />
     <DocsLayout
       title={article.title}
       description={article.description}
@@ -56,5 +99,6 @@ export default function DocsArticle() {
         ) : null}
       </div>
     </DocsLayout>
+    </>
   );
 }

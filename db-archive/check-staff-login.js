@@ -1,4 +1,6 @@
-import pool from './server/db.js';
+// Legacy debug helper: lists recent staff and verifies users-table sync.
+// Usage: node db-archive/check-staff-login.js
+import pool from '../server/db.js';
 
 async function checkStaff() {
   try {

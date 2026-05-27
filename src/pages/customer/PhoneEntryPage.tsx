@@ -44,7 +44,7 @@ export default function PhoneEntryPage({ outlet, onCustomerReady, onNeedSetup }:
       {/* Top branding */}
       <div className="bg-white border-b border-gray-100 px-6 pt-10 pb-8 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary mx-auto mb-4">
-          <UtensilsCrossed className="h-7 w-7 text-white" />
+          <UtensilsCrossed className="h-7 w-7 text-primary-foreground" />
         </div>
         <h1 className="font-bold text-xl text-gray-900">{outlet.name}</h1>
         {outlet.address && <p className="text-sm text-gray-500 mt-1">{outlet.address}</p>}
@@ -88,7 +88,7 @@ export default function PhoneEntryPage({ outlet, onCustomerReady, onNeedSetup }:
           <button
             type="submit"
             disabled={loading || phone.replace(/\s/g, "").length < 10}
-            className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity mt-2"
+            className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity mt-2"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />

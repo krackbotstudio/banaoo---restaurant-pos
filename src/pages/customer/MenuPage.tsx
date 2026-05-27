@@ -114,7 +114,7 @@ function ItemCard({ item }: { item: MenuItem }) {
           {qty === 0 ? (
             <button
               onClick={() => addItem({ menu_item_id: item.id, name: item.name, unit_price: displayPrice, image_url: item.image_url })}
-              className="flex items-center gap-1 bg-primary text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+              className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
             >
               <Plus className="h-3.5 w-3.5" /> ADD
             </button>
@@ -437,7 +437,7 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button onClick={retry} className="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-sm font-semibold text-gray-600">Retry</button>
-                  <button onClick={addToCart} className="flex-1 py-3 rounded-2xl bg-primary text-white text-sm font-bold">Add to Cart</button>
+                  <button onClick={addToCart} className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground text-sm font-bold">Add to Cart</button>
                 </div>
               </>
             )}
@@ -453,7 +453,7 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
                 <div className="flex gap-2">
                   <button onClick={() => { stopListening(); onClose(); }} className="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
                   {isSupportedRef.current && (
-                    <button onClick={retry} className="flex-1 py-3 rounded-2xl bg-primary text-white text-sm font-bold">Try Again</button>
+                    <button onClick={retry} className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground text-sm font-bold">Try Again</button>
                   )}
                 </div>
               </>
@@ -462,7 +462,7 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
             {voiceState === "idle" && (
               <div className="flex flex-col items-center gap-3 py-2">
                 <button onClick={startListening} className="h-14 w-14 rounded-full bg-primary flex items-center justify-center shadow-lg">
-                  <Mic className="h-7 w-7 text-white" />
+                  <Mic className="h-7 w-7 text-primary-foreground" />
                 </button>
                 <p className="text-sm text-gray-500">Tap to start speaking</p>
               </div>
@@ -499,7 +499,7 @@ function MenuPlaceOrderBar({ basePath }: { basePath: string }) {
         <button
           type="button"
           onClick={() => navigate(`${basePath}/checkout`)}
-          className="shrink-0 bg-primary text-white font-bold text-sm px-5 py-3.5 rounded-xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md"
+          className="shrink-0 bg-primary text-primary-foreground font-bold text-sm px-5 py-3.5 rounded-xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md"
         >
           Place Order
         </button>
@@ -614,7 +614,7 @@ export default function MenuPage({ outlet, basePath }: { outlet: Outlet; basePat
               <button
                 onClick={() => scrollToCategory("all")}
                 className={`whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
-                  activeCategory === "all" ? "bg-primary text-white" : "bg-white text-gray-600 border border-gray-200"
+                  activeCategory === "all" ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 border border-gray-200"
                 }`}
               >
                 All
@@ -624,7 +624,7 @@ export default function MenuPage({ outlet, basePath }: { outlet: Outlet; basePat
                   key={cat.id}
                   onClick={() => scrollToCategory(cat.id)}
                   className={`whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
-                    activeCategory === cat.id ? "bg-primary text-white" : "bg-white text-gray-600 border border-gray-200"
+                    activeCategory === cat.id ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 border border-gray-200"
                   }`}
                 >
                   {cat.name}
@@ -670,7 +670,7 @@ export default function MenuPage({ outlet, basePath }: { outlet: Outlet; basePat
       {!voiceOpen && (
         <button
           onClick={() => setVoiceOpen(true)}
-          className={`fixed right-4 z-30 flex items-center gap-2 bg-primary text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-primary/90 active:scale-95 transition-all ${
+          className={`fixed right-4 z-30 flex items-center gap-2 bg-primary text-primary-foreground pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-primary/90 active:scale-95 transition-all ${
             itemCount > 0 ? "bottom-36" : "bottom-20"
           }`}
           title="Voice Order"

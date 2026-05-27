@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API_URL } from "@/lib/api-url";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { PricingComparison } from "@/components/landing/PricingComparison";
+import { SEO, StructuredData, buildFaqPage } from "@/components/seo/SEO";
 import {
   UtensilsCrossed,
   LayoutDashboard,
@@ -34,9 +34,8 @@ import {
 // ─── Hero videos ─────────────────────────────────────────────────────────────
 
 const heroVideos = [
-  "/12996803_3840_2160_60fps.mp4",
-  "/20671585-uhd_3840_2160_24fps.mp4",
-  "/8448182-hd_1920_1080_24fps.mp4",
+  "/hero-loop.mp4",
+  "/hero-orders.mp4",
 ];
 
 // ─── Typing words (Banaoo in multiple languages) ──────────────────────────────
@@ -309,29 +308,69 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="banaoo — One App to Run Your Restaurant | POS, Online Orders, KDS"
+        disableSuffix
+        description="banaoo is an all-in-one restaurant management platform built for Indian restaurants, cloud kitchens, QSRs and self-service counters. POS, kitchen display, online orders, UPI payments, multi-outlet analytics — set up in minutes."
+        path="/"
+      />
+      <StructuredData
+        data={buildFaqPage([
+          {
+            question: "What is banaoo?",
+            answer:
+              "banaoo is an all-in-one restaurant management platform with POS, online orders, kitchen display, payments and multi-outlet analytics — purpose-built for Indian restaurants, cloud kitchens, QSRs and self-service counters.",
+          },
+          {
+            question: "Is there a free trial?",
+            answer:
+              "Yes. Every account gets a 7-day free trial with no credit card required. You only pay when you choose to continue, starting with a 3-month plan.",
+          },
+          {
+            question: "Does banaoo work for cloud kitchens and QSRs?",
+            answer:
+              "Yes. banaoo automatically configures table-less workflows, self-service counters and delivery integrations for cloud kitchens, QSRs, food carts and other takeaway-first business types.",
+          },
+          {
+            question: "Which payment methods are supported?",
+            answer:
+              "banaoo supports UPI, debit and credit cards, net-banking and cash. Online payments are powered by Razorpay; staff can also collect direct UPI / cash payments at the counter.",
+          },
+          {
+            question: "Do I need any special hardware?",
+            answer:
+              "No special hardware is required. banaoo runs in any modern browser and on Android. We support common Bluetooth and LAN thermal printers when you want printed KOTs and bills.",
+          },
+        ])}
+      />
       <Navbar />
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden min-h-[92vh] flex items-center">
-        {/* Looping video background */}
+        {/* Looping video background — rotates between clips on each play-through */}
         <video
           key={videoIndex}
           autoPlay
           muted
           playsInline
+          preload="auto"
+          aria-hidden="true"
           onEnded={() => setVideoIndex((i) => (i + 1) % heroVideos.length)}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700"
         >
           <source src={heroVideos[videoIndex]} type="video/mp4" />
         </video>
         {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/55 to-black/70" />
         <div className="container relative py-24 md:py-36">
           <div className="max-w-3xl space-y-8">
             {/* Typing tagline */}
             <p className="text-base md:text-lg text-white/70 font-medium tracking-wide">
               For all the Food Creators across the world!{" "}
-              <span className="text-primary font-bold">
+              {/* Canonical brand name for crawlers and screen readers */}
+              <span className="sr-only">banaoo!</span>
+              {/* Decorative cycling text — hidden from accessibility tree */}
+              <span className="text-primary font-bold" aria-hidden="true">
                 {typedText}
                 <span className="inline-block w-0.5 h-5 bg-primary ml-0.5 align-middle animate-pulse" />
               </span>
@@ -356,7 +395,7 @@ export default function Landing() {
                 asChild
                 className="gradient-warm text-white border-0 gap-2 h-12 px-8 text-base shadow-lg shadow-primary/25 hover:opacity-90 transition-opacity"
               >
-                <Link to="/auth">
+                <Link to="/auth?mode=signup">
                   Start Free — No card needed
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -553,13 +592,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Pricing ── */}
-      <section id="pricing" className="py-20 scroll-mt-20">
-        <div className="container">
-          <PricingComparison />
-        </div>
-      </section>
-
       {/* ── Testimonials ── */}
       <section className="py-20 bg-muted/30">
         <div className="container">
@@ -633,7 +665,7 @@ export default function Landing() {
                 asChild
                 className="gradient-warm text-white border-0 gap-2 hover:opacity-90 transition-opacity"
               >
-                <Link to="/auth">
+                <Link to="/auth?mode=signup">
                   Get started free
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -679,7 +711,7 @@ export default function Landing() {
                   asChild
                   className="bg-white text-primary hover:bg-white/90 gap-2 h-12 px-8 text-base font-semibold shadow-lg"
                 >
-                  <Link to="/auth">
+                  <Link to="/auth?mode=signup">
                     Start your free trial
                     <ArrowRight className="h-4 w-4" />
                   </Link>

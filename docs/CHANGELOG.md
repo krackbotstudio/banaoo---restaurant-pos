@@ -2,7 +2,7 @@
 
 **Purpose:** Single living document for frontend, backend, mobile, and ops. Update this file whenever we ship or plan a change (add a dated entry under [Change log](#change-log)).
 
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-26
 
 ---
 
@@ -37,6 +37,17 @@ Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo
 ---
 
 ## Change log
+
+### 2026-05-26 — Backend error handler + April schema back-fill
+
+**Summary:** Closed two long-standing gaps surfaced while writing the new dev docs — the backend now has a real top-level error handler, and the April-2026 GST/batch columns finally have a checked-in migration so a fresh Supabase database matches production.
+
+| Area | Changes |
+|------|---------|
+| **Backend** | `server/index.js`: added a JSON **404 handler** and a **centralised error middleware** registered immediately before the listen call. Classifies CORS rejections (→ 403), `MulterError` (→ 413/400), body-parser overflow (→ 413), malformed JSON (→ 400), `err.status` shapes, and falls back to 500 `Internal server error`. Every response carries a short `request_id` that is also logged to `console.error`, so a user-reported failure can be cross-referenced. In dev the original message + an 8-line stack snippet are surfaced; in production both are hidden. See [`docs/backend.md`](backend.md) §12 for the table. |
+| **DB** | New idempotent migration `supabase/migrations/20260526000001_april_schema_backfill.sql` adds the six columns that shipped in April 2026 but never had a migration file: `order_items.{status, batch_id, gst_rate}`, `menu_items.gst_category`, `outlets.{gst_number, gst_categories}`. All use `ADD COLUMN IF NOT EXISTS` and matching defaults from `db-archive/19-april.sql`, so production is a no-op and fresh databases land in the same shape. Also adds two helper indexes on `order_items(status)` and `order_items(batch_id)` for kitchen-display and batch-print routing. |
+| **Docs** | `docs/backend.md` §12 rewritten to describe the new error and 404 handlers. |
+| **Deploy** | Run the new migration on production once. Recommended path: `node server/scripts/apply-migration.js supabase/migrations/20260526000001_april_schema_backfill.sql`. No code releases blocked by this — the new error handler is additive (existing per-route `try/catch` still catches first). |
 
 ### 2026-05-20 — Public documentation site
 

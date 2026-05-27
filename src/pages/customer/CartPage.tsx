@@ -23,7 +23,7 @@ export default function CartPage({ outlet }: { outlet: Outlet }) {
         </div>
         <button
           onClick={() => navigate(`/r/${outlet.id}`)}
-          className="mt-2 bg-primary text-white text-sm font-semibold px-6 py-2.5 rounded-xl"
+          className="mt-2 bg-primary text-primary-foreground text-sm font-semibold px-6 py-2.5 rounded-xl"
         >
           Browse Menu
         </button>
@@ -83,7 +83,7 @@ export default function CartPage({ outlet }: { outlet: Outlet }) {
       <div className="sticky bottom-16 px-4 pb-3 bg-gray-50 pt-2">
         <button
           onClick={() => navigate(`/r/${outlet.id}/checkout`)}
-          className="w-full bg-primary text-white font-bold py-3.5 rounded-xl text-sm flex items-center justify-between px-5"
+          className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl text-sm flex items-center justify-between px-5"
         >
           <span>{itemCount} item{itemCount !== 1 ? "s" : ""}</span>
           <span>Proceed to Checkout →</span>

@@ -295,7 +295,7 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
         <button
           onClick={handleSubmit}
           disabled={loading || !name.trim()}
-          className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all"
+          className="w-full bg-primary text-primary-foreground font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all"
         >
           {loading ? (
             <Loader2 className="h-5 w-5 animate-spin" />

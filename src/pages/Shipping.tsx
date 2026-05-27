@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 export default function Shipping() {
   const updated = new Date().toLocaleDateString("en-IN", {
@@ -10,6 +11,17 @@ export default function Shipping() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Shipping & Delivery Policy"
+        description="Service delivery and access policy for banaoo's restaurant management platform — how subscriptions are activated and supported."
+        path="/shipping"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Shipping & Delivery", path: "/shipping" },
+        ])}
+      />
       <Navbar />
 
       <main className="flex-1 py-12 md:py-20">

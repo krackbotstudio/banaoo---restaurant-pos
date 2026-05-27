@@ -1,21 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import {
-  UtensilsCrossed,
-  Building2,
-  ChefHat,
-  Coffee,
-  Zap,
-  Wine,
-  ArrowRight,
-  ArrowLeft,
-  Loader2,
-} from "lucide-react";
+import { ChefHat, ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
+import { BUSINESS_TYPES } from "@/lib/business-types";
 
 function generateSlug(name: string): string {
   const base = name
@@ -28,17 +19,8 @@ function generateSlug(name: string): string {
   return `${base}-${suffix}`;
 }
 
-const BUSINESS_TYPES = [
-  { id: "restaurant", label: "Restaurant", icon: UtensilsCrossed, description: "Dine-in & takeaway" },
-  { id: "hotel", label: "Hotel", icon: Building2, description: "Hotel dining & room service" },
-  { id: "cloud_kitchen", label: "Cloud Kitchen", icon: ChefHat, description: "Delivery-only kitchen" },
-  { id: "cafe", label: "Cafe", icon: Coffee, description: "Coffee shop & cafe" },
-  { id: "qsr", label: "QSR", icon: Zap, description: "Quick service restaurant" },
-  { id: "bar", label: "Bar & Lounge", icon: Wine, description: "Bar, pub & lounge" },
-];
-
 export default function Onboarding() {
-  const { refreshProfile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -49,6 +31,14 @@ export default function Onboarding() {
   const [city, setCity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
+
+  // Owners who've already finished onboarding shouldn't be able to re-trigger
+  // it — that's how duplicate outlets got created.
+  useEffect(() => {
+    if (profile?.onboarding_completed) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [profile?.onboarding_completed, navigate]);
 
   const handleSkip = async () => {
     setIsSkipping(true);
@@ -159,24 +149,56 @@ export default function Onboarding() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {BUSINESS_TYPES.map(({ id, label, icon: Icon, description }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setBusinessType(id)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all hover:border-primary/60 hover:bg-primary/5 ${
-                    businessType === id
-                      ? "border-primary bg-primary/10 shadow-sm"
-                      : "border-border/50 bg-card"
-                  }`}
-                >
-                  <div className={`inline-flex p-2 rounded-lg mb-3 ${businessType === id ? "bg-primary/20" : "bg-muted"}`}>
-                    <Icon className={`h-5 w-5 ${businessType === id ? "text-primary" : "text-muted-foreground"}`} />
-                  </div>
-                  <p className={`font-semibold text-sm ${businessType === id ? "text-primary" : ""}`}>{label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-                </button>
-              ))}
+              {BUSINESS_TYPES.map(({ id, label, icon: Icon, description, comingSoon }) => {
+                const selected = businessType === id;
+                const disabled = !!comingSoon;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => !disabled && setBusinessType(id)}
+                    disabled={disabled}
+                    aria-disabled={disabled}
+                    title={disabled ? `${label} support is coming soon` : undefined}
+                    className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                      disabled
+                        ? "border-border/40 bg-muted/30 opacity-60 cursor-not-allowed"
+                        : "hover:border-primary/60 hover:bg-primary/5"
+                    } ${
+                      selected && !disabled
+                        ? "border-primary bg-primary/10 shadow-sm"
+                        : disabled
+                          ? ""
+                          : "border-border/50 bg-card"
+                    }`}
+                  >
+                    {comingSoon && (
+                      <span className="absolute top-2 right-2 inline-flex items-center rounded-full bg-accent/15 text-accent text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5">
+                        Soon
+                      </span>
+                    )}
+                    <div
+                      className={`inline-flex p-2 rounded-lg mb-3 ${
+                        selected && !disabled ? "bg-primary/20" : "bg-muted"
+                      }`}
+                    >
+                      <Icon
+                        className={`h-5 w-5 ${
+                          selected && !disabled ? "text-primary" : "text-muted-foreground"
+                        }`}
+                      />
+                    </div>
+                    <p
+                      className={`font-semibold text-sm ${
+                        selected && !disabled ? "text-primary" : ""
+                      }`}
+                    >
+                      {label}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                  </button>
+                );
+              })}
             </div>
 
             <Button

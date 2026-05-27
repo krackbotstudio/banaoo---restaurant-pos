@@ -36,7 +36,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/auth" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link to="/auth?mode=signup" className="text-muted-foreground hover:text-foreground transition-colors">
                   Get Started
                 </Link>
               </li>

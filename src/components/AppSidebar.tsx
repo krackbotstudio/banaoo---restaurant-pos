@@ -22,6 +22,8 @@ import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { getBusinessType, type BusinessType } from "@/lib/business-types";
+import type { OutletOperationMode } from "@/lib/outlet-operation";
 
 import {
   Sidebar,
@@ -43,18 +45,24 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const mainNavItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
-  { title: "Menu",      url: "/menu",      icon: UtensilsCrossed, key: "menu"      },
-];
-
-const operationsItems: {
+interface NavItem {
   title: string;
   url: string;
   icon: typeof ShoppingCart;
   key: string;
   feature?: FeatureKey;
-}[] = [
+  /** When set, item only renders for these business types. */
+  businessTypes?: BusinessType[];
+  /** When set, item only renders for outlets in these operation modes. */
+  operationModes?: OutletOperationMode[];
+}
+
+const mainNavItems: NavItem[] = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
+  { title: "Menu",      url: "/menu",      icon: UtensilsCrossed, key: "menu"      },
+];
+
+const operationsItems: NavItem[] = [
   { title: "Orders",        url: "/orders",        icon: ShoppingCart, key: "orders"        },
   { title: "Payments",      url: "/payments",      icon: IndianRupee,  key: "payments"      },
   { title: "Order History", url: "/order-history", icon: History,      key: "order-history" },
@@ -74,16 +82,32 @@ export function AppSidebar() {
   const { permissions, loading: permissionsLoading } = useStaffPermissions();
   const { canAccess: canAccessFeature } = useFeatureGating();
   const collapsed = state === "collapsed";
+  const businessTypeDef = getBusinessType(profile?.business_type);
+
+  const businessType = profile?.business_type as BusinessType | null | undefined;
+  const operationMode = currentOutlet?.operation_mode as OutletOperationMode | null | undefined;
 
   // permissions === null means owner (no filter). Otherwise filter by allowed keys.
   // During loading, return [] so staff don't see a flash of all items before filtering.
-  const getAllowed = <T extends { key: string; feature?: FeatureKey }>(items: T[]): T[] => {
+  // Items can also opt into business_type / operation_mode gates (NavItem fields).
+  const getAllowed = <T extends NavItem>(items: T[]): T[] => {
     if (permissionsLoading && profile?.role !== "owner") return [];
     let list = items;
     if (permissions !== null) {
       list = list.filter((item) => permissions.includes(item.key));
     }
-    return list.filter((item) => !item.feature || canAccessFeature(item.feature));
+    list = list.filter((item) => !item.feature || canAccessFeature(item.feature));
+    list = list.filter(
+      (item) =>
+        !item.businessTypes ||
+        (businessType && item.businessTypes.includes(businessType))
+    );
+    list = list.filter(
+      (item) =>
+        !item.operationModes ||
+        (operationMode && item.operationModes.includes(operationMode))
+    );
+    return list;
   };
   const allowedMain = getAllowed(mainNavItems);
   const allowedOps = getAllowed(operationsItems);
@@ -138,9 +162,16 @@ export function AppSidebar() {
                   <img src="/logo.png" alt="Default logo" className="h-6 w-6 object-contain brightness-0 invert" />
                 </div>
               )}
-              <span className="font-display text-sm font-semibold truncate leading-tight">
-                {profile?.brand_name || profile?.full_name || 'My Restaurant'}
-              </span>
+              <div className="flex flex-col min-w-0 gap-0.5">
+                <span className="font-display text-sm font-semibold truncate leading-tight">
+                  {profile?.brand_name || profile?.full_name || 'My Restaurant'}
+                </span>
+                {businessTypeDef && (
+                  <span className="self-start text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary leading-none">
+                    {businessTypeDef.label}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}

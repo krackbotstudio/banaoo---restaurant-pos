@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 export default function Terms() {
   const updated = new Date().toLocaleDateString("en-IN", {
@@ -10,6 +11,17 @@ export default function Terms() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Terms & Conditions"
+        description="Read the banaoo Terms and Conditions covering subscriptions, billing, acceptable use, intellectual property and data ownership."
+        path="/terms"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Terms & Conditions", path: "/terms" },
+        ])}
+      />
       <Navbar />
 
       <main className="flex-1 py-12 md:py-20">

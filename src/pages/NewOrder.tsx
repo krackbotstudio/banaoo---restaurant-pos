@@ -28,6 +28,7 @@ import { OrderSuccessDialog } from "@/components/order/OrderSuccessDialog";
 import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { printKitchenOrderSlip } from "@/lib/print-kitchen";
 import { isSelfServiceMode } from "@/lib/outlet-operation";
+import { getBusinessCapabilities, getOrderModeBadge } from "@/lib/business-types";
 import { toast as sonnerToast } from "sonner";
 
 interface Category {
@@ -420,8 +421,13 @@ function VoicePOSOrder({
 
 // ── Main NewOrder Page ─────────────────────────────────────────────────────────
 export default function NewOrder() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
+  // Cloud kitchens / food carts / QSRs etc. don't have tables — treat them
+  // the same as self-service for the POS flow (auto-takeaway, skip the
+  // Dine-In / Select Table step).
+  const businessCaps = getBusinessCapabilities(profile?.business_type);
+  const businessHasTables = businessCaps.hasTables;
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -435,7 +441,8 @@ export default function NewOrder() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const selfService = isSelfServiceMode(currentOutlet?.operation_mode);
+  const selfService =
+    isSelfServiceMode(currentOutlet?.operation_mode) || !businessHasTables;
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(
     addToOrderId ? addToType : selfService ? "takeaway" : "dine_in"
   );
@@ -510,11 +517,14 @@ export default function NewOrder() {
   }, [currentOutlet]);
 
   useEffect(() => {
-    if (!addToOrderId && isSelfServiceMode(currentOutlet?.operation_mode)) {
+    if (
+      !addToOrderId &&
+      (isSelfServiceMode(currentOutlet?.operation_mode) || !businessHasTables)
+    ) {
       setOrderType("takeaway");
       setFlowStep("menu");
     }
-  }, [currentOutlet?.operation_mode, addToOrderId]);
+  }, [currentOutlet?.operation_mode, addToOrderId, businessHasTables]);
 
   const fetchCategories = async () => {
     if (!currentOutlet) return;
@@ -894,6 +904,7 @@ export default function NewOrder() {
               tableNumber={tableNumber}
               onChangeType={handleChangeOrderType}
               selfService={selfService}
+              businessType={profile?.business_type}
             />
           )}
 
@@ -978,22 +989,27 @@ export default function NewOrder() {
 
           {/* Order type + table badge row */}
           <div className="px-5 py-3 border-b border-border/50 flex items-center gap-2 shrink-0">
-            <div
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border-2",
-                selfService || orderType !== "dine_in"
-                  ? "border-orange-400 bg-orange-50 text-orange-600"
-                  : "border-primary bg-primary/10 text-primary"
-              )}
-            >
-              {selfService ? (
-                <><Store className="h-3.5 w-3.5" /> Self Service</>
-              ) : orderType === "dine_in" ? (
-                <><Utensils className="h-3.5 w-3.5" /> Dine In</>
-              ) : (
-                <><Package className="h-3.5 w-3.5" /> Takeaway</>
-              )}
-            </div>
+            {(() => {
+              const badge = getOrderModeBadge(profile?.business_type, selfService, orderType);
+              const Icon = badge.icon;
+              const badgeClass =
+                badge.variant === "primary"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : badge.variant === "info"
+                    ? "border-blue-400 bg-blue-50 text-blue-700"
+                    : "border-orange-400 bg-orange-50 text-orange-600";
+              return (
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border-2",
+                    badgeClass
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {badge.label}
+                </div>
+              );
+            })()}
             {!selfService && orderType === "dine_in" && tableNumber && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border-2 border-primary/30 bg-primary/5 text-primary">
                 Table {tableNumber}

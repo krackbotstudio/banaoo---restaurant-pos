@@ -73,7 +73,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                       <LogOut className="h-3.5 w-3.5" />
                     </Button>
                     <Link
-                      to="/auth"
+                      to="/auth?mode=login"
                       className="text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap hidden sm:inline"
                     >
                       Owner →

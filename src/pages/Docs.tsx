@@ -3,6 +3,7 @@ import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DOC_SECTIONS, getDocArticlesBySection, formatDocDate } from "@/content/docs/registry";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, BookOpen, HelpCircle, Printer, UtensilsCrossed } from "lucide-react";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 const sectionIcons: Record<string, typeof BookOpen> = {
   start: BookOpen,
@@ -13,6 +14,18 @@ const sectionIcons: Record<string, typeof BookOpen> = {
 
 export default function Docs() {
   return (
+    <>
+      <SEO
+        title="Documentation"
+        description="banaoo documentation — guides for setting up your restaurant POS, kitchen display, online orders, printers and the Android app."
+        path="/docs"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Documentation", path: "/docs" },
+        ])}
+      />
     <DocsLayout
       title="Documentation"
       description="Guides for setting up and running your restaurant on banaoo — POS, kitchen, billing, printers, and the Android app."
@@ -93,5 +106,6 @@ export default function Docs() {
         .
       </p>
     </DocsLayout>
+    </>
   );
 }

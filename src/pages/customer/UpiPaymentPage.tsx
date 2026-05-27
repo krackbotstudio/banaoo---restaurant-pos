@@ -169,7 +169,7 @@ export default function UpiPaymentPage({
           </div>
           <a
             href={payUrl}
-            className="flex items-center justify-center gap-2 w-full bg-primary text-white font-semibold py-3 rounded-xl text-sm"
+            className="flex items-center justify-center gap-2 w-full bg-primary text-primary-foreground font-semibold py-3 rounded-xl text-sm"
           >
             <ExternalLink className="h-4 w-4" />
             Open UPI app

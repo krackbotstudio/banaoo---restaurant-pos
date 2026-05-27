@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
+import { SEO, StructuredData, buildBreadcrumbList } from "@/components/seo/SEO";
 
 export default function Refund() {
   const updated = new Date().toLocaleDateString("en-IN", {
@@ -10,6 +11,17 @@ export default function Refund() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Refund & Cancellation Policy"
+        description="banaoo's Refund and Cancellation Policy — eligibility, processing timelines and how to request a refund on your subscription."
+        path="/refund"
+      />
+      <StructuredData
+        data={buildBreadcrumbList([
+          { name: "Home", path: "/" },
+          { name: "Refund & Cancellation", path: "/refund" },
+        ])}
+      />
       <Navbar />
 
       <main className="flex-1 py-12 md:py-20">

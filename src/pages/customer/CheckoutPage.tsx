@@ -307,7 +307,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-primary text-white font-bold py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+          className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {loading ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Placing Order...</>
