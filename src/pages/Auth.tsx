@@ -712,7 +712,20 @@ export default function Auth() {
               Staff PIN login
             </Link>
           </div>
-          <span>© {new Date().getFullYear()} Banaoo</span>
+          <span className="flex items-center gap-1.5">
+            <span>© {new Date().getFullYear()}</span>
+            <img
+              src="/tectangle-logo.png"
+              onError={(e) => {
+                // Fallback until `public/tectangle-logo.png` is added.
+                (e.currentTarget as HTMLImageElement).src = "/logo.png";
+              }}
+              alt="Tectangle"
+              loading="lazy"
+              className="h-4 w-4 object-contain"
+            />
+            <span>Tectangle. All rights reserved.</span>
+          </span>
         </footer>
       </div>
 
