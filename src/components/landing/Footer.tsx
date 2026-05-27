@@ -81,8 +81,19 @@ export function Footer() {
         </div>
 
         <div className="mt-12 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} banaoo.in. All rights reserved.
+          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+            <span>© {new Date().getFullYear()}</span>
+            <img
+              src="/tectangle-logo.png"
+              onError={(e) => {
+                // Fallback until `public/tectangle-logo.png` is added.
+                (e.currentTarget as HTMLImageElement).src = "/logo.png";
+              }}
+              alt="Tectangle"
+              loading="lazy"
+              className="h-4 w-4 object-contain"
+            />
+            <span>Tectangle. All rights reserved.</span>
           </p>
           <div className="flex gap-6 text-sm">
             <Link to="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
