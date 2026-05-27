@@ -10,8 +10,8 @@ This document captures everything that has been wired up for search engine optim
 
 ### 1.1 Per-route SEO with `react-helmet-async`
 
-- Installed `react-helmet-async` and wrapped the app in `<HelmetProvider>` in [`src/App.tsx`](src/App.tsx).
-- Created a reusable component at [`src/components/seo/SEO.tsx`](src/components/seo/SEO.tsx) that exposes:
+- Installed `react-helmet-async` and wrapped the app in `<HelmetProvider>` in [`src/App.tsx`](../src/App.tsx).
+- Created a reusable component at [`src/components/seo/SEO.tsx`](../src/components/seo/SEO.tsx) that exposes:
   - `<SEO />` — drops in a per-route `<title>`, meta description, canonical URL, full Open Graph + Twitter card, and optional `noindex`/`keywords`/`article:*` tags.
   - `<StructuredData data={…} />` — emits a JSON-LD `<script>` for any schema.org payload.
   - `buildBreadcrumbList(trail)` — helper for `BreadcrumbList` schema.
@@ -37,7 +37,7 @@ This document captures everything that has been wired up for search engine optim
 
 ### 1.3 Site-wide HTML defaults
 
-[`index.html`](index.html) now contains:
+[`index.html`](../index.html) now contains:
 
 - **Strong default `<title>` and `<meta description>`** — used as a fallback whenever a page hasn't supplied its own (and visible to crawlers that don't run JS).
 - **Comprehensive Open Graph block** — `og:site_name`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image` (1200×630), `og:image:width`, `og:image:height`, `og:image:alt`, `og:locale=en_IN`.
@@ -53,7 +53,7 @@ This document captures everything that has been wired up for search engine optim
 
 ### 1.4 `sitemap.xml`
 
-- Generated at build time by [`scripts/build-sitemap.mjs`](scripts/build-sitemap.mjs).
+- Generated at build time by [`scripts/build-sitemap.mjs`](../scripts/build-sitemap.mjs).
 - Wired into npm scripts:
   - `npm run sitemap` — regenerate manually.
   - `npm run prebuild` — automatically runs before `npm run build`.
@@ -62,7 +62,7 @@ This document captures everything that has been wired up for search engine optim
 
 ### 1.5 `robots.txt`
 
-[`public/robots.txt`](public/robots.txt) now:
+[`public/robots.txt`](../public/robots.txt) now:
 
 - Explicitly **allows** Googlebot, Bingbot, Twitterbot, facebookexternalhit, LinkedInBot, WhatsApp and Slackbot on public marketing pages.
 - **Disallows** every authenticated/admin/customer-ordering route so crawl budget isn't wasted: `/dashboard`, `/onboarding`, `/outlets`, `/menu`, `/orders`, `/kitchen`, `/payments`, `/staff`, `/settings`, `/addons`, `/inventory`, `/integrations`, `/order-history`, `/customers`, `/analytics`, `/admin`, `/billing`, `/account-pending`, `/auth`, `/staff-login`, `/affiliate/auth`, `/affiliate/dashboard`, `/affiliate/*`, `/order/`, `/r/`, `/m/`, `/menu/`, `/my-menus`, `/pricing`.
@@ -172,7 +172,7 @@ export default function MyPage() {
 - [ ] **Replace `public/og-default.png`** with a proper **1200×630 PNG** — banaoo logo + tagline ("One App to Run Your Restaurant") on the warm gradient. This is what shows on every WhatsApp / Slack / LinkedIn / Twitter share. Until replaced, link previews will show a small logo cropped into the 1200×630 frame.
 - [ ] **Verify domain ownership in Google Search Console** (`search.google.com/search-console`). Use the **DNS TXT** verification method (most robust). Once verified, submit `https://banaoo.io/sitemap.xml` and start monitoring Coverage / Performance / Enhancements reports daily for the first month.
 - [ ] **Verify domain in Bing Webmaster Tools** (`bing.com/webmasters`). Mirror the Google setup — about 25% of Indian search traffic still goes through Bing/DuckDuckGo/ChatGPT-Search, all of which use Bing's index.
-- [ ] **Update social `sameAs` URLs** in [`index.html`](index.html) — currently lists placeholders (`twitter.com/banaoo_io`, `linkedin.com/company/banaoo`, etc.). Replace any that don't exist yet, and add more once you create them. Empty/404 `sameAs` URLs hurt rather than help.
+- [ ] **Update social `sameAs` URLs** in [`index.html`](../index.html) — currently lists placeholders (`twitter.com/banaoo_io`, `linkedin.com/company/banaoo`, etc.). Replace any that don't exist yet, and add more once you create them. Empty/404 `sameAs` URLs hurt rather than help.
 - [ ] **Set up a Google Business Profile** (`business.google.com`). The right-side knowledge panel in the ElevenLabs example draws from this. Postcard verification takes ~5 days.
 - [ ] **Submit a Wikidata entry** for banaoo (`wikidata.org`) once the basics are above. Lists founding date, headquarters, founder(s), product category, social profiles. This is what lets Google Knowledge Graph understand your brand in absence of a Wikipedia article.
 
@@ -191,7 +191,7 @@ Until prerender is in place, **link previews on `/about`, `/docs/*`, `/affiliate
 
 ### 3.3 Performance / Core Web Vitals
 
-- **Compress hero videos.** [`public/hero-loop.mp4`](public/hero-loop.mp4) is 2.4 MB and `hero-orders.mp4` is 2.2 MB. Both autoplay. Run them through `ffmpeg -crf 28 -preset slower -movflags +faststart` to halve the size, and add a small **poster image** so first paint shows the still instantly.
+- **Compress hero videos.** [`public/hero-loop.mp4`](../public/hero-loop.mp4) is 2.4 MB and `hero-orders.mp4` is 2.2 MB. Both autoplay. Run them through `ffmpeg -crf 28 -preset slower -movflags +faststart` to halve the size, and add a small **poster image** so first paint shows the still instantly.
 - **Modern image formats.** Convert PNG/JPEG hero/marketing images to AVIF + WebP (with fallbacks). Use `<picture>` for legacy browsers.
 - **Width/height on every `<img>`.** Prevents Cumulative Layout Shift, which is a ranking signal.
 - **Lazy-load below-the-fold images.** Most are already in the wild; verify with Lighthouse.
@@ -241,7 +241,7 @@ The realistic milestone is **rich sitelinks within 4–8 weeks of Tier 1 + Tier 
 
 ## 5. File index
 
-Files created or changed for this work:
+Files created or changed for this work (paths are from the repo root):
 
 ```
 index.html                                     → expanded head, JSON-LD, <noscript>
@@ -267,7 +267,7 @@ src/pages/Auth.tsx                             → SEO (noindex)
 src/pages/StaffLogin.tsx                       → SEO (noindex)
 src/pages/NotFound.tsx                         → SEO (noindex)
 src/pages/tools/QRMenuBuilder.tsx              → SEO + breadcrumb + keywords
-SEO.md                                         → this document
+docs/SEO.md                                    → this document
 ```
 
 ---

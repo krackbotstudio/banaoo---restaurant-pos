@@ -2191,6 +2191,79 @@ app.post('/api/webhooks/zomato', async (req, res) => {
 registerCustomerOrderRoutes(app, { requireAuth });
 registerBillingMobileRoutes(app, { requireAuth });
 
+// =============================================================================
+// 404 + global error handler — MUST be the LAST middleware/route registered.
+// Routes added below these handlers will silently 404 because Express matches
+// in order.
+// =============================================================================
+
+// JSON 404 for any unmatched route under our API/auth namespaces.
+// Static (uploads, downloads) and SPA routes are not behind this handler
+// because nginx / Vite serve them directly; in dev, anything that falls
+// through to Express truly is unknown.
+app.use((req, res, next) => {
+  if (res.headersSent) return next();
+  res.status(404).json({
+    error: 'Not found',
+    path: req.originalUrl,
+    method: req.method,
+  });
+});
+
+// Centralised JSON error handler. Translates known error shapes into the
+// right HTTP status and prevents the default Express HTML error page from
+// leaking stack traces to clients (especially via the CORS-origin throw).
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  // Generate a short request id so the response and server logs can be
+  // cross-referenced when a user reports an error.
+  const requestId =
+    (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 8);
+
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // Classify common errors so we return the right status code.
+  let status = 500;
+  let message = 'Internal server error';
+
+  if (err && err.message === 'Not allowed by CORS') {
+    status = 403;
+    message = 'Origin not allowed';
+  } else if (err && err.name === 'MulterError') {
+    // multer surfaces upload-size/limit issues with `code: 'LIMIT_FILE_SIZE'`, etc.
+    status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    message = err.message || 'Upload error';
+  } else if (err && typeof err.status === 'number') {
+    status = err.status;
+    message = err.message || message;
+  } else if (err && err.type === 'entity.too.large') {
+    // express.json / urlencoded body-parser overflow
+    status = 413;
+    message = 'Request body too large';
+  } else if (err && err.type === 'entity.parse.failed') {
+    status = 400;
+    message = 'Malformed JSON body';
+  } else if (err && err.message && !isProd) {
+    // In dev, surface the actual message so debugging is fast.
+    message = err.message;
+  }
+
+  console.error(
+    `[error] request_id=${requestId} ${req.method} ${req.originalUrl} → ${status}:`,
+    err && err.stack ? err.stack : err
+  );
+
+  if (res.headersSent) return next(err);
+
+  const body = { error: message, request_id: requestId };
+  if (!isProd && err && err.stack) {
+    body.stack = err.stack.split('\n').slice(0, 8);
+  }
+  res.status(status).json(body);
+});
+
 ensureMobileAppLeadsTable()
   .catch((err) => {
     console.error('mobile_app_leads bootstrap on startup:', err);

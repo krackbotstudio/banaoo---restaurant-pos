@@ -1,4 +1,6 @@
-import pool from './server/db.js';
+// Legacy debug helper: prints schema info for staff-related tables.
+// Usage: node db-archive/check-db.js
+import pool from '../server/db.js';
 
 async function check() {
   try {

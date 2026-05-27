@@ -1,4 +1,6 @@
-import pool from './server/db.js';
+// Legacy debug helper: prints RLS state for sensitive tables.
+// Usage: node db-archive/check-rls.js
+import pool from '../server/db.js';
 
 async function checkRLS() {
   try {
