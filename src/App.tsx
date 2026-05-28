@@ -6,14 +6,18 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SupportChatWidget } from "@/components/support";
 import { CookieConsent } from "@/components/CookieConsent";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
+import { CmsAuthProvider } from "@/lib/cms-auth";
+import { CmsProtectedRoute } from "@/components/cms/CmsProtectedRoute";
+import { CmsLayout } from "@/components/cms/CmsLayout";
 import { OutletProvider } from "@/lib/outlet-context";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AffiliateLayout } from "@/components/affiliate/AffiliateLayout";
 import { AffiliateProtectedRoute } from "@/components/affiliate/AffiliateProtectedRoute";
 import { ThemeProvider } from "@/lib/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ProductTourProvider } from "@/lib/product-tour/tour-context";
 import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages for code splitting
@@ -62,8 +66,16 @@ const RestaurantApp = lazy(() => import("./pages/customer/RestaurantApp"));
 const BrandApp = lazy(() => import("./pages/customer/BrandApp"));
 const StaffLogin = lazy(() => import("./pages/StaffLogin"));
 const AccountPending = lazy(() => import("./pages/AccountPending"));
-const AdminAccounts = lazy(() => import("./pages/admin/Accounts"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const CmsLogin = lazy(() => import("./pages/cms/CmsLogin"));
+const CmsDashboard = lazy(() => import("./pages/cms/Dashboard"));
+const CmsCustomers = lazy(() => import("./pages/cms/Customers"));
+const CmsCustomerDetail = lazy(() => import("./pages/cms/CustomerDetail"));
+const CmsSubscriptions = lazy(() => import("./pages/cms/Subscriptions"));
+const CmsPayments = lazy(() => import("./pages/cms/Payments"));
+const CmsMarketing = lazy(() => import("./pages/cms/Marketing"));
+const CmsBanners = lazy(() => import("./pages/cms/Banners"));
+const CmsRoles = lazy(() => import("./pages/cms/Roles"));
 
 const queryClient = new QueryClient();
 
@@ -83,7 +95,13 @@ const App = () => (
             <Toaster />
             <Sonner position="top-right" />
             <SupportChatWidget />
-            <BrowserRouter>
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <ProductTourProvider>
               <CookieConsent />
               <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
@@ -121,9 +139,38 @@ const App = () => (
                   {/* Account pending — requires auth, exempt from all checks */}
                   <Route path="/account-pending" element={<ProtectedRoute><AccountPending /></ProtectedRoute>} />
 
-                  {/* Admin routes */}
-                  <Route path="/admin/account" element={<Navigate to="/admin/accounts" replace />} />
-                  <Route path="/admin/accounts" element={<ProtectedRoute><AdminAccounts /></ProtectedRoute>} />
+                  {/* Legacy admin URL → CMS */}
+                  <Route path="/admin/account" element={<Navigate to="/cms/customers" replace />} />
+                  <Route path="/admin/accounts" element={<Navigate to="/cms/customers" replace />} />
+
+                  {/* Tectangle CMS (separate auth from restaurant owners) */}
+                  <Route
+                    path="/cms"
+                    element={
+                      <CmsAuthProvider>
+                        <Outlet />
+                      </CmsAuthProvider>
+                    }
+                  >
+                    <Route path="login" element={<CmsLogin />} />
+                    <Route
+                      element={
+                        <CmsProtectedRoute>
+                          <CmsLayout />
+                        </CmsProtectedRoute>
+                      }
+                    >
+                      <Route index element={<Navigate to="/cms/dashboard" replace />} />
+                      <Route path="dashboard" element={<CmsDashboard />} />
+                      <Route path="customers" element={<CmsCustomers />} />
+                      <Route path="customers/:userId" element={<CmsCustomerDetail />} />
+                      <Route path="subscriptions" element={<CmsSubscriptions />} />
+                      <Route path="payments" element={<CmsPayments />} />
+                      <Route path="marketing" element={<CmsMarketing />} />
+                      <Route path="banners" element={<CmsBanners />} />
+                      <Route path="roles" element={<CmsRoles />} />
+                    </Route>
+                  </Route>
 
                   {/* Affiliate portal */}
                   <Route
@@ -166,6 +213,7 @@ const App = () => (
                 </Routes>
               </Suspense>
               </ErrorBoundary>
+              </ProductTourProvider>
             </BrowserRouter>
           </TooltipProvider>
         </OutletProvider>

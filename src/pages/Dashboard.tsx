@@ -2,21 +2,24 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { useProductTour } from "@/lib/product-tour/tour-context";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
-import { 
-  ChefHat, 
-  Store, 
-  UtensilsCrossed, 
-  ShoppingCart, 
-  Users, 
+import { DashboardBannerCarousel } from "@/components/dashboard/DashboardBannerCarousel";
+import { DashboardQuickActions } from "@/components/dashboard/DashboardQuickActions";
+import { DashboardDemoVideos } from "@/components/dashboard/DashboardDemoVideos";
+import { DashboardResources } from "@/components/dashboard/DashboardResources";
+import { DashboardUpdates } from "@/components/dashboard/DashboardUpdates";
+import {
+  Store,
+  ShoppingCart,
+  Users,
   TrendingUp,
   Sparkles,
   Plus,
-  ArrowRight,
-  Loader2
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -34,18 +37,26 @@ interface AIInsight {
   action?: { label: string; href: string };
 }
 
-// Maps a quick-action href to the permission key required to see it.
-const ACTION_PERMISSION: Record<string, string> = {
-  "/orders/new":  "orders",
-  "/kitchen":     "kitchen",
-  "/menu":        "menu",
-  "/outlets":     "__owner_only__", // outlets is owner-only
-};
-
 export default function Dashboard() {
   const { profile, user } = useAuth();
   const { currentOutlet } = useOutlet();
   const { permissions } = useStaffPermissions();
+  const canAccessInsightHref = (href: string): boolean => {
+    if (permissions === null) return true;
+    if (!permissions) return false;
+    const map: Record<string, string> = {
+      "/orders/new": "orders",
+      "/kitchen": "kitchen",
+      "/menu": "menu",
+      "/orders": "orders",
+      "/outlets": "__none__",
+    };
+    const key = map[href];
+    if (!key) return true;
+    if (key === "__none__") return false;
+    return permissions.includes(key);
+  };
+  const { checkWelcomeOnDashboard } = useProductTour();
   const [stats, setStats] = useState<DashboardStats>({
     ordersToday: 0,
     revenueToday: 0,
@@ -62,6 +73,10 @@ export default function Dashboard() {
       fetchDashboardData();
     }
   }, [user, currentOutlet?.id]);
+
+  useEffect(() => {
+    checkWelcomeOnDashboard();
+  }, [checkWelcomeOnDashboard]);
 
   const fetchDashboardData = async () => {
     if (!currentOutlet?.id) return;
@@ -137,147 +152,93 @@ export default function Dashboard() {
     }
   };
 
-  const canAccessAction = (href: string): boolean => {
-    if (permissions === null) return true; // owner sees all
-    const key = ACTION_PERMISSION[href];
-    if (!key) return true; // unmapped hrefs pass through
-    if (key === "__owner_only__") return false; // explicitly owner-only
-    return permissions.includes(key);
-  };
-
-  const allQuickActions = [
-    {
-      title: "New Order",
-      description: "Take dine-in or takeaway orders",
-      icon: ShoppingCart,
-      href: "/orders/new",
-      color: "primary"
-    },
-    {
-      title: "Kitchen Display",
-      description: "View live order queue",
-      icon: ChefHat,
-      href: "/kitchen",
-      color: "accent"
-    },
-    {
-      title: "Menu",
-      description: "Manage items & categories",
-      icon: UtensilsCrossed,
-      href: "/menu",
-      color: "success"
-    },
-    {
-      title: "Outlets",
-      description: "Manage your restaurants",
-      icon: Store,
-      href: "/outlets",
-      color: "purple"
-    },
-  ];
-
-  const quickActions = allQuickActions.filter((a) => canAccessAction(a.href));
-
-  const colorMap: Record<string, string> = {
-    primary: "bg-primary/10 text-primary group-hover:bg-primary/15",
-    accent: "bg-accent/10 text-accent group-hover:bg-accent/15",
-    success: "bg-success/10 text-success group-hover:bg-success/15",
-    purple: "bg-purple-500/10 text-purple-500 group-hover:bg-purple-500/15",
-  };
-
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto animate-fade-in">
-      {/* Welcome Section */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">
-          Welcome back{profile?.brand_name ? `, ${profile.brand_name}` : profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''} 👋
-        </h1>
-        <p className="text-muted-foreground">Here's what's happening today</p>
-      </div>
+    <div className="animate-fade-in">
+      <DashboardBannerCarousel />
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Orders Today"
-          value={loading ? "..." : stats.ordersToday.toString()}
-          icon={ShoppingCart}
-          variant="primary"
-        />
-        <StatCard
-          title="Revenue"
-          value={loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
-          icon={TrendingUp}
-          variant="success"
-        />
-        <StatCard
-          title="Covers"
-          value={loading ? "..." : stats.coversToday.toString()}
-          icon={Users}
-          variant="accent"
-        />
-        <StatCard
-          title="Outlets"
-          value={loading ? "..." : stats.outletsCount.toString()}
-          icon={Store}
-          variant="purple"
-        />
-      </div>
-
-      {/* AI Insight Card */}
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg gradient-warm glow-primary">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <CardTitle className="text-base font-medium">AI Insights</CardTitle>
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-1" data-tour="dashboard-welcome">
+            <h1 className="text-2xl font-semibold">
+              Welcome back{profile?.brand_name ? `, ${profile.brand_name}` : profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''} 👋
+            </h1>
+            <p className="text-muted-foreground">Here&apos;s what&apos;s happening today</p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              <p className="text-muted-foreground text-sm">Analyzing your business...</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-muted-foreground text-sm mb-4">{insight?.message}</p>
-              {insight?.action && canAccessAction(insight.action.href) && (
-                <Button asChild size="sm" className="gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity">
-                  <Link to={insight.action.href}>
-                    <Plus className="h-4 w-4 mr-1.5" />
-                    {insight.action.label}
-                  </Link>
-                </Button>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Quick Actions</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {quickActions.map((action) => (
-            <Link key={action.title} to={action.href}>
-              <Card className="h-full group hover:shadow-elevated hover:-translate-y-0.5 transition-all cursor-pointer border-border hover:border-primary/30">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <div className={`p-2.5 rounded-lg mb-3 w-fit transition-colors ${colorMap[action.color]}`}>
-                        <action.icon className="h-5 w-5" />
-                      </div>
-                      <CardTitle className="text-sm font-medium group-hover:text-primary transition-colors">{action.title}</CardTitle>
-                      <CardDescription className="text-xs">{action.description}</CardDescription>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour="dashboard-stats">
+            <StatCard
+              title="Orders Today"
+              value={loading ? "..." : stats.ordersToday.toString()}
+              icon={ShoppingCart}
+              variant="primary"
+            />
+            <StatCard
+              title="Revenue"
+              value={loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
+              icon={TrendingUp}
+              variant="success"
+            />
+            <StatCard
+              title="Covers"
+              value={loading ? "..." : stats.coversToday.toString()}
+              icon={Users}
+              variant="accent"
+            />
+            <StatCard
+              title="Outlets"
+              value={loading ? "..." : stats.outletsCount.toString()}
+              icon={Store}
+              variant="purple"
+            />
+          </div>
+
+          <Card
+            className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5"
+            data-tour="dashboard-insight"
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg gradient-warm glow-primary">
+                  <Sparkles className="h-4 w-4 text-white" />
+                </div>
+                <CardTitle className="text-base font-medium">AI Insights</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">Analyzing your business...</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-muted-foreground text-sm mb-4">{insight?.message}</p>
+                  {insight?.action && canAccessInsightHref(insight.action.href) && (
+                    <Button asChild size="sm" className="gradient-warm text-white border-0 glow-primary hover:opacity-90 transition-opacity">
+                      <Link to={insight.action.href}>
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        {insight.action.label}
+                      </Link>
+                    </Button>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <DashboardQuickActions />
+
+          <DashboardResources />
         </div>
+
+        <div className="lg:col-span-1">
+          <div className="lg:sticky lg:top-4 space-y-4">
+            <DashboardUpdates />
+            <DashboardDemoVideos />
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );

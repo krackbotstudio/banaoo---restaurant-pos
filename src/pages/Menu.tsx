@@ -797,7 +797,7 @@ export default function Menu() {
             <div className="p-2.5 rounded-xl gradient-primary glow-primary">
               <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
             </div>
-            <div>
+            <div data-tour="menu-header">
               <h1 className="font-display text-2xl font-bold">Menu</h1>
               <p className="text-sm text-muted-foreground">Manage items, specials and offers</p>
             </div>

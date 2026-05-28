@@ -21,6 +21,8 @@ Disallow: /customers
 Disallow: /analytics
 Disallow: /admin
 Disallow: /admin/
+Disallow: /cms
+Disallow: /cms/
 Disallow: /billing
 Disallow: /billing/
 Disallow: /account-pending

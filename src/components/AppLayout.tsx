@@ -1,13 +1,18 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed, Package } from "lucide-react";
+import { Plus, ChefHat, ClipboardList, MessageCircle, LogOut, UserCog, LayoutDashboard, UtensilsCrossed, Package, Info } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import {
+  NotificationPanel,
+  NotificationPanelProvider,
+  NotificationTrigger,
+} from "@/components/notifications/NotificationCenter";
 import { TrialBanner } from "@/components/TrialBanner";
 import { useAuth } from "@/lib/auth";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { useProductTour } from "@/lib/product-tour/tour-context";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -19,6 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { profile, signOut } = useAuth();
 
   const { permissions, loading: permissionsLoading } = useStaffPermissions();
+  const { openLauncher } = useProductTour();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
   const isNewOrderPage = location.pathname === "/orders/new";
@@ -30,7 +36,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   // Owners always can; staff must wait for permissions to load then check.
   const canAccess = (key: string): boolean => {
     if (!isStaff) return true;
-    if (permissionsLoading) return false;
+    if (permissionsLoading || permissions === undefined) return false;
     if (permissions === null) return true;
     return permissions.includes(key);
   };
@@ -40,15 +46,22 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate("/staff-login");
   };
 
+  const handleSwitchToOwner = async () => {
+    await signOut();
+    navigate("/auth?mode=login&switch=1");
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       {/* Global Trial Banner - sits at top, takes natural height */}
       <TrialBanner />
 
+      <NotificationPanelProvider>
       <SidebarProvider>
-        {/* Remaining height after TrialBanner, flex-row: sidebar + content */}
+        {/* Remaining height after TrialBanner, flex-row: sidebar + content + notifications */}
         <div className="flex flex-1 w-full min-h-0 overflow-hidden">
           <AppSidebar />
+          <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
           <SidebarInset className="flex-1 min-w-0 flex flex-col overflow-hidden">
             {/* Header — always visible, stays in place via flex layout (no sticky needed) */}
             <header className="h-14 shrink-0 border-b border-border flex items-center justify-between px-3 md:px-6 bg-background/80 backdrop-blur-sm z-10 w-full">
@@ -72,12 +85,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                     >
                       <LogOut className="h-3.5 w-3.5" />
                     </Button>
-                    <Link
-                      to="/auth?mode=login"
+                    <button
+                      type="button"
+                      onClick={() => void handleSwitchToOwner()}
                       className="text-xs text-muted-foreground hover:text-primary transition-colors whitespace-nowrap hidden sm:inline"
                     >
                       Owner →
-                    </Link>
+                    </button>
                   </div>
                 )}
               </div>
@@ -92,7 +106,18 @@ export function AppLayout({ children }: AppLayoutProps) {
 
               {/* Always visible quick navigation */}
               <div className="flex items-center gap-1 md:gap-2">
-                <NotificationCenter />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0 border-border hover:bg-primary/5 hover:border-primary/30 hover:text-primary"
+                  onClick={openLauncher}
+                  aria-label="App tour and help"
+                  title="App tour"
+                  data-tour="tour-info-button"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
                 {!isStaff && (
                   <Button
                     asChild
@@ -160,6 +185,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     </Link>
                   </Button>
                 )}
+                <NotificationTrigger />
               </div>
             </header>
 
@@ -175,8 +201,11 @@ export function AppLayout({ children }: AppLayoutProps) {
               {children}
             </main>
           </SidebarInset>
+          <NotificationPanel />
+          </div>
         </div>
       </SidebarProvider>
+      </NotificationPanelProvider>
 
       {(canAccess("dashboard") || canAccess("menu") || canAccess("orders") || canAccess("kitchen")) && (
         <nav className="fixed bottom-0 left-0 right-0 z-[70] border-t border-border bg-background/95 shadow-[0_-6px_20px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">

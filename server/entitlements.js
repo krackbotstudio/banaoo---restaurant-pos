@@ -1,6 +1,14 @@
 import pool from './db.js';
+import {
+  fetchProfileAccess,
+  isComplimentaryAccessActive,
+  resolveComplimentaryPlan,
+  buildComplimentaryEntitlements,
+  mergeLimitsWithProfileOverrides,
+  buildAccessMeta,
+} from './access-grants.js';
 
-const PLAN_LIMITS = {
+export const PLAN_LIMITS = {
   starter: {
     outlets: 1,
     staffAccounts: 1,
@@ -13,6 +21,7 @@ const PLAN_LIMITS = {
     zomatoIntegration: false,
     customerOrdering: false,
     inventoryManagement: false,
+    whatsappIntegration: false,
     aiMenuImport: false,
     qrMenus: 3,
   },
@@ -28,6 +37,7 @@ const PLAN_LIMITS = {
     zomatoIntegration: false,
     customerOrdering: true,
     inventoryManagement: false,
+    whatsappIntegration: false,
     aiMenuImport: false,
     qrMenus: 3,
   },
@@ -43,6 +53,7 @@ const PLAN_LIMITS = {
     zomatoIntegration: true,
     customerOrdering: true,
     inventoryManagement: true,
+    whatsappIntegration: true,
     aiMenuImport: true,
     qrMenus: Infinity,
   },
@@ -60,15 +71,10 @@ const DEFAULT_LIMITS = {
   zomatoIntegration: false,
   customerOrdering: false,
   inventoryManagement: false,
+  whatsappIntegration: false,
   aiMenuImport: false,
   qrMenus: 0,
 };
-
-// Internal test accounts that should always get full feature access.
-// Keep this list small and explicit.
-const INTERNAL_FULL_ACCESS_EMAILS = new Set([
-  "krackbotstudio@gmail.com",
-]);
 
 export const ADDON_MONTHLY_PRICES = {
   extra_outlet: 250,
@@ -77,6 +83,7 @@ export const ADDON_MONTHLY_PRICES = {
   zomato_integration: 499,
   customer_ordering: 299,
   inventory_management: 399,
+  whatsapp_integration: 349,
 };
 
 const STACKABLE_ADDONS = new Set(['extra_outlet', 'extra_staff']);
@@ -89,6 +96,7 @@ export function aggregateAddonsFromRows(rows) {
     zomato: false,
     customer_ordering: false,
     inventory: false,
+    whatsapp: false,
   };
   for (const row of rows) {
     const qty = Number(row.quantity) || 0;
@@ -110,6 +118,9 @@ export function aggregateAddonsFromRows(rows) {
         break;
       case 'inventory_management':
         out.inventory = out.inventory || qty > 0;
+        break;
+      case 'whatsapp_integration':
+        out.whatsapp = out.whatsapp || qty > 0;
         break;
       default:
         break;
@@ -134,6 +145,7 @@ export function computeEffectiveLimits(planType, addons, hasActiveSubscription) 
     inventoryManagement: base.inventoryManagement || addons.inventory,
     swiggyIntegration: base.swiggyIntegration || addons.swiggy,
     zomatoIntegration: base.zomatoIntegration || addons.zomato,
+    whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };
@@ -209,73 +221,41 @@ export async function fetchUsage(userId) {
 }
 
 export async function buildEntitlementsPayload(userId) {
-  // Special-case internal test account(s) so UI feature gates are stable
-  // even if their real billing/subscription rows are incomplete/expired.
-  const { rows: userRows } = await pool.query(
-    "SELECT email FROM public.users WHERE id = $1",
-    [userId]
-  );
-  const email = userRows?.[0]?.email?.toLowerCase?.() ?? null;
-  if (email && INTERNAL_FULL_ACCESS_EMAILS.has(email)) {
-    // Subscription fields are used by the frontend to compute "days remaining"
-    // and to decide whether to show renewal banners.
-    const now = new Date();
-    const expiresAt = new Date(now);
-    expiresAt.setDate(expiresAt.getDate() + 365);
-
-    const subscription = {
-      id: `test-enterprise-${userId}`,
-      user_id: userId,
-      plan_type: "enterprise",
-      status: "active",
-      trial_ends_at: null,
-      expires_at: expiresAt.toISOString(),
-      period_months: 12,
-      razorpay_subscription_id: null,
-      razorpay_order_id: null,
-      razorpay_payment_id: null,
-      current_period_start: now.toISOString(),
-      current_period_end: expiresAt.toISOString(),
-      cancelled_at: null,
-      created_at: now.toISOString(),
-    };
-
-    // Addons are mostly informational in the UI; feature gating is driven by limits.
-    const addons = {
-      extra_outlets: 0,
-      extra_staff: 0,
-      swiggy: true,
-      zomato: true,
-      customer_ordering: true,
-      inventory: true,
-    };
-
-    const usage = await fetchUsage(userId);
-
-    return {
-      subscription,
-      addons,
-      effective_limits: serializeLimits(PLAN_LIMITS.enterprise),
-      usage,
-      has_active_subscription: true,
-    };
+  const profileAccess = await fetchProfileAccess(userId);
+  if (isComplimentaryAccessActive(profileAccess)) {
+    const plan = resolveComplimentaryPlan(profileAccess);
+    return buildComplimentaryEntitlements(userId, plan, {
+      isTestAccount: !!profileAccess?.is_test_account,
+    });
   }
 
   const subscription = await fetchActiveSubscription(userId);
   const hasActiveSubscription = isSubscriptionActive(subscription);
   const addons = await fetchActiveAddons(userId);
-  const effective_limits = computeEffectiveLimits(
+  const rawLimits = computeEffectiveLimits(
     subscription?.plan_type,
     addons,
     hasActiveSubscription
   );
+  const effective_limits = serializeLimits(
+    mergeLimitsWithProfileOverrides(rawLimits, profileAccess)
+  );
   const usage = await fetchUsage(userId);
+  const complimentaryActive = isComplimentaryAccessActive(profileAccess);
+
   return {
     subscription,
     addons,
-    effective_limits: serializeLimits(effective_limits),
+    effective_limits,
     usage,
-    has_active_subscription: hasActiveSubscription,
+    has_active_subscription: hasActiveSubscription || complimentaryActive,
+    feature_overrides: profileAccess?.feature_overrides ?? {},
+    access: buildAccessMeta(profileAccess),
+    access_source: complimentaryActive
+      ? profileAccess?.is_test_account
+        ? 'test_account'
+        : 'complimentary'
+      : null,
   };
 }
 

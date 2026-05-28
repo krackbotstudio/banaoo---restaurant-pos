@@ -13,8 +13,8 @@ import pool from './db.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
+import { isGoogleAuthEnabled } from './load-env.js';
 import { sendSubscriptionConfirmation } from './email.js';
 import {
   buildEntitlementsPayload,
@@ -24,10 +24,13 @@ import {
 } from './entitlements.js';
 import { registerCustomerOrderRoutes } from './customer-orders.js';
 import { registerBillingMobileRoutes } from './billing-mobile.js';
+import { registerBillingRoutes } from './billing.js';
+import { registerDashboardQuickActionRoutes } from './dashboard-quick-actions.js';
+import { registerStaffRoutes } from './staff-api.js';
+import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction } from './admin/routes.js';
+import { ensureNotificationsInfra } from './notifications-bootstrap.js';
 import { getDefaultOperationMode } from './business-types.js';
 import { CURRENT_TERMS_VERSION, extractClientIp } from './legal.js';
-
-dotenv.config();
 
 /** Supabase PostgREST uses this JWT so RLS policies see auth.uid() = sub (Passport user id). */
 function mintSupabaseAccessToken(userId) {
@@ -95,7 +98,7 @@ app.use(cookieParser());
 
 app.use(session({
   store: new pgStore({ pool: pool, tableName: 'session' }),
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -200,13 +203,20 @@ passport.use(new LocalStrategy({ usernameField: 'email' }, async (email, passwor
 }));
 
 // --- Passport Google Strategy ---
-console.log('Google OAuth Config:', { 
-  hasClientId: !!process.env.GOOGLE_CLIENT_ID, 
-  clientId: process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + '...',
-  isPlaceholder: process.env.GOOGLE_CLIENT_ID === 'PLACEHOLDER_GOOGLE_CLIENT_ID'
+const googleAuthEnabled = isGoogleAuthEnabled();
+console.log('Google OAuth Config:', {
+  enabled: googleAuthEnabled,
+  hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+  hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
 });
 
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'PLACEHOLDER_GOOGLE_CLIENT_ID') {
+if (!googleAuthEnabled) {
+  console.warn(
+    '[auth] Google sign-in is disabled. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env (see .env.example).'
+  );
+}
+
+if (googleAuthEnabled) {
   console.log('Initializing Google OAuth strategy...');
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
@@ -332,7 +342,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'PLACEHOLDE
   }));
 }
 
-passport.serializeUser((user, done) => done(null, user.id));
+passport.serializeUser((user, done) => {
+  if (!user || !user.id) {
+    return done(new Error('Invalid user for session serialization'));
+  }
+  return done(null, user.id);
+});
 passport.deserializeUser(async (id, done) => {
   try {
     console.log('Deserializing user from session:', id);
@@ -381,14 +396,7 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Admin Middleware
-const isAdmin = (req, res, next) => {
-  if (req.user && req.user.is_admin) {
-    next();
-  } else {
-    res.status(403).json({ error: 'Admin access required' });
-  }
-};
+// Admin access: CMS session (req.session.cmsAdmin) OR legacy profiles.is_admin owner.
 
 const requireAuth = (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
@@ -498,9 +506,33 @@ app.post('/auth/login', (req, res, next) => {
   })(req, res, next);
 });
 
+app.get('/auth/providers', (_req, res) => {
+  res.json({ google: googleAuthEnabled });
+});
+
+function rejectGoogleAuthDisabled(req, res) {
+  const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
+  const accept = req.headers.accept || '';
+  if (accept.includes('text/html') || req.method === 'GET') {
+    res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_unavailable=1`);
+    return true;
+  }
+  res.status(503).json({
+    error: 'Google sign-in is not configured on this server',
+    code: 'google_auth_disabled',
+  });
+  return true;
+}
+
 // Stash T&C acceptance in the session BEFORE the Google OAuth redirect, so
 // the Google strategy callback can persist it onto the new profile.
 app.post('/auth/google/prepare', (req, res) => {
+  if (!googleAuthEnabled) {
+    return res.status(503).json({
+      error: 'Google sign-in is not configured on this server',
+      code: 'google_auth_disabled',
+    });
+  }
   const { terms_version } = req.body || {};
   if (!terms_version) {
     return res.status(400).json({ error: 'Terms acceptance required' });
@@ -521,6 +553,10 @@ app.post('/auth/google/prepare', (req, res) => {
 });
 
 app.get('/auth/google', (req, res, next) => {
+  if (!googleAuthEnabled) {
+    rejectGoogleAuthDisabled(req, res);
+    return;
+  }
   const redirectUri = typeof req.query.redirect_uri === 'string' ? req.query.redirect_uri : '';
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectUri)) {
     req.session.oauth_redirect_uri = redirectUri;
@@ -532,11 +568,12 @@ app.get('/auth/google', (req, res, next) => {
   });
   authenticator(req, res, next);
 });
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/auth' }), (req, res) => {
+function finishGoogleRedirect(req, res) {
   console.log('Google OAuth successful, redirecting...');
   const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
-  const redirectFromSession = typeof req.session?.oauth_redirect_uri === 'string' ? req.session.oauth_redirect_uri : '';
+  const redirectFromSession =
+    typeof req.session?.oauth_redirect_uri === 'string' ? req.session.oauth_redirect_uri : '';
   if (req.session?.oauth_redirect_uri) delete req.session.oauth_redirect_uri;
 
   if (state) {
@@ -559,6 +596,31 @@ app.get('/auth/google/callback', passport.authenticate('google', { failureRedire
   }
 
   res.redirect(fallback);
+}
+
+app.get('/auth/google/callback', (req, res, next) => {
+  if (!googleAuthEnabled) {
+    rejectGoogleAuthDisabled(req, res);
+    return;
+  }
+  passport.authenticate('google', (err, user) => {
+    if (err || !user) {
+      console.error('Google callback auth failure:', err?.message || 'No user returned');
+      const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
+      res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_error=1`);
+      return;
+    }
+
+    req.logIn(user, (loginErr) => {
+      if (loginErr) {
+        console.error('Google callback session login failure:', loginErr.message);
+        const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
+        res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_error=1`);
+        return;
+      }
+      finishGoogleRedirect(req, res);
+    });
+  })(req, res, next);
 });
 
 // Clear orphaned sessions (for debugging)
@@ -783,11 +845,32 @@ app.get('/api/mobile-app/update-policy', (req, res) => {
   ).trim();
 
   res.setHeader('Cache-Control', 'no-store');
-  res.json({
+  const payload = {
     minVersion,
     forceUpdate,
     message,
-  });
+  };
+
+  // If an authenticated owner checks update policy and an update is forced,
+  // create a single in-app notification per day so the alert appears in-app too.
+  if (forceUpdate && req.user?.id) {
+    void pool.query(
+      `INSERT INTO public.notifications (user_id, type, title, message, action_url)
+       SELECT $1, 'app_update', 'Application Update Required', $2, '/settings?tab=subscription'
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM public.notifications
+         WHERE user_id = $1
+           AND type = 'app_update'
+           AND created_at >= now() - interval '24 hours'
+       )`,
+      [req.user.id, message]
+    ).catch((err) => {
+      console.error('update-policy notification insert:', err.message);
+    });
+  }
+
+  res.json(payload);
 });
 
 app.post('/api/mobile-app/download-request', async (req, res) => {
@@ -834,13 +917,49 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
   });
 });
 
+/** At most one outlet per owner may be is_active; fixes legacy rows with multiple enabled. */
+async function ensureSingleActiveOutlet(ownerId) {
+  const { rows: activeRows } = await pool.query(
+    `SELECT id FROM public.outlets
+     WHERE owner_id = $1 AND is_active = true
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC`,
+    [ownerId]
+  );
+  if (activeRows.length > 1) {
+    const keepId = activeRows[0].id;
+    await pool.query(
+      `UPDATE public.outlets
+       SET is_active = false, updated_at = NOW()
+       WHERE owner_id = $1 AND id <> $2`,
+      [ownerId, keepId]
+    );
+    await pool.query(
+      `UPDATE public.outlets SET is_active = true, updated_at = NOW() WHERE id = $1`,
+      [keepId]
+    );
+    return;
+  }
+  if (activeRows.length === 0) {
+    const { rows: anyOutlet } = await pool.query(
+      `SELECT id FROM public.outlets WHERE owner_id = $1 ORDER BY created_at ASC LIMIT 1`,
+      [ownerId]
+    );
+    if (anyOutlet[0]) {
+      await pool.query(
+        `UPDATE public.outlets SET is_active = true, updated_at = NOW() WHERE id = $1`,
+        [anyOutlet[0].id]
+      );
+    }
+  }
+}
+
 // Outlets — use Postgres directly so the browser does not depend on reaching Supabase REST (avoids "Failed to fetch")
 app.get('/api/outlets', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   try {
     if (req.user.isStaff) {
       const { rows } = await pool.query(
-        `SELECT o.id, o.name, o.address, o.phone, o.is_active, o.created_at
+        `SELECT o.id, o.name, o.address, o.phone, o.is_active, o.latitude, o.created_at
          FROM public.outlets o
          INNER JOIN public.staff_outlet_assignments a ON a.outlet_id = o.id
          WHERE a.user_id = $1
@@ -849,11 +968,12 @@ app.get('/api/outlets', async (req, res) => {
       );
       return res.json({ outlets: rows });
     }
+    await ensureSingleActiveOutlet(req.user.id);
     const { rows } = await pool.query(
-      `SELECT id, name, address, phone, is_active, created_at
+      `SELECT id, name, address, phone, is_active, latitude, created_at
        FROM public.outlets
        WHERE owner_id = $1
-       ORDER BY created_at DESC`,
+       ORDER BY is_active DESC, created_at DESC`,
       [req.user.id]
     );
     res.json({ outlets: rows });
@@ -884,9 +1004,15 @@ app.post('/api/outlets', async (req, res) => {
       operationMode = getDefaultOperationMode(profileRows[0]?.business_type);
     }
 
+    const { rows: countRows } = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM public.outlets WHERE owner_id = $1`,
+      [req.user.id]
+    );
+    const isFirstOutlet = (countRows[0]?.total ?? 0) === 0;
+
     const { rows } = await pool.query(
-      `INSERT INTO public.outlets (owner_id, name, address, phone, operation_mode)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO public.outlets (owner_id, name, address, phone, operation_mode, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, address, phone, is_active, operation_mode, created_at`,
       [
         req.user.id,
@@ -894,6 +1020,7 @@ app.post('/api/outlets', async (req, res) => {
         address ? String(address).trim() || null : null,
         phone ? String(phone).trim() || null : null,
         operationMode,
+        isFirstOutlet,
       ]
     );
     res.status(201).json({ outlet: rows[0] });
@@ -906,22 +1033,87 @@ app.post('/api/outlets', async (req, res) => {
   }
 });
 
+app.patch('/api/outlets/:id/activate', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.isStaff) return res.status(403).json({ error: 'Only owners can enable outlets' });
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    const { rows: owned } = await client.query(
+      `SELECT id FROM public.outlets WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+    if (!owned[0]) {
+      return res.status(404).json({ error: 'Outlet not found or access denied' });
+    }
+
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE public.outlets SET is_active = false, updated_at = NOW() WHERE owner_id = $1`,
+      [req.user.id]
+    );
+    const { rows } = await client.query(
+      `UPDATE public.outlets
+       SET is_active = true, updated_at = NOW()
+       WHERE id = $1 AND owner_id = $2
+       RETURNING id, name, address, phone, is_active, latitude, created_at`,
+      [id, req.user.id]
+    );
+    await client.query('COMMIT');
+    res.json({ outlet: rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('PATCH /api/outlets/:id/activate:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.delete('/api/outlets/:id', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   if (req.user.isStaff) return res.status(403).json({ error: 'Only owners can delete outlets' });
   const { id } = req.params;
+  const client = await pool.connect();
   try {
-    const { rowCount } = await pool.query(
-      'DELETE FROM public.outlets WHERE id = $1 AND owner_id = $2',
+    const { rows: target } = await client.query(
+      `SELECT id, is_active FROM public.outlets WHERE id = $1 AND owner_id = $2`,
       [id, req.user.id]
     );
-    if (rowCount === 0) {
+    if (!target[0]) {
       return res.status(404).json({ error: 'Outlet not found or access denied' });
     }
+
+    await client.query('BEGIN');
+    await client.query('DELETE FROM public.outlets WHERE id = $1 AND owner_id = $2', [
+      id,
+      req.user.id,
+    ]);
+
+    if (target[0].is_active) {
+      const { rows: next } = await client.query(
+        `SELECT id FROM public.outlets
+         WHERE owner_id = $1
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [req.user.id]
+      );
+      if (next[0]) {
+        await client.query(
+          `UPDATE public.outlets SET is_active = true, updated_at = NOW() WHERE id = $1`,
+          [next[0].id]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('DELETE /api/outlets:', err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -960,6 +1152,61 @@ app.put('/api/profile', async (req, res) => {
     res.json({ profile: rows[0] });
   } catch (err) {
     console.error('PUT /api/profile:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/product-tour/dismiss', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.isStaff) return res.json({ ok: true });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE public.profiles
+       SET product_tour_dismissed_at = COALESCE(product_tour_dismissed_at, NOW())
+       WHERE user_id = $1
+       RETURNING *`,
+      [req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ profile: rows[0] });
+  } catch (err) {
+    console.error('POST /api/product-tour/dismiss:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/product-tour/complete', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.isStaff) return res.json({ ok: true });
+  const { module } = req.body || {};
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT product_tour_modules FROM public.profiles WHERE user_id = $1 LIMIT 1',
+      [req.user.id]
+    );
+    if (existing.length === 0) return res.status(404).json({ error: 'Profile not found' });
+
+    let modules = existing[0].product_tour_modules;
+    if (typeof modules === 'string') {
+      try { modules = JSON.parse(modules); } catch { modules = []; }
+    }
+    if (!Array.isArray(modules)) modules = [];
+
+    if (module && typeof module === 'string' && !modules.includes(module)) {
+      modules = [...modules, module];
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE public.profiles
+       SET product_tour_modules = $1::jsonb,
+           product_tour_completed_at = COALESCE(product_tour_completed_at, NOW())
+       WHERE user_id = $2
+       RETURNING *`,
+      [JSON.stringify(modules), req.user.id]
+    );
+    res.json({ profile: rows[0] });
+  } catch (err) {
+    console.error('POST /api/product-tour/complete:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1067,7 +1314,7 @@ app.get('/api/entitlements', async (req, res) => {
 
 // --- Admin Endpoints ---
 
-app.get('/api/admin/accounts', isAdmin, async (req, res) => {
+app.get('/api/admin/accounts', requireAdminAccess, async (req, res) => {
   try {
     const { status } = req.query;
     
@@ -1076,6 +1323,7 @@ app.get('/api/admin/accounts', isAdmin, async (req, res) => {
              p.account_status, p.is_admin, p.onboarding_completed, p.created_at,
              p.terms_accepted_at, p.terms_version,
              p.terms_accepted_ip, p.terms_accepted_user_agent,
+             p.is_test_account, p.billing_exempt, p.complimentary_plan,
              u.email
       FROM public.profiles p
       JOIN public.users u ON p.user_id = u.id
@@ -1098,7 +1346,7 @@ app.get('/api/admin/accounts', isAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/affiliates', isAdmin, async (req, res) => {
+app.get('/api/admin/affiliates', requireAdminAccess, async (req, res) => {
   try {
     const status = String(req.query.status || 'all').toLowerCase();
     const values = [];
@@ -1124,7 +1372,7 @@ app.get('/api/admin/affiliates', isAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/affiliates/action', isAdmin, async (req, res) => {
+app.post('/api/admin/affiliates/action', requireAdminAccess, async (req, res) => {
   try {
     const { affiliate_id, action } = req.body || {};
     if (!affiliate_id || !action) {
@@ -1151,7 +1399,7 @@ app.post('/api/admin/affiliates/action', isAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/affiliate-payouts', isAdmin, async (req, res) => {
+app.get('/api/admin/affiliate-payouts', requireAdminAccess, async (req, res) => {
   try {
     const status = String(req.query.status || 'all').toLowerCase();
     const values = [];
@@ -1179,7 +1427,7 @@ app.get('/api/admin/affiliate-payouts', isAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/affiliate-payouts/action', isAdmin, async (req, res) => {
+app.post('/api/admin/affiliate-payouts/action', requireAdminAccess, async (req, res) => {
   try {
     const { payout_id, status, transaction_id, notes } = req.body || {};
     if (!payout_id || !status) {
@@ -1207,7 +1455,7 @@ app.post('/api/admin/affiliate-payouts/action', isAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/mobile-app-leads', isAdmin, async (req, res) => {
+app.get('/api/admin/mobile-app-leads', requireAdminAccess, async (req, res) => {
   try {
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 250;
@@ -1225,7 +1473,7 @@ app.get('/api/admin/mobile-app-leads', isAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/accounts/action', isAdmin, async (req, res) => {
+app.post('/api/admin/accounts/action', requireAdminAccess, async (req, res) => {
   try {
     const { target_user_id, action } = req.body;
     if (!target_user_id || !action) {
@@ -1257,6 +1505,17 @@ app.post('/api/admin/accounts/action', isAdmin, async (req, res) => {
       [target_user_id, 'subscription', notificationData.title, notificationData.message, notificationData.action_url]
     );
 
+    const cmsAdmin = req.cmsAdmin;
+    await logAdminAction({
+      adminId: cmsAdmin?.source === 'admin_users' ? cmsAdmin.id : null,
+      adminEmail: cmsAdmin?.email || req.user?.email,
+      action: `account.${action}`,
+      targetType: 'profile',
+      targetId: target_user_id,
+      metadata: { new_status: newStatus },
+      req,
+    });
+
     res.json({ success: true, status: newStatus });
   } catch (err) {
     console.error('Admin approve account error:', err);
@@ -1280,7 +1539,15 @@ app.patch('/auth/password', async (req, res) => {
 app.post('/auth/logout', (req, res) => {
   req.logout((err) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true });
+    if (!req.session) {
+      res.clearCookie('connect.sid');
+      return res.json({ success: true });
+    }
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) return res.status(500).json({ error: destroyErr.message });
+      res.clearCookie('connect.sid');
+      return res.json({ success: true });
+    });
   });
 });
 
@@ -1292,6 +1559,7 @@ const BASE_PRICES = {
 };
 
 const BILLING_PERIOD_MONTHS = [3, 6, 12];
+const ADDON_BILLING_PERIOD_MONTHS = [1, 3, 6, 12];
 
 const DISCOUNTS = {
   3: 0.05,
@@ -1303,6 +1571,14 @@ function assertValidBillingPeriod(months) {
   const m = Number(months);
   if (!BILLING_PERIOD_MONTHS.includes(m)) {
     throw new Error('Invalid period_months. Choose 3, 6, or 12 months.');
+  }
+  return m;
+}
+
+function assertValidAddonBillingPeriod(months) {
+  const m = Number(months);
+  if (!ADDON_BILLING_PERIOD_MONTHS.includes(m)) {
+    throw new Error('Invalid period_months. Choose 1, 3, 6, or 12 months.');
   }
   return m;
 }
@@ -1419,7 +1695,17 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
   const { addon_type, quantity = 1, period_months } = req.body || {};
 
   try {
-    const months = assertValidBillingPeriod(period_months);
+    const entitlements = await buildEntitlementsPayload(req.user.id);
+    if (entitlements.access_source) {
+      return res.status(400).json({
+        error:
+          'This account has admin-granted access — no add-on payment is required. Refresh the page or sign out and back in.',
+        code: 'COMPLIMENTARY_ACCESS',
+        access: entitlements.access,
+      });
+    }
+
+    const months = assertValidAddonBillingPeriod(period_months);
     const KEY_ID = process.env.RAZORPAY_KEY_ID;
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     if (!KEY_ID || !KEY_SECRET) {
@@ -1480,7 +1766,7 @@ app.post('/api/payments/verify-addon-payment', async (req, res) => {
   } = req.body || {};
 
   try {
-    const months = assertValidBillingPeriod(period_months);
+    const months = assertValidAddonBillingPeriod(period_months);
     const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
@@ -1550,7 +1836,7 @@ app.post('/api/payments/cancel-subscription', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 // Upload endpoint
 app.post('/api/upload', (req, res) => {
   if (!req.isAuthenticated()) {
@@ -2188,8 +2474,15 @@ app.post('/api/webhooks/zomato', async (req, res) => {
   }
 });
 
+registerCmsRoutes(app);
 registerCustomerOrderRoutes(app, { requireAuth });
 registerBillingMobileRoutes(app, { requireAuth });
+registerBillingRoutes(app, { requireAuth });
+registerDashboardBannerPublicRoutes(app, { requireAuth });
+registerDashboardQuickActionRoutes(app, { requireAuth });
+registerStaffRoutes(app, { requireAuth });
+console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');
+console.log('[api] Dashboard routes: GET /api/dashboard/banners, GET|PUT /api/dashboard/quick-actions');
 
 // =============================================================================
 // 404 + global error handler — MUST be the LAST middleware/route registered.
@@ -2264,9 +2557,9 @@ app.use((err, req, res, next) => {
   res.status(status).json(body);
 });
 
-ensureMobileAppLeadsTable()
+Promise.all([ensureMobileAppLeadsTable(), ensureNotificationsInfra()])
   .catch((err) => {
-    console.error('mobile_app_leads bootstrap on startup:', err);
+    console.error('bootstrap on startup:', err);
   })
   .finally(() => {
     app.listen(PORT, () => {

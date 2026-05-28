@@ -58,7 +58,7 @@ export function useNotifications() {
     if (!user) return;
 
     const channel = supabase
-      .channel("notifications-changes")
+      .channel(`notifications-changes-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -82,12 +82,38 @@ export function useNotifications() {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Keep read/unread counts correct without stale closure issues.
+          void fetchNotifications();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Keep local cache aligned; simplest safe path is to refetch.
+          void fetchNotifications();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, playSound, fetchNotifications]);
 
   const markAsRead = async (notificationId: string) => {
     try {

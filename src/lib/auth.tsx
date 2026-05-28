@@ -47,6 +47,9 @@ interface Profile {
   online_payments_enabled?: boolean | null;
   terms_accepted_at?: string | null;
   terms_version?: string | null;
+  product_tour_completed_at?: string | null;
+  product_tour_dismissed_at?: string | null;
+  product_tour_modules?: string[] | null;
 }
 
 interface AuthContextType {

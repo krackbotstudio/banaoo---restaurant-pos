@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isToday, subDays, formatISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FloorPlanModal } from "@/components/floor-plan/FloorPlanModal";
-import { Loader2, Plus, ShoppingCart, Clock, CheckCircle, XCircle, ChefHat, MapPin, User, Utensils, Package, Printer, ArrowLeft, PlusCircle, Minus, Trash2, Banknote, CalendarDays, ChevronLeft, ChevronRight, ArrowLeftRight } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, Clock, CheckCircle, XCircle, ChefHat, MapPin, User, Utensils, Package, Printer, ArrowLeft, PlusCircle, Minus, Trash2, Banknote, CalendarDays, ChevronLeft, ChevronRight, ArrowLeftRight, LayoutGrid, List, ArrowUpDown, Filter, X } from "lucide-react";
 import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
@@ -22,6 +24,15 @@ import { buildBillingReceipt, printViaSerial } from "@/lib/serial-printer";
 import { getPrintLayoutFromConfig } from "@/lib/paper-width";
 import { isNativePrinterBridgeExpected, isNativePrintCapable, openNativePrinterSettings, postNativeBillingPrint } from "@/lib/native-print-bridge";
 import { printKitchenCancelSlip } from "@/lib/print-kitchen";
+import {
+  OrdersVisualHub,
+  VisualSpotActionSheet,
+  VisualPosOverlay,
+  type VisualOrder,
+  type VisualSpotContext,
+  type InlinePosSession,
+} from "@/components/orders";
+import type { TableActivatePayload } from "@/components/floor-plan/TableGridView";
 
 interface Order {
   id: string;
@@ -121,6 +132,8 @@ export default function Orders() {
   const [filter, setFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<"visual" | "list">("visual");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "total_high" | "total_low">("newest");
 
   // Order detail sheet
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -134,9 +147,35 @@ export default function Orders() {
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [tax, setTax] = useState(0); // always percentage
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const printAfterLoadRef = useRef(false);
 
   // Change Table dialog
   const [showChangeTable, setShowChangeTable] = useState(false);
+
+  // Visual floor — table / bag / box action sheet
+  const [spotContext, setSpotContext] = useState<VisualSpotContext | null>(null);
+  const [spotSheetOpen, setSpotSheetOpen] = useState(false);
+  const [inlinePosSession, setInlinePosSession] = useState<InlinePosSession | null>(null);
+
+  const toVisualOrder = (o: Order): VisualOrder => ({
+    id: o.id,
+    order_number: o.order_number,
+    status: o.status,
+    total: o.total,
+    table_number: o.table_number,
+    order_type: o.order_type,
+    source: o.source,
+    customer_name: o.customer_name,
+    order_items: o.order_items,
+  });
+
+  const syncSpotContext = (orderId: string) => {
+    setSpotContext((prev) => {
+      if (!prev?.order || prev.order.id !== orderId) return prev;
+      const updated = orders.find((o) => o.id === orderId);
+      return updated ? { ...prev, order: toVisualOrder(updated) } : prev;
+    });
+  };
 
   useEffect(() => {
     if (currentOutlet) {
@@ -164,6 +203,23 @@ export default function Orders() {
       };
     }
   }, [currentOutlet, dateFilter]);
+
+  useEffect(() => {
+    if (spotSheetOpen && spotContext?.order) {
+      syncSpotContext(spotContext.order.id);
+    }
+  }, [orders, spotSheetOpen, spotContext?.order?.id]);
+
+  useEffect(() => {
+    if (
+      printAfterLoadRef.current &&
+      selectedOrder &&
+      !itemsLoading
+    ) {
+      printAfterLoadRef.current = false;
+      void handlePrintBill();
+    }
+  }, [selectedOrder, itemsLoading, orderItems]);
 
   const fetchOrders = async (date: Date = dateFilter) => {
     if (!currentOutlet) return;
@@ -340,11 +396,12 @@ export default function Orders() {
     setEditingItemId(null);
   };
 
-  const handleStatusUpdate = async (newStatus: Order["status"]) => {
-    if (!selectedOrder) return;
+  const handleStatusUpdate = async (newStatus: Order["status"], orderArg?: Order) => {
+    const order = orderArg ?? selectedOrder;
+    if (!order) return;
     setUpdatingStatus(true);
 
-    const subtotal = selectedOrder.total;
+    const subtotal = order.total;
     const discountAmt = discountType === "percent"
       ? Math.round((subtotal * discount) / 100 * 100) / 100
       : discount;
@@ -365,7 +422,7 @@ export default function Orders() {
         status: newStatus,
         ...(newStatus === "paid" ? { discount: discountAmt, tax: Math.round((itemGst + taxAmt) * 100) / 100, total: finalTotal } : {}),
       })
-      .eq("id", selectedOrder.id);
+      .eq("id", order.id);
 
     if (!error) {
       // Status rank: items can only move FORWARD, never backward.
@@ -384,7 +441,7 @@ export default function Orders() {
         await supabase
           .from("order_items")
           .update({ status: "cancelled" })
-          .eq("order_id", selectedOrder.id)
+          .eq("order_id", order.id)
           .neq("status", "completed");
       } else {
         // Only advance items that are strictly behind the target status
@@ -394,21 +451,22 @@ export default function Orders() {
           await supabase
             .from("order_items")
             .update({ status: itemStatus })
-            .eq("order_id", selectedOrder.id)
+            .eq("order_id", order.id)
             .in("status", eligibleStatuses);
         }
       }
-      await refreshItems(selectedOrder.id);
+      await refreshItems(order.id);
     }
 
     setUpdatingStatus(false);
     if (error) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } else {
-      setSelectedOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
+      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: newStatus } : prev));
       setOrders((prev) =>
-        prev.map((o) => o.id === selectedOrder.id ? { ...o, status: newStatus } : o)
+        prev.map((o) => o.id === order.id ? { ...o, status: newStatus } : o)
       );
+      syncSpotContext(order.id);
       if (newStatus === "cancelled") {
         const cancelItems = orderItems
           .filter((i) => i.status !== "completed")
@@ -418,11 +476,11 @@ export default function Orders() {
             printerSettings,
             {
               outletId: currentOutlet?.id,
-              orderNumber: selectedOrder.order_number,
-              orderType: selectedOrder.order_type === "takeaway" ? "takeaway" : "dine_in",
-              tableNumber: selectedOrder.table_number ?? undefined,
+              orderNumber: order.order_number,
+              orderType: order.order_type === "takeaway" ? "takeaway" : "dine_in",
+              tableNumber: order.table_number ?? undefined,
               items: cancelItems,
-              createdAt: new Date(selectedOrder.created_at),
+              createdAt: new Date(order.created_at),
               cancelledAt: new Date(),
             },
             fleetContext
@@ -433,12 +491,14 @@ export default function Orders() {
           });
         }
         toast({ title: "Order cancelled", description: "Kitchen void slip sent" });
+        setSpotSheetOpen(false);
       } else if (newStatus === "paid") {
         toast({
           title: "✅ Order Paid!",
-          description: `Table ${selectedOrder.table_number || ""} is now free for new orders.`,
+          description: `Table ${order.table_number || ""} is now free for new orders.`,
         });
         setSelectedOrder(null);
+        setSpotSheetOpen(false);
       } else {
         toast({ title: "Status updated", description: `Order marked as ${newStatus}` });
       }
@@ -691,6 +751,187 @@ export default function Orders() {
     }
   };
 
+  const handleNewDineIn = (tableNumber: string) => {
+    navigate(`/orders/new?type=dine_in&table=${encodeURIComponent(tableNumber)}`);
+  };
+
+  const handleNewTakeaway = () => {
+    navigate("/orders/new?type=takeaway");
+  };
+
+  const handleTableActivate = (payload: TableActivatePayload) => {
+    const order =
+      (payload.liveOrder?.id
+        ? orders.find((o) => o.id === payload.liveOrder!.id)
+        : undefined) ??
+      orders.find(
+        (o) =>
+          o.table_number === payload.tableNumber &&
+          o.order_type === "dine_in" &&
+          ["pending", "preparing", "ready", "completed"].includes(o.status)
+      );
+
+    const liveAsVisual: VisualOrder | null = payload.liveOrder
+      ? {
+          id: payload.liveOrder.id,
+          order_number: payload.liveOrder.order_number,
+          status: payload.liveOrder.status,
+          total: payload.liveOrder.total,
+          table_number: payload.tableNumber,
+          order_type: payload.liveOrder.order_type,
+          source: payload.liveOrder.source,
+          customer_name: payload.liveOrder.customer_name,
+          order_items: Array.from({ length: payload.liveOrder.item_count }, (_, i) => ({
+            id: `${payload.liveOrder!.id}-${i}`,
+          })),
+        }
+      : null;
+
+    setSpotContext({
+      spotType: "table",
+      table: {
+        tableId: payload.tableId,
+        tableNumber: payload.tableNumber,
+        seats: payload.seats,
+        zone: payload.zone,
+        customerName: payload.customerName,
+        reservedTime: payload.reservedTime,
+        partySize: payload.partySize,
+        tableStatus: payload.tableStatus,
+      },
+      order: order ? toVisualOrder(order) : liveAsVisual,
+    });
+    setSpotSheetOpen(true);
+  };
+
+  const handleSpotNewOrder = (ctx: VisualSpotContext) => {
+    setSpotSheetOpen(false);
+    if (ctx.spotType === "table" && ctx.table) {
+      setInlinePosSession({
+        mode: "new",
+        orderType: "dine_in",
+        tableNumber: ctx.table.tableNumber,
+        label: `Table ${ctx.table.tableNumber}`,
+      });
+    } else {
+      setInlinePosSession({
+        mode: "new",
+        orderType: "takeaway",
+        label: "New takeaway",
+      });
+    }
+  };
+
+  const handleSpotViewOrder = (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    setSpotSheetOpen(false);
+    void openOrderDetail(order);
+  };
+
+  const handleSpotAddItems = (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    setSpotSheetOpen(false);
+    setInlinePosSession({
+      mode: "add",
+      orderId: order.id,
+      orderType: order.order_type,
+      tableNumber: order.table_number || "",
+      label:
+        order.order_type === "dine_in" && order.table_number
+          ? `Table ${order.table_number} · Add items`
+          : order.order_type === "takeaway"
+            ? `Takeaway #${order.order_number} · Add items`
+            : `Order #${order.order_number} · Add items`,
+    });
+  };
+
+  const handleInlinePosComplete = () => {
+    setInlinePosSession(null);
+    void fetchOrders(dateFilter);
+  };
+
+  const handleSpotPrintBill = async (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    printAfterLoadRef.current = true;
+    setSpotSheetOpen(false);
+    await openOrderDetail(order);
+  };
+
+  const handleSpotAdvanceStatus = async (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    const next = nextStatus(order.status);
+    if (!next) return;
+    setUpdatingStatus(true);
+    await openOrderDetail(order);
+    await handleStatusUpdate(next, order);
+    setUpdatingStatus(false);
+  };
+
+  const handleSpotMarkPaid = async (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    setUpdatingStatus(true);
+    await openOrderDetail(order);
+    await handleStatusUpdate("paid", order);
+    setUpdatingStatus(false);
+  };
+
+  const handleSpotChangeTable = (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    setSpotSheetOpen(false);
+    void openOrderDetail(order);
+    setShowChangeTable(true);
+  };
+
+  const handleSpotCancelOrder = async (vo: VisualOrder) => {
+    const order = orders.find((o) => o.id === vo.id);
+    if (!order) return;
+    setUpdatingStatus(true);
+    await openOrderDetail(order);
+    await handleStatusUpdate("cancelled", order);
+    setUpdatingStatus(false);
+  };
+
+  const filteredOrders = useMemo(() => {
+    let result = orders;
+    if (sourceFilter !== "all") {
+      result = result.filter((o) => o.source === sourceFilter);
+    }
+    if (filter !== "all") {
+      result = result.filter((o) => o.status === filter);
+    }
+    const sorted = [...result];
+    switch (sortBy) {
+      case "oldest":
+        sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        break;
+      case "total_high":
+        sorted.sort((a, b) => b.total - a.total);
+        break;
+      case "total_low":
+        sorted.sort((a, b) => a.total - b.total);
+        break;
+      default:
+        sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+    return sorted;
+  }, [orders, sourceFilter, filter, sortBy]);
+
+  const hasActiveFilters =
+    sourceFilter !== "all" || filter !== "all" || sortBy !== "newest" || !isToday(dateFilter);
+
+  const clearFilters = () => {
+    setSourceFilter("all");
+    setFilter("all");
+    setSortBy("newest");
+    setDateFilter(new Date());
+  };
+
   if (outletLoading) {
     return (
       <AppLayout>
@@ -726,7 +967,7 @@ export default function Orders() {
             <div className="p-2.5 rounded-xl gradient-primary glow-primary">
               <ShoppingCart className="h-5 w-5 text-primary-foreground" />
             </div>
-            <div>
+            <div data-tour="orders-header">
               <h1 className="font-display text-2xl font-bold">Orders</h1>
               <p className="text-sm text-muted-foreground">
                 {currentOutlet?.name ? `${currentOutlet.name} - ` : ""}Manage and track customer orders
@@ -744,106 +985,218 @@ export default function Orders() {
           </div>
         </div>
 
-        {/* Date Filter */}
-        {(() => {
-          const isTodaySelected = isToday(dateFilter);
-          const isYesterday = !isTodaySelected &&
-            format(dateFilter, "yyyy-MM-dd") === format(subDays(new Date(), 1), "yyyy-MM-dd");
-          const label = isTodaySelected ? "Today" : isYesterday ? "Yesterday" : format(dateFilter, "dd MMM yyyy");
-          return (
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-              <button
-                onClick={() => setDateFilter(d => subDays(d, 1))}
-                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
-                title="Previous day"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => (dateInputRef.current as any)?.showPicker?.() ?? dateInputRef.current?.click()}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                  isTodaySelected
-                    ? "bg-primary text-white border-primary"
-                    : "bg-background border-border hover:bg-muted"
-                }`}
-              >
-                {label}
-              </button>
-              <input
-                ref={dateInputRef}
-                type="date"
-                max={format(new Date(), "yyyy-MM-dd")}
-                value={format(dateFilter, "yyyy-MM-dd")}
-                onChange={(e) => e.target.value && setDateFilter(new Date(e.target.value + "T00:00:00"))}
-                className="sr-only"
-                tabIndex={-1}
-              />
-              <button
-                onClick={() => setDateFilter(d => { const n = subDays(d, -1); return n > new Date() ? new Date() : n; })}
-                disabled={isTodaySelected}
-                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Next day"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              {!isTodaySelected && (
-                <button
-                  onClick={() => setDateFilter(new Date())}
-                  className="text-xs text-primary underline underline-offset-2 ml-1"
-                >
-                  Back to Today
-                </button>
-              )}
-            </div>
-          );
-        })()}
+        {/* Toolbar: date, filters, sort, view */}
+        <div className="rounded-xl border bg-card shadow-sm" data-tour="orders-filters">
+          <div className="flex flex-col gap-3 p-3 md:p-4">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              {/* Date */}
+              {(() => {
+                const isTodaySelected = isToday(dateFilter);
+                const isYesterday =
+                  !isTodaySelected &&
+                  format(dateFilter, "yyyy-MM-dd") === format(subDays(new Date(), 1), "yyyy-MM-dd");
+                const label = isTodaySelected
+                  ? "Today"
+                  : isYesterday
+                    ? "Yesterday"
+                    : format(dateFilter, "dd MMM yyyy");
+                return (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground ml-1 mr-1 shrink-0" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setDateFilter((d) => subDays(d, 1))}
+                      title="Previous day"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 min-w-[7.5rem] font-medium"
+                      onClick={() =>
+                        (dateInputRef.current as any)?.showPicker?.() ?? dateInputRef.current?.click()
+                      }
+                    >
+                      {label}
+                    </Button>
+                    <input
+                      ref={dateInputRef}
+                      type="date"
+                      max={format(new Date(), "yyyy-MM-dd")}
+                      value={format(dateFilter, "yyyy-MM-dd")}
+                      onChange={(e) =>
+                        e.target.value && setDateFilter(new Date(e.target.value + "T00:00:00"))
+                      }
+                      className="sr-only"
+                      tabIndex={-1}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() =>
+                        setDateFilter((d) => {
+                          const n = subDays(d, -1);
+                          return n > new Date() ? new Date() : n;
+                        })
+                      }
+                      disabled={isTodaySelected}
+                      title="Next day"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })()}
 
-        {/* Filter Tabs */}
-        <div className="space-y-3">
-          {/* Source Filter */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-sm text-muted-foreground self-center mr-2">Source:</span>
-            {["all", "pos", "zomato", "swiggy"].map((source) => (
-              <Button
-                key={source}
-                variant={sourceFilter === source ? "secondary" : "outline"}
-                size="sm"
-                className="rounded-full capitalize"
-                onClick={() => setSourceFilter(source)}
-              >
-                {source === "all" ? "All Sources" : source.toUpperCase()}
-              </Button>
-            ))}
-          </div>
-          
-          {/* Status Filter */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-sm text-muted-foreground self-center mr-2">Status:</span>
-            {["all", "pending", "preparing", "ready", "completed", "paid"].map((status) => (
-              <Button
-                key={status}
-                variant={filter === status ? "secondary" : "outline"}
-                size="sm"
-                className="rounded-full capitalize"
-                onClick={() => setFilter(status)}
-              >
-                {status === "all" ? "All Status" : status}
-              </Button>
-            ))}
+              <Separator orientation="vertical" className="hidden lg:block h-8" />
+
+              {/* Filters & sort */}
+              <div className="flex flex-wrap flex-1 items-center gap-2">
+                <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                  <SelectTrigger className="h-9 w-full sm:w-[140px] bg-background">
+                    <SelectValue placeholder="Source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All sources</SelectItem>
+                    <SelectItem value="pos">POS</SelectItem>
+                    <SelectItem value="zomato">Zomato</SelectItem>
+                    <SelectItem value="swiggy">Swiggy</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filter} onValueChange={setFilter}>
+                  <SelectTrigger className="h-9 w-full sm:w-[150px] bg-background">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="preparing">Preparing</SelectItem>
+                    <SelectItem value="ready">Ready</SelectItem>
+                    <SelectItem value="completed">Awaiting payment</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                  <SelectTrigger className="h-9 w-full sm:w-[160px] bg-background">
+                    <div className="flex items-center gap-2">
+                      <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <SelectValue placeholder="Sort" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest first</SelectItem>
+                    <SelectItem value="oldest">Oldest first</SelectItem>
+                    <SelectItem value="total_high">Highest total</SelectItem>
+                    <SelectItem value="total_low">Lowest total</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-1.5 text-muted-foreground"
+                    onClick={clearFilters}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+
+              <Separator orientation="vertical" className="hidden lg:block h-8" />
+
+              {/* View mode */}
+              <div className="flex items-center gap-2 shrink-0" data-tour="orders-view-toggle">
+                <span className="text-xs text-muted-foreground hidden sm:inline">View</span>
+                <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+                  <Button
+                    variant={viewMode === "visual" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 rounded-md gap-1.5 px-3 shadow-none"
+                    onClick={() => setViewMode("visual")}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Visual
+                  </Button>
+                  <Button
+                    variant={viewMode === "list" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 rounded-md gap-1.5 px-3 shadow-none"
+                    onClick={() => setViewMode("list")}
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    List
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Active filter summary */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground">Active:</span>
+                {!isToday(dateFilter) && (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {format(dateFilter, "dd MMM yyyy")}
+                  </Badge>
+                )}
+                {sourceFilter !== "all" && (
+                  <Badge variant="secondary" className="text-xs font-normal capitalize">
+                    {sourceFilter === "pos" ? "POS" : sourceFilter}
+                  </Badge>
+                )}
+                {filter !== "all" && (
+                  <Badge variant="secondary" className="text-xs font-normal capitalize">
+                    {filter === "completed" ? "Awaiting payment" : filter}
+                  </Badge>
+                )}
+                {sortBy !== "newest" && (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {sortBy === "oldest"
+                      ? "Oldest first"
+                      : sortBy === "total_high"
+                        ? "Highest total"
+                        : "Lowest total"}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Orders List */}
+        {/* Visual floor / list */}
         {(() => {
           const RUNNING = new Set(["pending", "preparing", "ready", "completed"]);
-          let filteredOrders = orders;
-          
-          if (sourceFilter !== "all") {
-            filteredOrders = filteredOrders.filter(o => o.source === sourceFilter);
-          }
-          if (filter !== "all") {
-            filteredOrders = filteredOrders.filter(o => o.status === filter);
+
+          if (viewMode === "visual" && currentOutlet) {
+            return (
+              <div data-tour="orders-visual-hub">
+              <OrdersVisualHub
+                outletId={currentOutlet.id}
+                orders={filteredOrders}
+                onTableActivate={handleTableActivate}
+                onTakeawayActivate={(order) => {
+                  setSpotContext({ spotType: "takeaway", order });
+                  setSpotSheetOpen(true);
+                }}
+                onOnlineActivate={(order) => {
+                  setSpotContext({ spotType: "online", order });
+                  setSpotSheetOpen(true);
+                }}
+              />
+              </div>
+            );
           }
 
           if (filteredOrders.length === 0) {
@@ -1342,6 +1695,37 @@ export default function Orders() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ── Visual floor inline POS (no page redirect) ── */}
+      {inlinePosSession && (
+        <VisualPosOverlay
+          session={inlinePosSession}
+          onClose={() => setInlinePosSession(null)}
+          onComplete={handleInlinePosComplete}
+        />
+      )}
+
+      {/* ── Visual floor quick actions ── */}
+      <VisualSpotActionSheet
+        open={spotSheetOpen}
+        onOpenChange={setSpotSheetOpen}
+        context={spotContext}
+        statusLabel={ORDER_STATUS_LABEL}
+        statusColor={getStatusColor}
+        statusIcon={getStatusIcon}
+        nextStatus={nextStatus}
+        nextStatusLabel={nextStatusLabel}
+        onNewOrder={handleSpotNewOrder}
+        onViewOrder={handleSpotViewOrder}
+        onAddItems={handleSpotAddItems}
+        onPrintBill={handleSpotPrintBill}
+        onAdvanceStatus={handleSpotAdvanceStatus}
+        onMarkPaid={handleSpotMarkPaid}
+        onChangeTable={handleSpotChangeTable}
+        onCancelOrder={handleSpotCancelOrder}
+        printingBill={printingBill}
+        updatingStatus={updatingStatus}
+      />
 
       {/* ── Change Table — reuse the full floor-plan picker ── */}
       {currentOutlet && (

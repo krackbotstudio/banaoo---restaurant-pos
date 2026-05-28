@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import {
@@ -12,6 +12,7 @@ import {
   ADDON_CATALOG,
   getAddonCatalogItem,
   isValidBillingPeriodMonths,
+  isValidAddonBillingPeriodMonths,
 } from "@/lib/plans";
 import {
   BILLING_COMPLETE_EVENT,
@@ -19,6 +20,7 @@ import {
   isBanaooNativeApp,
   openBillingInExternalBrowser,
 } from "@/lib/native-app-bridge";
+import { apiUrl } from "@/lib/api-base";
 
 export interface Subscription {
   id: string;
@@ -42,12 +44,22 @@ export interface SubscriptionUsage {
   staff: number;
 }
 
+export interface AccountAccessMeta {
+  is_test_account: boolean;
+  billing_exempt: boolean;
+  complimentary_plan: string | null;
+  is_complimentary_active: boolean;
+  access_source: "test_account" | "complimentary" | null;
+}
+
 export interface EntitlementsPayload {
   subscription: Subscription | null;
   addons: SubscriptionAddons;
   effective_limits: PlanLimits;
   usage: SubscriptionUsage;
   has_active_subscription: boolean;
+  access_source?: "test_account" | "complimentary" | null;
+  access?: AccountAccessMeta | null;
 }
 
 declare global {
@@ -88,6 +100,7 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
         zomatoIntegration: false,
         customerOrdering: false,
         inventoryManagement: false,
+        whatsappIntegration: false,
         aiMenuImport: false,
         qrMenus: 0,
       }),
@@ -115,6 +128,7 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
         zomatoIntegration: false,
         customerOrdering: false,
         inventoryManagement: false,
+        whatsappIntegration: false,
         aiMenuImport: false,
         qrMenus: 0,
         ...limitsApi,
@@ -124,6 +138,11 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
         staff: Number((obj.usage as SubscriptionUsage)?.staff) || 0,
       },
       has_active_subscription: Boolean(obj.has_active_subscription),
+      access_source:
+        (obj.access_source as EntitlementsPayload["access_source"]) ??
+        (obj.access as AccountAccessMeta | undefined)?.access_source ??
+        null,
+      access: (obj.access as AccountAccessMeta | null) ?? null,
     };
   }
 
@@ -152,6 +171,7 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
       zomatoIntegration: false,
       customerOrdering: false,
       inventoryManagement: false,
+      whatsappIntegration: false,
       aiMenuImport: false,
       qrMenus: 0,
     }),
@@ -166,6 +186,7 @@ export function useSubscription() {
     parseEntitlementsResponse(null)
   );
   const [loading, setLoading] = useState(true);
+  const fetchGenerationRef = useRef(0);
 
   const subscription = entitlements.subscription;
 
@@ -180,10 +201,10 @@ export function useSubscription() {
       if (profileLoading) return;
       if (!profile) return;
 
+      const generation = ++fetchGenerationRef.current;
       setLoading(true);
       try {
-        const API_URL = import.meta.env.VITE_API_URL ?? "";
-        const res = await fetch(`${API_URL}/api/subscription`, {
+        const res = await fetch(apiUrl("/api/subscription"), {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
         });
@@ -191,16 +212,20 @@ export function useSubscription() {
         if (res.status === 401 && attemptNumber < 3) {
           const delay = (attemptNumber + 1) * 500;
           await new Promise((resolve) => setTimeout(resolve, delay));
-          return fetchSubscription(attemptNumber + 1);
+          await fetchSubscription(attemptNumber + 1);
+          return;
         }
 
         if (!res.ok) throw new Error("Failed to fetch subscription from backend");
         const data = await res.json();
+        if (generation !== fetchGenerationRef.current) return;
         setEntitlements(parseEntitlementsResponse(data));
       } catch (error) {
         console.error("Error fetching subscription:", error);
       } finally {
-        setLoading(false);
+        if (generation === fetchGenerationRef.current) {
+          setLoading(false);
+        }
       }
     },
     [user, profile, profileLoading]
@@ -220,6 +245,24 @@ export function useSubscription() {
     return () => window.removeEventListener(BILLING_COMPLETE_EVENT, onBillingComplete);
   }, [fetchSubscription]);
 
+  useEffect(() => {
+    const onFocus = () => {
+      void fetchSubscription();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void fetchSubscription();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [fetchSubscription]);
+
   const expiresAt = subscription?.expires_at
     ? new Date(subscription.expires_at)
     : subscription?.trial_ends_at
@@ -232,7 +275,14 @@ export function useSubscription() {
     (subscription?.status === "active" || isTrialing) && !isExpired;
   const isPastDue = subscription?.status === "past_due";
   const hasActiveSubscription =
-    entitlements.has_active_subscription || (isActive && !isExpired);
+    entitlements.has_active_subscription ||
+    Boolean(entitlements.access_source) ||
+    Boolean(entitlements.access?.is_complimentary_active) ||
+    (isActive && !isExpired);
+
+  const accessSource =
+    entitlements.access_source ?? entitlements.access?.access_source ?? null;
+  const hasComplimentaryAccess = Boolean(accessSource);
 
   const daysUntilExpiry = expiresAt
     ? Math.max(
@@ -329,8 +379,7 @@ export function useSubscription() {
         }
       }
       try {
-        const API_URL = import.meta.env.VITE_API_URL ?? "";
-        const res = await fetch(`${API_URL}/api/payments/create-order`, {
+        const res = await fetch(apiUrl("/api/payments/create-order"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -357,7 +406,7 @@ export function useSubscription() {
           description: `${planNames[planType]} Plan — ${periodMonths} month${periodMonths > 1 ? "s" : ""}`,
           onSuccess: async (response) => {
             const verifyRes = await fetch(
-              `${API_URL}/api/payments/verify-payment`,
+              apiUrl("/api/payments/verify-payment"),
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -401,8 +450,8 @@ export function useSubscription() {
         toast.error("Unknown add-on");
         return false;
       }
-      if (!isValidBillingPeriodMonths(periodMonths)) {
-        toast.error("Choose a billing period of 3, 6, or 12 months");
+      if (!isValidAddonBillingPeriodMonths(periodMonths)) {
+        toast.error("Choose a billing period of 1, 3, 6, or 12 months");
         return false;
       }
       if (isBanaooNativeApp()) {
@@ -426,8 +475,15 @@ export function useSubscription() {
         }
       }
       try {
-        const API_URL = import.meta.env.VITE_API_URL ?? "";
-        const res = await fetch(`${API_URL}/api/payments/create-addon-order`, {
+        if (hasComplimentaryAccess) {
+          toast.info(
+            "Your account already has admin-granted access. Refresh the page — no add-on payment is needed."
+          );
+          await fetchSubscription();
+          return false;
+        }
+
+        const res = await fetch(apiUrl("/api/payments/create-addon-order"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -451,7 +507,7 @@ export function useSubscription() {
           description: `${item.name}${qtyLabel} — ${periodMonths} month${periodMonths > 1 ? "s" : ""}`,
           onSuccess: async (response) => {
             const verifyRes = await fetch(
-              `${API_URL}/api/payments/verify-addon-payment`,
+              apiUrl("/api/payments/verify-addon-payment"),
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -497,8 +553,7 @@ export function useSubscription() {
       return false;
     }
     try {
-      const API_URL = import.meta.env.VITE_API_URL ?? "";
-      const res = await fetch(`${API_URL}/api/payments/cancel-subscription`, {
+      const res = await fetch(apiUrl("/api/payments/cancel-subscription"), {
         method: "POST",
         credentials: "include",
       });
@@ -527,6 +582,8 @@ export function useSubscription() {
     isActive,
     isPastDue,
     hasActiveSubscription,
+    hasComplimentaryAccess,
+    accessSource,
     expiresAt,
     daysUntilExpiry,
     daysRemaining,
@@ -539,3 +596,5 @@ export function useSubscription() {
     isNativeAppBilling: isBanaooNativeApp(),
   };
 }
+
+

@@ -87,8 +87,8 @@ export function registerBillingMobileRoutes(app, { requireAuth }) {
           return res.status(400).json({ error: 'Invalid addon_type' });
         }
         const months = Number(period_months);
-        if (![3, 6, 12].includes(months)) {
-          return res.status(400).json({ error: 'Invalid period_months. Choose 3, 6, or 12 months.' });
+        if (![1, 3, 6, 12].includes(months)) {
+          return res.status(400).json({ error: 'Invalid period_months. Choose 1, 3, 6, or 12 months.' });
         }
         payload = {
           kind,

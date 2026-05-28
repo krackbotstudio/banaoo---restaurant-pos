@@ -10,6 +10,7 @@ const ADDON_FEATURES: FeatureKey[] = [
   "staffAccounts",
   "customerOrdering",
   "inventoryManagement",
+  "whatsappIntegration",
   "swiggyIntegration",
   "zomatoIntegration",
 ];
@@ -18,19 +19,24 @@ export function useFeatureGating() {
   const {
     subscription,
     hasActiveSubscription,
+    hasComplimentaryAccess,
     effectiveLimits,
     usage,
     addons,
+    loading,
   } = useSubscription();
 
   const planType = subscription?.plan_type || null;
 
   const limits = useMemo(() => {
+    if (loading) return effectiveLimits;
     if (!hasActiveSubscription) return DEFAULT_LIMITS;
     return effectiveLimits;
-  }, [hasActiveSubscription, effectiveLimits]);
+  }, [loading, hasActiveSubscription, effectiveLimits]);
 
   const canAccess = (feature: FeatureKey): boolean => {
+    if (loading) return false;
+    if (hasComplimentaryAccess) return true;
     if (!hasActiveSubscription) return false;
     const limit = limits[feature];
     if (typeof limit === "boolean") return limit;
@@ -43,6 +49,8 @@ export function useFeatureGating() {
   };
 
   const isWithinLimit = (feature: FeatureKey, currentCount: number): boolean => {
+    if (loading) return true;
+    if (hasComplimentaryAccess) return true;
     const limit = limits[feature];
     if (typeof limit === "number") {
       if (limit === Infinity) return true;
@@ -70,6 +78,8 @@ export function useFeatureGating() {
     addons,
     usage,
     hasActiveSubscription,
+    hasComplimentaryAccess,
+    loading,
     canAccess,
     getLimit,
     isWithinLimit,

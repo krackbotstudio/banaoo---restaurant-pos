@@ -11,6 +11,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { getRestaurantPostAuthPath } from "@/lib/post-auth-redirect";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,33 +34,13 @@ export default function AuthCallback() {
 
     redirected.current = true;
 
-    // Staff → dashboard directly
-    if (profile.role !== "owner") {
-      navigate("/dashboard", { replace: true });
-      return;
+    const destination = getRestaurantPostAuthPath(profile);
+
+    if (destination === "/dashboard" && profile.role === "owner") {
+      toast.success(`Welcome back, ${profile.full_name?.split(" ")[0] || "there"}! 👋`);
     }
 
-    // Admin → dashboard
-    if (profile.is_admin) {
-      navigate("/dashboard", { replace: true });
-      return;
-    }
-
-    // Rejected or pending → account-pending page
-    if (profile.account_status === "rejected" || profile.account_status === "pending") {
-      navigate("/account-pending", { replace: true });
-      return;
-    }
-
-    // Onboarding not done → restaurant setup
-    if (!profile.onboarding_completed) {
-      navigate("/onboarding", { replace: true });
-      return;
-    }
-
-    // Everything OK — existing user returning
-    toast.success(`Welcome back, ${profile.full_name?.split(" ")[0] || "there"}! 👋`);
-    navigate("/dashboard", { replace: true });
+    navigate(destination, { replace: true });
   }, [user, profile, authLoading, profileLoading, navigate]);
 
   // Fallback: if no user after 8 seconds, redirect to auth

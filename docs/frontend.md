@@ -177,12 +177,27 @@ POS new-order flow uses the native `SpeechRecognition` / `webkitSpeechRecognitio
 | `/onboarding` | `Onboarding` |
 | `/dashboard`, `/outlets[/:id]`, `/menu`, `/orders[/new]`, `/kitchen`, `/payments`, `/staff`, `/customers`, `/analytics`, `/order-history`, `/inventory`, `/integrations`, `/my-menus`, `/settings`, `/addons` | Owner / staff pages |
 
-**Admin**
+**Tectangle CMS** (separate auth via `CmsAuthProvider` — not gated by owner `<ProtectedRoute>`)
 
 | Path | Component |
 |---|---|
-| `/admin/account` → `<Navigate>` → `/admin/accounts` |
-| `/admin/accounts` | `admin/Accounts` |
+| `/cms/login` | `cms/CmsLogin` |
+| `/cms` → redirect | `/cms/dashboard` |
+| `/cms/dashboard` | `cms/Dashboard` |
+| `/cms/customers` | `cms/Customers` → `AccountsPanel` |
+| `/cms/customers/:userId` | `cms/CustomerDetail` — customer 360 with tabs and controls |
+| `/cms/subscriptions` | `cms/Subscriptions` — list + status/plan actions |
+| `/cms/payments` | `cms/Payments` — Razorpay-linked payment timeline |
+| `/cms/marketing` | `cms/Marketing` — leads, export, affiliate pipeline |
+| `/cms/roles` | `cms/Roles` — CMS admin user management (super_admin) |
+
+**Legacy admin redirects**
+
+| Path | Component |
+|---|---|
+| `/admin/account`, `/admin/accounts` | `<Navigate>` → `/cms/customers` |
+
+See [`admin-cms.md`](admin-cms.md) for setup and roadmap.
 
 **Affiliate portal** (`<AffiliateProtectedRoute><AffiliateLayout />`):
 
@@ -309,7 +324,7 @@ If running inside the APK (`isNativePrinterBridgeExpected()`), a header "Open Pr
 
 ### 6.7 Admin accounts
 
-`pages/admin/Accounts.tsx` — admin-only screen (route gated by `<ProtectedRoute>`, admin check inside the page using `profile.is_admin`). Lists accounts from `/api/admin/accounts`; tabs filter by `account_status`. Per-account actions: approve, reject, suspend. Uses `<StatCard>` for counts, `<Tabs>`/`<Card>`, sonner toasts.
+`pages/admin/Accounts.tsx` — exports **`AccountsPanel`** (no layout/auth wrapper). Used inside CMS at `/cms/customers`. Lists accounts from `/api/admin/accounts`; tabs for owners, affiliates, payouts, mobile-app leads. Approve/reject/suspend actions. CMS session or legacy admin Passport session required on API.
 
 ---
 

@@ -24,6 +24,7 @@ import { useOutlet } from "@/lib/outlet-context";
 import { useAuth } from "@/lib/auth";
 import { restaurantDisplayName } from "@/lib/restaurant-display-name";
 import { computeReceiptTotals } from "@/lib/order-receipt-totals";
+import { WhatsAppBillButton } from "@/components/order/WhatsAppBillButton";
 
 interface OrderItem {
   name: string;
@@ -221,6 +222,14 @@ export function OrderSuccessDialog({
 
   if (!orderData) return null;
 
+  const lineItems = orderData.items.map((i) => ({
+    name: i.name,
+    quantity: i.quantity,
+    totalPrice: i.totalPrice ?? 0,
+    gstRate: i.gstRate,
+  }));
+  const receiptTotals = computeReceiptTotals(lineItems);
+
   const typeLabel = selfService
     ? "Self Service"
     : orderData.orderType === "dine_in"
@@ -319,6 +328,23 @@ export function OrderSuccessDialog({
             ) : null}
           </div>
         ) : null}
+
+        <WhatsAppBillButton
+          className="w-full"
+          variant="secondary"
+          payload={{
+            restaurantName: restaurantDisplayName(profile) || orderData.outletName,
+            outletName: orderData.outletName || outletName,
+            orderNumber: orderData.orderNumber,
+            orderType: orderData.orderType,
+            tableNumber: orderData.tableNumber,
+            items: lineItems,
+            subtotal: receiptTotals.subtotal,
+            gstTotal: receiptTotals.gstTotal,
+            grandTotal: receiptTotals.grandTotal,
+            createdAt: orderData.createdAt,
+          }}
+        />
 
         <DialogFooter className="flex-col sm:flex-row gap-2 mt-1">
           <Button variant="outline" className="flex-1 gap-2" onClick={handleClose}>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "@/lib/auth";
+import { getRestaurantPostAuthPath } from "@/lib/post-auth-redirect";
 import { API_URL } from "@/lib/api-url";
 import { CURRENT_TERMS_VERSION } from "@/lib/legal";
 import { SEO } from "@/components/seo/SEO";
@@ -37,7 +38,7 @@ type AuthMode = "login" | "signup";
 type AuthView = "main" | "forgot-password";
 
 export default function Auth() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -74,10 +75,54 @@ export default function Auth() {
   const [signupAcceptedTerms, setSignupAcceptedTerms] = useState(false);
 
   const [resetEmail, setResetEmail] = useState("");
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
 
   const { signIn, signUp, resetPassword } = useAuth();
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/providers`);
+        if (!res.ok) throw new Error("providers unavailable");
+        const data = (await res.json()) as { google?: boolean };
+        if (!cancelled) setGoogleEnabled(!!data.google);
+      } catch {
+        if (!cancelled) setGoogleEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("google_unavailable") === "1") {
+      toast({
+        variant: "destructive",
+        title: "Google sign-in unavailable",
+        description:
+          "Google OAuth is not configured on the API server. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env, then restart npm run server.",
+      });
+    } else if (searchParams.get("google_error") === "1") {
+      toast({
+        variant: "destructive",
+        title: "Google sign-in failed",
+        description: "Please try again or use email and password.",
+      });
+    }
+  }, [searchParams, toast]);
+
   const handleGoogleSignIn = async (isSignupContext = false) => {
+    if (googleEnabled === false) {
+      toast({
+        variant: "destructive",
+        title: "Google sign-in unavailable",
+        description:
+          "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your .env file and restart the API server.",
+      });
+      return;
+    }
     if (isSignupContext && !signupAcceptedTerms) {
       toast({
         variant: "destructive",
@@ -138,10 +183,18 @@ export default function Auth() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!loading && user && profile) {
-      navigate("/dashboard");
+    const shouldSwitch = searchParams.get("switch") === "1";
+    if (!shouldSwitch || loading) return;
+    if (!user) return;
+    void signOut();
+  }, [searchParams, loading, user, signOut]);
+
+  useEffect(() => {
+    const shouldSwitch = searchParams.get("switch") === "1";
+    if (!loading && user && profile && !shouldSwitch) {
+      navigate(getRestaurantPostAuthPath(profile), { replace: true });
     }
-  }, [user, loading, profile, navigate]);
+  }, [user, loading, profile, navigate, searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,25 +474,29 @@ export default function Auth() {
                       )}
                     </Button>
 
-                    <div className="relative py-1">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-border/60" />
-                      </div>
-                      <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
-                        <span className="bg-background px-3 text-muted-foreground">or</span>
-                      </div>
-                    </div>
+                    {googleEnabled !== false && (
+                      <>
+                        <div className="relative py-1">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border/60" />
+                          </div>
+                          <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                            <span className="bg-background px-3 text-muted-foreground">or</span>
+                          </div>
+                        </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-12 text-base font-medium gap-3"
-                      onClick={() => handleGoogleSignIn(false)}
-                      disabled={isSubmitting}
-                    >
-                      <GoogleIcon />
-                      Continue with Google
-                    </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full h-12 text-base font-medium gap-3"
+                          onClick={() => handleGoogleSignIn(false)}
+                          disabled={isSubmitting || googleEnabled === null}
+                        >
+                          <GoogleIcon />
+                          Continue with Google
+                        </Button>
+                      </>
+                    )}
 
                     <p className="text-center text-sm text-muted-foreground pt-2">
                       Don't have an account?{" "}
@@ -600,30 +657,34 @@ export default function Auth() {
                       )}
                     </Button>
 
-                    <div className="relative py-1">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-border/60" />
-                      </div>
-                      <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
-                        <span className="bg-background px-3 text-muted-foreground">or</span>
-                      </div>
-                    </div>
+                    {googleEnabled !== false && (
+                      <>
+                        <div className="relative py-1">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border/60" />
+                          </div>
+                          <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                            <span className="bg-background px-3 text-muted-foreground">or</span>
+                          </div>
+                        </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-12 text-base font-medium gap-3"
-                      onClick={() => handleGoogleSignIn(true)}
-                      disabled={isSubmitting || !signupAcceptedTerms}
-                      title={
-                        !signupAcceptedTerms
-                          ? "Please accept the Terms & Policies first"
-                          : undefined
-                      }
-                    >
-                      <GoogleIcon />
-                      Sign up with Google
-                    </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full h-12 text-base font-medium gap-3"
+                          onClick={() => handleGoogleSignIn(true)}
+                          disabled={isSubmitting || !signupAcceptedTerms || googleEnabled === null}
+                          title={
+                            !signupAcceptedTerms
+                              ? "Please accept the Terms & Policies first"
+                              : undefined
+                          }
+                        >
+                          <GoogleIcon />
+                          Sign up with Google
+                        </Button>
+                      </>
+                    )}
 
                     <p className="text-center text-sm text-muted-foreground pt-2">
                       Already have an account?{" "}

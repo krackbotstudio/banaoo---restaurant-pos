@@ -1,21 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
-import { useAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, Link2, CheckCircle, XCircle, AlertCircle, ExternalLink,
-  Settings2, Copy, Globe, MapPin,
+  Loader2,
+  Link2,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Settings2,
+  Sparkles,
+  Radio,
+  HelpCircle,
+  ArrowUpRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PlatformConfigModal } from "@/components/integrations/PlatformConfigModal";
-import { OrderingQRCode } from "@/components/customer/OrderingQRCode";
 import { FeatureGate } from "@/components/FeatureGate";
 import type { FeatureKey } from "@/hooks/use-feature-gating";
+import { Link } from "react-router-dom";
 
 interface PlatformIntegration {
   id: string;
@@ -32,6 +39,8 @@ interface Platform {
   description: string;
   logo: string;
   color: string;
+  accent: string;
+  gradient: string;
   available: boolean;
 }
 
@@ -45,43 +54,50 @@ const PLATFORMS: Platform[] = [
   {
     id: "zomato",
     name: "Zomato",
-    description: "Receive and manage orders from Zomato directly in your dashboard",
+    description: "Receive and manage Zomato orders in your kitchen display and POS.",
     logo: "🍽️",
     color: "bg-red-500",
+    accent: "border-red-500/40",
+    gradient: "from-red-500/15 via-red-500/5 to-transparent",
     available: true,
   },
   {
     id: "swiggy",
     name: "Swiggy",
-    description: "Sync your Swiggy orders for unified order management",
+    description: "Sync Swiggy orders into one unified queue with dine-in and takeaway.",
     logo: "🧡",
     color: "bg-orange-500",
+    accent: "border-orange-500/40",
+    gradient: "from-orange-500/15 via-orange-500/5 to-transparent",
     available: true,
   },
   {
     id: "uber_eats",
     name: "Uber Eats",
-    description: "Connect Uber Eats to manage all delivery orders in one place",
+    description: "Connect Uber Eats for delivery order management in one dashboard.",
     logo: "🚗",
     color: "bg-green-600",
+    accent: "border-green-500/30",
+    gradient: "from-green-600/10 via-green-600/5 to-transparent",
     available: false,
   },
   {
     id: "magicpin",
     name: "Magicpin",
-    description: "Integrate with Magicpin for local food delivery orders",
+    description: "Integrate Magicpin for local discovery and delivery orders.",
     logo: "📍",
     color: "bg-purple-500",
+    accent: "border-purple-500/30",
+    gradient: "from-purple-500/10 via-purple-500/5 to-transparent",
     available: false,
   },
 ];
 
 export default function Integrations() {
   const { currentOutlet, outlets, loading: outletLoading } = useOutlet();
-  const { profile } = useAuth();
   const { toast } = useToast();
   const [integrations, setIntegrations] = useState<PlatformIntegration[]>([]);
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
 
@@ -105,9 +121,14 @@ export default function Integrations() {
     setLoading(false);
   };
 
-  const getIntegrationStatus = (platformId: string) => {
-    return integrations.find(i => i.platform === platformId);
-  };
+  const connectedCount = useMemo(
+    () =>
+      integrations.filter((i) => i.is_active && i.status === "connected").length,
+    [integrations]
+  );
+
+  const getIntegrationStatus = (platformId: string) =>
+    integrations.find((i) => i.platform === platformId);
 
   const handleConfigurePlatform = (platform: Platform) => {
     setSelectedPlatform(platform);
@@ -131,41 +152,36 @@ export default function Integrations() {
     }
   };
 
-  const copyLink = (url: string, label: string) => {
-    navigator.clipboard.writeText(url);
-    toast({ title: `${label} copied!` });
-  };
-
   const getStatusBadge = (integration: PlatformIntegration | undefined) => {
     if (!integration) {
       return (
-        <Badge variant="outline" className="text-muted-foreground">
-          Not Connected
+        <Badge variant="outline" className="text-muted-foreground bg-background/80">
+          Not connected
         </Badge>
       );
     }
-
     if (integration.is_active && integration.status === "connected") {
       return (
-        <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Connected
+        <Badge className="bg-green-500/15 text-green-700 border-green-500/30 gap-1">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+          </span>
+          Live
         </Badge>
       );
     }
-
     if (integration.status === "error") {
       return (
-        <Badge variant="destructive">
-          <XCircle className="h-3 w-3 mr-1" />
+        <Badge variant="destructive" className="gap-1">
+          <XCircle className="h-3 w-3" />
           Error
         </Badge>
       );
     }
-
     return (
-      <Badge variant="secondary">
-        <AlertCircle className="h-3 w-3 mr-1" />
+      <Badge variant="secondary" className="gap-1">
+        <AlertCircle className="h-3 w-3" />
         {integration.status}
       </Badge>
     );
@@ -184,278 +200,234 @@ export default function Integrations() {
   if (outlets.length === 0) {
     return (
       <AppLayout>
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8">
           <EmptyState
             icon={Link2}
-            title="No Outlets Found"
-            description="Create an outlet first to set up integrations"
-            actionLabel="Go to Outlets"
-            onAction={() => window.location.href = "/outlets"}
+            title="No outlets yet"
+            description="Create an outlet first, then connect delivery platforms."
+            actionLabel="Go to Settings → Outlets"
+            onAction={() => (window.location.href = "/settings?tab=outlets")}
           />
         </div>
       </AppLayout>
     );
   }
 
-  const origin = window.location.origin;
-  const brandLink = profile?.ordering_slug ? `${origin}/order/${profile.ordering_slug}` : null;
-
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl gradient-primary glow-primary">
-              <Link2 className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-display text-2xl font-bold">Integrations</h1>
-              <p className="text-sm text-muted-foreground">
-                Online ordering links &amp; delivery platform connections
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-8">
+        {/* Hero */}
+        <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.08] via-background to-accent/[0.06] p-6 md:p-8">
+          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+          <div className="absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-accent/10 blur-2xl pointer-events-none" />
+          <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+            <div className="space-y-3 max-w-2xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Delivery platform hub
+              </div>
+              <h1 className="font-display text-3xl font-bold tracking-tight">Integrations</h1>
+              <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                Connect Swiggy, Zomato, and more so aggregator orders flow into the same kitchen
+                queue as your POS. Online ordering links for customers live in{" "}
+                <Link to="/settings?tab=outlets" className="text-primary font-medium hover:underline">
+                  Settings → Outlets
+                </Link>
+                .
               </p>
+            </div>
+            <div className="flex flex-wrap gap-3 shrink-0">
+              <Card className="min-w-[140px] border-border/60 bg-background/80 shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Connected</p>
+                  <p className="text-2xl font-bold mt-1">{connectedCount}</p>
+                </CardContent>
+              </Card>
+              <Card className="min-w-[140px] border-border/60 bg-background/80 shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Outlet</p>
+                  <p className="text-sm font-semibold mt-1 truncate max-w-[160px]">
+                    {currentOutlet?.name ?? "—"}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
 
-        {/* ── Online Ordering Links (no feature gate) ── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="h-4 w-4 text-primary" />
-              Online Ordering Links
-            </CardTitle>
-            <CardDescription>
-              Share these links with customers so they can order directly from you — no third-party app needed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {/* Brand link */}
-            {brandLink ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Brand Ordering Page</p>
-                    <p className="text-xs text-muted-foreground">
-                      Shows all your outlets — customers see the nearest one first
-                    </p>
-                  </div>
-                  <Badge className="bg-green-500/20 text-green-600 border-green-500/30 text-xs shrink-0 ml-2">
-                    Recommended
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2.5">
-                  <span className="text-sm font-mono text-primary truncate flex-1">{brandLink}</span>
-                  <Button
-                    variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                    onClick={() => copyLink(brandLink, "Brand link")}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                    onClick={() => window.open(brandLink, "_blank")}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground bg-muted/30 rounded-lg px-4 py-3">
-                Complete onboarding to get your brand ordering link.
-              </div>
-            )}
-
-            {/* Per-outlet direct links */}
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm font-medium">Direct Outlet Links</p>
-                <p className="text-xs text-muted-foreground">
-                  Link customers to a specific outlet (useful for single-location restaurants or WhatsApp shares)
-                </p>
-              </div>
-              <div className="space-y-2">
-                {outlets.map((outlet) => {
-                  const outletLink = `${origin}/r/${outlet.id}`;
-                  return (
-                    <div
-                      key={outlet.id}
-                      className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-2"
-                    >
-                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{outlet.name}</p>
-                        <p className="text-xs font-mono text-muted-foreground truncate">{outletLink}</p>
-                      </div>
-                      <Button
-                        variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                        onClick={() => copyLink(outletLink, outlet.name)}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                        onClick={() => window.open(outletLink, "_blank")}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Button>
-                      <OrderingQRCode
-                        url={outletLink}
-                        restaurantName={profile?.brand_name || outlet.name}
-                        outletName={outlet.name}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-              Make sure each outlet has a GPS location set so customers see accurate distances. Edit outlets to add location.
+        {/* Info strip */}
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3.5">
+          <Radio className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-sm">Unified order management</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Connected platforms push orders in real time alongside dine-in and takeaway — no
+              separate tablet needed.
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* ── Platform Integrations (per-platform add-ons) ── */}
-        <div className="space-y-6">
-            {/* Info Banner */}
-            <Card className="border-primary/30 bg-primary/5">
-              <CardContent className="p-4 flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium">Unified Order Management</p>
-                  <p className="text-sm text-muted-foreground">
-                    Connect your food delivery platform accounts to receive and manage all orders from one dashboard.
-                    Orders will appear in real-time alongside your POS orders.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+        {loading && (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          </div>
+        )}
 
-            {/* Platform Cards */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {PLATFORMS.map((platform) => {
-                const integration = getIntegrationStatus(platform.id);
-                const isConnected = integration?.is_active && integration?.status === "connected";
-                const featureKey = platformFeatureKey(platform.id);
+        {/* Platform grid */}
+        <div className="grid gap-5 md:grid-cols-2">
+          {PLATFORMS.map((platform) => {
+            const integration = getIntegrationStatus(platform.id);
+            const isConnected = integration?.is_active && integration?.status === "connected";
+            const featureKey = platformFeatureKey(platform.id);
 
-                const card = (
-                  <Card
-                    key={platform.id}
-                    className={`relative overflow-hidden transition-all duration-300 ${
-                      isConnected ? "border-green-500/50" : ""
-                    } ${!platform.available ? "opacity-60" : "hover:border-primary/50"}`}
-                  >
-                    <div className={`absolute top-0 left-0 right-0 h-1 ${platform.color}`} />
-
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-xl ${platform.color} flex items-center justify-center text-2xl`}>
-                            {platform.logo}
-                          </div>
-                          <div>
-                            <CardTitle className="font-display text-lg flex items-center gap-2">
-                              {platform.name}
-                              {!platform.available && (
-                                <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                              )}
-                            </CardTitle>
-                            <CardDescription className="text-xs mt-1">
-                              {platform.description}
-                            </CardDescription>
-                          </div>
-                        </div>
+            const card = (
+              <Card
+                key={platform.id}
+                className={`relative overflow-hidden transition-all duration-300 group ${
+                  isConnected
+                    ? "border-green-500/40 shadow-md shadow-green-500/5"
+                    : platform.available
+                      ? "hover:border-primary/35 hover:shadow-elevated"
+                      : "opacity-70"
+                }`}
+              >
+                <div
+                  className={`absolute inset-0 bg-gradient-to-br ${platform.gradient} pointer-events-none`}
+                />
+                <CardHeader className="relative pb-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-14 h-14 rounded-2xl border ${platform.accent} bg-background/90 flex items-center justify-center text-2xl shadow-sm`}
+                      >
+                        {platform.logo}
                       </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(integration)}
-                          {integration?.last_synced_at && (
-                            <span className="text-xs text-muted-foreground">
-                              Last synced: {new Date(integration.last_synced_at).toLocaleString()}
-                            </span>
+                      <div>
+                        <CardTitle className="font-display text-xl flex items-center gap-2">
+                          {platform.name}
+                          {!platform.available && (
+                            <Badge variant="secondary" className="text-[10px] font-normal">
+                              Coming soon
+                            </Badge>
                           )}
-                        </div>
+                        </CardTitle>
+                        <CardDescription className="text-sm mt-1 max-w-sm">
+                          {platform.description}
+                        </CardDescription>
                       </div>
+                    </div>
+                    {getStatusBadge(integration)}
+                  </div>
+                </CardHeader>
 
-                      <div className="flex gap-2">
-                        {platform.available ? (
-                          isConnected ? (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                                onClick={() => handleConfigurePlatform(platform)}
-                              >
-                                <Settings2 className="h-4 w-4 mr-2" />
-                                Configure
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDisconnect(platform.id)}
-                              >
-                                Disconnect
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              className="flex-1"
-                              onClick={() => handleConfigurePlatform(platform)}
-                            >
-                              <Link2 className="h-4 w-4 mr-2" />
-                              Connect {platform.name}
-                            </Button>
-                          )
-                        ) : (
-                          <Button variant="outline" size="sm" className="flex-1" disabled>
-                            Coming Soon
+                <CardContent className="relative space-y-4 pt-2">
+                  {integration?.last_synced_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Last synced {new Date(integration.last_synced_at).toLocaleString()}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {platform.available ? (
+                      isConnected ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 min-w-[120px] bg-background/80"
+                            onClick={() => handleConfigurePlatform(platform)}
+                          >
+                            <Settings2 className="h-4 w-4 mr-2" />
+                            Configure
                           </Button>
-                        )}
-                      </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDisconnect(platform.id)}
+                          >
+                            Disconnect
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          className="w-full gradient-warm text-white border-0 shadow-md"
+                          onClick={() => handleConfigurePlatform(platform)}
+                        >
+                          <Link2 className="h-4 w-4 mr-2" />
+                          Connect {platform.name}
+                        </Button>
+                      )
+                    ) : (
+                      <Button variant="outline" size="sm" className="w-full" disabled>
+                        Coming soon
+                      </Button>
+                    )}
+                  </div>
 
-                      {isConnected && integration?.webhook_url && (
-                        <div className="p-3 rounded-lg bg-muted/50">
-                          <p className="text-xs text-muted-foreground mb-1">Webhook URL</p>
-                          <code className="text-xs break-all">{integration.webhook_url}</code>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
+                  {isConnected && integration?.webhook_url && (
+                    <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                        Webhook URL
+                      </p>
+                      <code className="text-xs break-all text-foreground/80">
+                        {integration.webhook_url}
+                      </code>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
 
-                if (!featureKey || !platform.available) {
-                  return <div key={platform.id}>{card}</div>;
-                }
+            if (!featureKey || !platform.available) {
+              return card;
+            }
 
-                return (
-                  <FeatureGate key={platform.id} feature={featureKey} showUpgradePrompt>
-                    {card}
-                  </FeatureGate>
-                );
-              })}
-            </div>
+            return (
+              <FeatureGate key={platform.id} feature={featureKey} showUpgradePrompt>
+                {card}
+              </FeatureGate>
+            );
+          })}
+        </div>
 
-            {/* Help Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Need Help?</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>
-                  <strong>Zomato:</strong> Contact your Zomato partner manager to get API credentials for POS integration.
-                </p>
-                <p>
-                  <strong>Swiggy:</strong> Swiggy integration requires partner API access. Contact Swiggy support for details.
-                </p>
-              </CardContent>
-            </Card>
+        {/* Help + addons CTA */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="border-border/80">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                Setup help
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                <strong className="text-foreground">Zomato:</strong> Ask your partner manager for
+                POS API credentials to connect.
+              </p>
+              <p>
+                <strong className="text-foreground">Swiggy:</strong> Partner API access is required —
+                contact Swiggy support for integration details.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-transparent">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Need Swiggy or Zomato add-ons?</CardTitle>
+              <CardDescription>
+                Platform integrations are available as add-ons on Launcher and Growth plans.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="secondary" className="gap-2">
+                <Link to="/addons">
+                  Browse add-ons
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
 

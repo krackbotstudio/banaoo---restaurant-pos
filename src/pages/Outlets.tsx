@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useOutlet } from "@/lib/outlet-context";
+import { AppLayout } from "@/components/AppLayout";
+import { Switch } from "@/components/ui/switch";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
-import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,11 +42,13 @@ interface Outlet {
 
 export default function Outlets() {
   const { user, signIn } = useAuth();
+  const { setCurrentOutlet, refreshOutlets } = useOutlet();
   const { toast } = useToast();
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [togglingOutletId, setTogglingOutletId] = useState<string | null>(null);
 
   // Delete outlet state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -70,7 +74,13 @@ export default function Outlets() {
       if (!res.ok) {
         throw new Error((data as { error?: string }).error || "Failed to load outlets");
       }
-      setOutlets((data as { outlets: Outlet[] }).outlets || []);
+      const raw = (data as { outlets: Outlet[] }).outlets || [];
+      setOutlets(
+        raw.map((o) => ({
+          ...o,
+          is_active: o.is_active === true || (o as { is_active?: unknown }).is_active === "true",
+        }))
+      );
     } catch (e) {
       toast({
         variant: "destructive",
@@ -80,6 +90,39 @@ export default function Outlets() {
       setOutlets([]);
     }
     setLoading(false);
+  };
+
+  const enabledOutletId = useMemo(() => {
+    const active = outlets.filter((o) => o.is_active);
+    if (active.length >= 1) return active[0].id;
+    return outlets[0]?.id ?? null;
+  }, [outlets]);
+
+  const handleActivateOutlet = async (outlet: Outlet) => {
+    if (outlet.id === enabledOutletId || togglingOutletId) return;
+    setTogglingOutletId(outlet.id);
+    try {
+      const res = await fetch(`${API_URL}/api/outlets/${outlet.id}/activate`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((payload as { error?: string }).error || "Could not enable outlet");
+      }
+      setOutlets((prev) => prev.map((o) => ({ ...o, is_active: o.id === outlet.id })));
+      setCurrentOutlet({ id: outlet.id, name: outlet.name });
+      await refreshOutlets();
+      toast({ title: "Outlet enabled", description: `"${outlet.name}" is now active.` });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: e instanceof Error ? e.message : "Failed to enable outlet",
+      });
+      void fetchOutlets();
+    }
+    setTogglingOutletId(null);
   };
 
   const handleCreateOutlet = async (e: React.FormEvent) => {
@@ -138,7 +181,8 @@ export default function Outlets() {
       setAddress("");
       setPhone("");
       setIsDialogOpen(false);
-      fetchOutlets();
+      await fetchOutlets();
+      await refreshOutlets();
     }
   };
 
@@ -187,7 +231,8 @@ export default function Outlets() {
       setDeleteDialogOpen(false);
       setOutletToDelete(null);
       setDeletePassword("");
-      fetchOutlets();
+      await fetchOutlets();
+      await refreshOutlets();
 
     } catch (error: unknown) {
       console.error("Error deleting outlet:", error);
@@ -293,34 +338,62 @@ export default function Outlets() {
           />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {outlets.map((outlet) => (
-              <Link key={outlet.id} to={`/outlets/${outlet.id}`}>
-                <Card className="group h-full hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 cursor-pointer overflow-hidden relative">
-                  {/* Delete button */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-destructive/10 hover:text-destructive"
-                    onClick={(e) => handleDeleteClick(e, outlet)}
+            {outlets.map((outlet) => {
+              const isEnabled = outlet.id === enabledOutletId;
+              return (
+              <Card
+                key={outlet.id}
+                className="group h-full hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 overflow-hidden relative"
+              >
+                {outlets.length > 1 && (
+                  <div
+                    className="absolute top-3 right-12 z-10 flex items-center gap-2 rounded-lg bg-background/95 px-2 py-1 border border-border/80 shadow-sm"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  
+                    <Switch
+                      id={`outlets-page-enabled-${outlet.id}`}
+                      checked={isEnabled}
+                      disabled={togglingOutletId !== null}
+                      onCheckedChange={(checked) => {
+                        if (checked) void handleActivateOutlet(outlet);
+                      }}
+                    />
+                    <Label
+                      htmlFor={`outlets-page-enabled-${outlet.id}`}
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      {isEnabled ? "Enabled" : "Disabled"}
+                    </Label>
+                    {togglingOutletId === outlet.id && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={(e) => handleDeleteClick(e, outlet)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+
+                <Link to={`/outlets/${outlet.id}`} className="block cursor-pointer">
                   <CardContent className="pt-5">
                     <div className="flex items-start gap-4">
                       <div className="p-3 rounded-xl gradient-primary glow-primary transition-transform group-hover:scale-110">
                         <ChefHat className="h-6 w-6 text-primary-foreground" />
                       </div>
                       <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-display font-semibold truncate text-lg group-hover:text-primary transition-colors">{outlet.name}</h3>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            outlet.is_active 
-                              ? "bg-accent/20 text-accent" 
-                              : "bg-muted text-muted-foreground"
-                          }`}>
-                            {outlet.is_active ? "Active" : "Inactive"}
-                          </span>
+                        <div className="flex items-center gap-2 flex-wrap pr-24">
+                          <h3 className="font-display font-semibold truncate text-lg group-hover:text-primary transition-colors">
+                            {outlet.name}
+                          </h3>
+                          {outlets.length === 1 && (
+                            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-accent/20 text-accent">
+                              Enabled
+                            </span>
+                          )}
                         </div>
                         {outlet.address && (
                           <p className="text-sm text-muted-foreground flex items-center gap-2 truncate">
@@ -337,9 +410,10 @@ export default function Outlets() {
                       </div>
                     </div>
                   </CardContent>
-                </Card>
-              </Link>
-            ))}
+                </Link>
+              </Card>
+            );
+            })}
           </div>
         )}
       </div>

@@ -220,3 +220,38 @@
     to { transform: translateX(-50%); }
   }
 }
+
+/* Product tour (driver.js) — match app theme */
+.driver-popover {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12) !important;
+}
+
+.driver-popover-title {
+  font-family: inherit !important;
+  font-weight: 600 !important;
+}
+
+.driver-popover-description {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.driver-popover-footer button {
+  border-radius: calc(var(--radius) - 2px) !important;
+  font-size: 0.8125rem !important;
+}
+
+.driver-popover-next-btn,
+.driver-popover-done-btn {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  text-shadow: none !important;
+}
+
+.driver-popover-prev-btn {
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}

@@ -22,10 +22,28 @@ interface TableZone {
   sort_order: number;
 }
 
-interface LiveOrder {
+export interface LiveOrder {
+  id: string;
   table_number: string;
   status: "pending" | "preparing" | "ready" | "completed";
   order_number: string;
+  total: number;
+  item_count: number;
+  order_type: string;
+  source: string;
+  customer_name: string | null;
+}
+
+export interface TableActivatePayload {
+  tableId: string;
+  tableNumber: string;
+  seats: number;
+  zone: string;
+  customerName: string | null;
+  reservedTime: string | null;
+  partySize: number | null;
+  tableStatus: "available" | "occupied" | "reserved";
+  liveOrder?: LiveOrder;
 }
 
 interface TableGridViewProps {
@@ -35,6 +53,11 @@ interface TableGridViewProps {
   showStatusFilter?: boolean;
   /** When true, only available tables (no live order) are selectable */
   selectableOnlyAvailable?: boolean;
+  /** When set, occupied tables with live orders become clickable */
+  onOpenLiveOrder?: (orderNumber: string) => void;
+  allowLiveOrderClick?: boolean;
+  /** Unified handler — opens action menu for any table (free or occupied) */
+  onTableActivate?: (payload: TableActivatePayload) => void;
   className?: string;
 }
 
@@ -44,6 +67,9 @@ export function TableGridView({
   onSelectTable,
   showStatusFilter = false,
   selectableOnlyAvailable = false,
+  onOpenLiveOrder,
+  allowLiveOrderClick = false,
+  onTableActivate,
   className,
 }: TableGridViewProps) {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
@@ -106,7 +132,7 @@ export function TableGridView({
           .order("sort_order"),
         supabase
           .from("orders")
-          .select("table_number, status, order_number")
+          .select("id, table_number, status, order_number, total, order_type, source, customer_name, order_items (id)")
           .eq("outlet_id", outletId)
           .eq("order_type", "dine_in")
           .in("status", ["pending", "preparing", "ready", "completed"]),
@@ -116,7 +142,19 @@ export function TableGridView({
       if (zonesRes.data) setZones(zonesRes.data);
       if (ordersRes.data) {
         setLiveOrders(
-          ordersRes.data.filter((o) => !!o.table_number) as LiveOrder[]
+          ordersRes.data
+            .filter((o) => !!o.table_number)
+            .map((o) => ({
+              id: o.id,
+              table_number: o.table_number!,
+              status: o.status as LiveOrder["status"],
+              order_number: o.order_number,
+              total: o.total ?? 0,
+              item_count: Array.isArray(o.order_items) ? o.order_items.length : 0,
+              order_type: o.order_type ?? "dine_in",
+              source: o.source ?? "pos",
+              customer_name: o.customer_name ?? null,
+            }))
         );
       }
     } catch (error) {
@@ -192,6 +230,23 @@ export function TableGridView({
         </Tabs>
       )}
 
+      {showStatusFilter && (
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40" />
+            Free ({statusCounts.available})
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+            Live ({statusCounts.occupied})
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
+            Reserved ({statusCounts.reserved})
+          </span>
+        </div>
+      )}
+
       {/* Tables grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {filteredTables.map((table) => {
@@ -200,29 +255,57 @@ export function TableGridView({
             table.status === "available" && !liveOrder;
           const canSelect =
             !selectableOnlyAvailable || isAvailable;
+          const resolvedStatus = liveOrder
+            ? "occupied"
+            : (table.status as "available" | "occupied" | "reserved");
+
+          const handleActivate = () => {
+            if (onTableActivate) {
+              onTableActivate({
+                tableId: table.id,
+                tableNumber: table.table_number,
+                seats: table.seats,
+                zone: table.zone,
+                customerName: table.current_customer_name,
+                reservedTime: table.reserved_time,
+                partySize: table.party_size,
+                tableStatus: resolvedStatus,
+                liveOrder,
+              });
+              return;
+            }
+            if (liveOrder && allowLiveOrderClick) {
+              onOpenLiveOrder?.(liveOrder.order_number);
+            } else if (canSelect) {
+              onSelectTable?.(table.id, table.table_number);
+            }
+          };
+
+          const isClickable =
+            !!onTableActivate ||
+            (liveOrder && allowLiveOrderClick) ||
+            canSelect;
+
           return (
             <TableCard
               key={table.id}
               id={table.id}
               tableNumber={table.table_number}
               seats={table.seats}
-              status={
-                liveOrder
-                  ? "occupied"
-                  : (table.status as "available" | "occupied" | "reserved")
-              }
+              status={resolvedStatus}
               customerName={table.current_customer_name}
               reservedTime={table.reserved_time}
               partySize={table.party_size}
               isSelected={selectedTableId === table.id}
               liveOrderStatus={liveOrder?.status}
               liveOrderNumber={liveOrder?.order_number}
-              onClick={
-                canSelect
-                  ? () => onSelectTable?.(table.id, table.table_number)
+              onClick={isClickable ? handleActivate : undefined}
+              onLiveOrderClick={
+                !onTableActivate && allowLiveOrderClick && liveOrder
+                  ? () => onOpenLiveOrder?.(liveOrder.order_number)
                   : undefined
               }
-              className={!canSelect ? "opacity-50 cursor-not-allowed" : undefined}
+              className={!isClickable ? "opacity-50 cursor-not-allowed" : undefined}
             />
           );
         })}

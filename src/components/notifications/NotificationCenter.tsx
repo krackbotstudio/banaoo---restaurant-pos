@@ -1,16 +1,29 @@
-import { useEffect } from "react";
-import { Bell, Check, Trash2 } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { Bell, Check, ChevronRight, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications, AppNotification } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+
+const STORAGE_KEY = "notifications-panel-open";
+
+type NotificationPanelContextValue = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  toggle: () => void;
+};
+
+const NotificationPanelContext = createContext<NotificationPanelContextValue | null>(null);
+
+function useNotificationPanel() {
+  const context = useContext(NotificationPanelContext);
+  if (!context) {
+    throw new Error("useNotificationPanel must be used within NotificationPanelProvider");
+  }
+  return context;
+}
 
 function NotificationItem({
   notification,
@@ -31,6 +44,8 @@ function NotificationItem({
         return "💰";
       case "order":
         return "🍽️";
+      case "app_update":
+        return "⬆️";
       default:
         return "🔔";
     }
@@ -44,6 +59,8 @@ function NotificationItem({
         return "bg-green-500/10";
       case "order":
         return "bg-orange-500/10";
+      case "app_update":
+        return "bg-blue-500/10";
       default:
         return "bg-muted";
     }
@@ -129,8 +146,67 @@ function NotificationItem({
   );
 }
 
-export function NotificationCenter() {
+export function NotificationPanelProvider({ children }: { children: React.ReactNode }) {
+  const [open, setOpenState] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(STORAGE_KEY) === "true";
+  });
+
+  const setOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    setOpenState((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      window.localStorage.setItem(STORAGE_KEY, String(value));
+      return value;
+    });
+  }, []);
+
+  const toggle = useCallback(() => setOpen((prev) => !prev), [setOpen]);
+
+  useEffect(() => {
+    const handleToggle = () => toggle();
+    window.addEventListener("notifications-toggle", handleToggle as EventListener);
+    return () => window.removeEventListener("notifications-toggle", handleToggle as EventListener);
+  }, [toggle]);
+
+  return (
+    <NotificationPanelContext.Provider value={{ open, setOpen, toggle }}>
+      {children}
+    </NotificationPanelContext.Provider>
+  );
+}
+
+export function NotificationTrigger() {
+  const { toggle, open } = useNotificationPanel();
+  const { unreadCount } = useNotifications();
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  return (
+    <Button
+      variant={open ? "secondary" : "ghost"}
+      size="icon"
+      className="relative h-8 w-8 md:h-10 md:w-10"
+      onClick={toggle}
+      aria-label={open ? "Close notifications panel" : "Open notifications panel"}
+      aria-expanded={open}
+    >
+      <Bell className="h-5 w-5" />
+      {unreadCount > 0 && (
+        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-medium">
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+    </Button>
+  );
+}
+
+export function NotificationPanel() {
   const navigate = useNavigate();
+  const { open, setOpen } = useNotificationPanel();
   const {
     notifications,
     unreadCount,
@@ -140,44 +216,61 @@ export function NotificationCenter() {
     deleteNotification,
   } = useNotifications();
 
-  // Request browser notification permission on mount
-  useEffect(() => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
-
   const handleNavigate = (url: string) => {
     navigate(url);
   };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8 md:h-10 md:w-10">
-          <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-medium">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
-        <div className="flex items-center justify-between p-3 border-b">
-          <h4 className="font-semibold text-sm">Notifications</h4>
-          {unreadCount > 0 && (
+    <aside
+      className={cn(
+        "relative shrink-0 h-full border-l border-border bg-background transition-[width] duration-300 ease-in-out overflow-hidden",
+        open ? "w-80 max-w-[85vw]" : "w-0 border-l-0"
+      )}
+      aria-hidden={!open}
+    >
+      <div className="flex h-full w-80 max-w-[85vw] flex-col">
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-3 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-auto text-xs p-1"
-              onClick={markAllAsRead}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => setOpen(false)}
+              aria-label="Collapse notifications panel"
             >
-              Mark all as read
+              <ChevronRight className="h-4 w-4" />
             </Button>
-          )}
+            <h2 className="font-semibold text-sm truncate">Notifications</h2>
+            {unreadCount > 0 && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary shrink-0">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto text-xs px-2"
+                onClick={markAllAsRead}
+              >
+                Mark all read
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setOpen(false)}
+              aria-label="Close notifications panel"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <ScrollArea className="h-[300px]">
+
+        <ScrollArea className="flex-1 min-h-0">
           {loading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               Loading...
@@ -199,19 +292,23 @@ export function NotificationCenter() {
             ))
           )}
         </ScrollArea>
-        {notifications.length > 0 && (
-          <div className="p-2 border-t">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs"
-              onClick={() => navigate("/settings")}
-            >
-              Manage notification preferences
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+
+        <div className="border-t p-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs"
+            onClick={() => navigate("/settings")}
+          >
+            Manage notification preferences
+          </Button>
+        </div>
+      </div>
+    </aside>
   );
+}
+
+/** @deprecated Use NotificationTrigger in header and NotificationPanel in layout */
+export function NotificationCenter() {
+  return <NotificationTrigger />;
 }

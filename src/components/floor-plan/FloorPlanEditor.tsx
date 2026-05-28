@@ -1,28 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { TableElement } from "./TableElement";
+import { TableCanvasItem, type TableShape, MIN_SIZE, MAX_SIZE } from "./TableCanvasItem";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Loader2, 
-  Plus, 
-  Trash2, 
-  Save, 
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Save,
   RotateCw,
   Circle,
   Square,
   RectangleHorizontal,
-  GripVertical,
   Layers,
   MousePointer2,
   Move,
-  X
+  X,
+  Copy,
+  Grid3X3,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,11 +40,7 @@ interface RestaurantTable {
   zone: string;
 }
 
-interface TableZone {
-  id: string;
-  name: string;
-  color: string;
-}
+type EditorTool = "select" | TableShape;
 
 interface FloorPlanEditorProps {
   outletId: string;
@@ -88,10 +83,13 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [activeZoneFilter, setActiveZoneFilter] = useState<string | null>(null);
-  const [draggedShape, setDraggedShape] = useState<"square" | "round" | "rectangle" | null>(null);
+  const [draggedShape, setDraggedShape] = useState<TableShape | null>(null);
+  const [editorTool, setEditorTool] = useState<EditorTool>("select");
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const snap = useCallback((n: number) => (snapToGrid ? Math.round(n / 5) * 5 : n), [snapToGrid]);
 
   const zones = ["Indoor", "Outdoor", "Patio", "Bar", "VIP", "Private"];
 
@@ -126,6 +124,8 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
       outlet_id: outletId,
       table_number: `T${tableCount}`,
       shape,
+      width: shape === "rectangle" ? 16 : 12,
+      height: shape === "rectangle" ? 10 : 12,
       x_position: xPercent,
       y_position: yPercent,
       zone: activeZoneFilter || "Indoor",
@@ -147,32 +147,44 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
     toast.success("Table added! Drag to position.");
   };
 
-  const addTable = async (shape: "square" | "round" | "rectangle") => {
-    const tableCount = tables.length + 1;
-    const newTable = {
+  const addTable = async (shape: TableShape) => {
+    const n = tables.length + 1;
+    await addTableAtPosition(shape, snap(20 + (n % 4) * 20), snap(20 + Math.floor(n / 4) * 25));
+  };
+
+  const duplicateTable = async () => {
+    if (!selectedTable) return;
+    const n = tables.length + 1;
+    const copy = {
       ...defaultTable,
       outlet_id: outletId,
-      table_number: `T${tableCount}`,
-      shape,
-      x_position: 20 + (tableCount % 4) * 20,
-      y_position: 20 + Math.floor(tableCount / 4) * 25,
-      zone: activeZoneFilter || "Indoor",
+      table_number: `${selectedTable.table_number}-copy`,
+      shape: selectedTable.shape,
+      seats: selectedTable.seats,
+      x_position: snap(Math.min(90, selectedTable.x_position + 8)),
+      y_position: snap(Math.min(90, selectedTable.y_position + 8)),
+      width: selectedTable.width,
+      height: selectedTable.height,
+      rotation: selectedTable.rotation,
+      zone: selectedTable.zone,
     };
-
-    const { data, error } = await supabase
-      .from("restaurant_tables")
-      .insert(newTable)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from("restaurant_tables").insert(copy).select().single();
     if (error) {
-      toast.error("Failed to add table");
+      toast.error("Failed to duplicate table");
       return;
     }
-
     setTables((prev) => [...prev, data as RestaurantTable]);
     setSelectedTable(data as RestaurantTable);
-    toast.success("Table added");
+    toast.success("Table duplicated");
+  };
+
+  const applyTablePatch = (tableId: string, patch: Partial<RestaurantTable>) => {
+    setTables((prev) => prev.map((t) => (t.id === tableId ? { ...t, ...patch } : t)));
+    setSelectedTable((prev) => (prev?.id === tableId ? { ...prev, ...patch } : prev));
+  };
+
+  const persistTablePatch = (tableId: string, patch: Partial<RestaurantTable>) => {
+    void supabase.from("restaurant_tables").update(patch).eq("id", tableId);
   };
 
   const updateTable = async (updates: Partial<RestaurantTable>) => {
@@ -243,8 +255,8 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-    const clampedX = Math.max(10, Math.min(90, x));
-    const clampedY = Math.max(10, Math.min(90, y));
+    const clampedX = snap(Math.max(10, Math.min(90, x)));
+    const clampedY = snap(Math.max(10, Math.min(90, y)));
 
     addTableAtPosition(draggedShape, clampedX, clampedY);
     setDraggedShape(null);
@@ -254,56 +266,15 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
     e.preventDefault();
   };
 
-  const handleTableDrag = (e: React.MouseEvent, table: RestaurantTable) => {
-    if (!canvasRef.current) return;
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (editorTool === "select" || !canvasRef.current) return;
+    if ((e.target as HTMLElement).closest("[data-table-item], [data-resize-handle]")) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const THRESHOLD = 5;
-    let hasDragged = false;
-    let lastX = table.x_position;
-    let lastY = table.y_position;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!hasDragged) {
-        const dx = Math.abs(moveEvent.clientX - startX);
-        const dy = Math.abs(moveEvent.clientY - startY);
-        if (dx < THRESHOLD && dy < THRESHOLD) return;
-        hasDragged = true;
-        setIsDragging(true);
-      }
-
-      const x = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-      const y = ((moveEvent.clientY - rect.top) / rect.height) * 100;
-      lastX = Math.max(5, Math.min(95, x));
-      lastY = Math.max(5, Math.min(95, y));
-
-      setTables((prev) =>
-        prev.map((t) =>
-          t.id === table.id ? { ...t, x_position: lastX, y_position: lastY } : t
-        )
-      );
-      setSelectedTable((prev) =>
-        prev?.id === table.id ? { ...prev, x_position: lastX, y_position: lastY } : prev
-      );
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      if (hasDragged) {
-        setIsDragging(false);
-        supabase
-          .from("restaurant_tables")
-          .update({ x_position: lastX, y_position: lastY })
-          .eq("id", table.id)
-          .then();
-      }
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    const x = snap(Math.max(10, Math.min(90, ((e.clientX - rect.left) / rect.width) * 100)));
+    const y = snap(Math.max(10, Math.min(90, ((e.clientY - rect.top) / rect.height) * 100)));
+    void addTableAtPosition(editorTool, x, y);
+    setEditorTool("select");
   };
 
   const filteredTables = activeZoneFilter 
@@ -326,81 +297,99 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
   return (
     <div className={cn("space-y-4", className)}>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 p-4 bg-card rounded-xl border shadow-sm">
-        {/* Draggable Table Shapes */}
+      <div className="flex flex-wrap items-center gap-2 p-3 bg-card rounded-xl border shadow-sm">
+        <Button
+          variant={editorTool === "select" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setEditorTool("select")}
+          title="Select and move tables"
+        >
+          <MousePointer2 className="h-4 w-4" />
+          Select
+        </Button>
+
+        <div className="h-8 w-px bg-border mx-1" />
+
+        {(
+          [
+            { shape: "square" as const, icon: Square, label: "Square" },
+            { shape: "round" as const, icon: Circle, label: "Round" },
+            { shape: "rectangle" as const, icon: RectangleHorizontal, label: "Rectangle" },
+          ] as const
+        ).map(({ shape, icon: Icon, label }) => (
+          <button
+            key={shape}
+            type="button"
+            draggable
+            onDragStart={() => setDraggedShape(shape)}
+            onDragEnd={() => setDraggedShape(null)}
+            onClick={() => {
+              setEditorTool(shape);
+              toast.info(`Click on the canvas to place a ${label.toLowerCase()} table`, { duration: 2500 });
+            }}
+            className={cn(
+              "relative flex flex-col items-center gap-0.5 rounded-lg border-2 px-3 py-2 transition-colors cursor-grab active:cursor-grabbing",
+              editorTool === shape
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5"
+            )}
+            title={`${label}: click to place on canvas, or drag onto canvas`}
+          >
+            <div className="flex items-center gap-1">
+              <Icon className="h-5 w-5" />
+              <Plus className="h-3 w-3 opacity-60" />
+            </div>
+            <span className="text-[10px] font-medium">{label}</span>
+          </button>
+        ))}
+
+        <div className="h-8 w-px bg-border mx-1" />
+
+        <Button
+          variant={snapToGrid ? "secondary" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setSnapToGrid((v) => !v)}
+          title="Snap position to grid"
+        >
+          <Grid3X3 className="h-4 w-4" />
+          Snap
+        </Button>
+
+        {selectedTable && (
+          <>
+            <div className="h-8 w-px bg-border mx-1" />
+            <Button variant="outline" size="sm" onClick={() => void duplicateTable()} title="Duplicate">
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const rotation = (selectedTable.rotation + 45) % 360;
+                updateTable({ rotation });
+                persistTablePatch(selectedTable.id, { rotation });
+              }}
+              title="Rotate 45°"
+            >
+              <RotateCw className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void saveTable()} disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => void deleteTable()}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+
+        <div className="flex-1 min-w-[8px]" />
+
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Drag to add:</span>
-          <div className="flex gap-1">
-            <div
-              draggable
-              onDragStart={() => setDraggedShape("square")}
-              onDragEnd={() => setDraggedShape(null)}
-              className="p-2.5 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing transition-colors"
-              title="Drag to add square table"
-            >
-              <Square className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div
-              draggable
-              onDragStart={() => setDraggedShape("round")}
-              onDragEnd={() => setDraggedShape(null)}
-              className="p-2.5 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing transition-colors"
-              title="Drag to add round table"
-            >
-              <Circle className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div
-              draggable
-              onDragStart={() => setDraggedShape("rectangle")}
-              onDragEnd={() => setDraggedShape(null)}
-              className="p-2.5 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing transition-colors"
-              title="Drag to add rectangle table"
-            >
-              <RectangleHorizontal className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </div>
-        </div>
-
-        <div className="h-8 w-px bg-border" />
-
-        {/* Quick Add Buttons */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => addTable("square")}
-            className="gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <Square className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => addTable("round")}
-            className="gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <Circle className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => addTable("rectangle")}
-            className="gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <RectangleHorizontal className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        
-        <div className="flex-1" />
-
-        {/* Zone Filter */}
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-muted-foreground" />
-          <Select 
-            value={activeZoneFilter || "all"} 
+          <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Select
+            value={activeZoneFilter || "all"}
             onValueChange={(v) => setActiveZoneFilter(v === "all" ? null : v)}
           >
             <SelectTrigger className="w-[130px] h-8">
@@ -408,7 +397,7 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Zones</SelectItem>
-              {zones.map(zone => (
+              {zones.map((zone) => (
                 <SelectItem key={zone} value={zone}>
                   {zone} ({tablesByZone[zone]?.length || 0})
                 </SelectItem>
@@ -418,19 +407,29 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
         </div>
       </div>
 
+      {editorTool !== "select" && (
+        <p className="text-xs text-primary px-1">
+          Place mode: click anywhere on the canvas to add a {editorTool} table, or drag a shape from the toolbar.
+        </p>
+      )}
+
       <div className="flex gap-4">
         {/* Canvas */}
         <div className="flex-1">
           <div
             ref={canvasRef}
+            data-floor-canvas
             className={cn(
               "relative w-full aspect-[16/10] bg-muted/20 rounded-xl border-2 overflow-hidden transition-colors",
-              isDragging && "cursor-grabbing",
-              draggedShape && "border-primary/50 bg-primary/5"
+              draggedShape && "border-primary/50 bg-primary/5",
+              editorTool !== "select" && "cursor-crosshair"
             )}
             onMouseDown={(e) => {
-              if (e.target === canvasRef.current) setSelectedTable(null);
+              if (e.target === canvasRef.current || (e.target as HTMLElement).dataset.floorCanvas !== undefined) {
+                if (editorTool === "select") setSelectedTable(null);
+              }
             }}
+            onClick={handleCanvasClick}
             onDrop={handleCanvasDrop}
             onDragOver={handleCanvasDragOver}
           >
@@ -458,56 +457,35 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
 
             {/* Tables */}
             {filteredTables.map((table) => (
-              <div
-                key={table.id}
-                className="absolute cursor-grab active:cursor-grabbing group"
-                style={{
-                  left: `${table.x_position}%`,
-                  top: `${table.y_position}%`,
-                  transform: `translate(-50%, -50%) rotate(${table.rotation}deg)`,
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setSelectedTable(table);
-                  handleTableDrag(e, table);
-                }}
-              >
-                {/* Delete button on hover */}
-                <button
-                  className="absolute -top-2 -right-2 p-1 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:scale-110"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteTable(table.id);
-                  }}
-                  title="Delete table"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-                
-                <TableElement
-                  id={table.id}
-                  tableNumber={table.table_number}
-                  shape={table.shape}
-                  seats={table.seats}
-                  status={table.status}
+              <div key={table.id} data-table-item>
+                <TableCanvasItem
+                  table={table}
                   isSelected={selectedTable?.id === table.id}
-                  isEditing
-                  style={{
-                    width: `${table.width * 4}px`,
-                    height: table.shape === "rectangle" ? `${table.height * 4}px` : undefined,
+                  zoneBadgeClass={ZONE_BADGE_COLORS[table.zone] || "bg-muted"}
+                  onSelect={setSelectedTable}
+                  onMove={(id, x, y) => applyTablePatch(id, { x_position: x, y_position: y })}
+                  onMoveComplete={(id, x, y) => {
+                    const sx = snap(x);
+                    const sy = snap(y);
+                    applyTablePatch(id, { x_position: sx, y_position: sy });
+                    persistTablePatch(id, { x_position: sx, y_position: sy });
                   }}
+                  onResize={(id, size) =>
+                    applyTablePatch(id, {
+                      width: size.width,
+                      height: table.shape === "rectangle" ? size.height : size.width,
+                    })
+                  }
+                  onResizeComplete={(id, size) => {
+                    const patch = {
+                      width: size.width,
+                      height: table.shape === "rectangle" ? size.height : size.width,
+                    };
+                    applyTablePatch(id, patch);
+                    persistTablePatch(id, patch);
+                  }}
+                  onDelete={deleteTable}
                 />
-                
-                {/* Zone indicator badge */}
-                <Badge 
-                  variant="outline" 
-                  className={cn(
-                    "absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0 whitespace-nowrap",
-                    ZONE_BADGE_COLORS[table.zone] || "bg-muted"
-                  )}
-                >
-                  {table.zone}
-                </Badge>
               </div>
             ))}
 
@@ -516,7 +494,7 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
                 <MousePointer2 className="h-10 w-10 opacity-50" />
                 <div className="text-center">
                   <p className="font-medium">No tables yet</p>
-                  <p className="text-sm">Drag a table shape onto the canvas or click + to add</p>
+                  <p className="text-sm">Pick a shape above — click the canvas or drag it here</p>
                 </div>
               </div>
             )}
@@ -619,23 +597,32 @@ export function FloorPlanEditor({ outletId, className }: FloorPlanEditorProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Size</Label>
+                <Label>Size (or drag handles on canvas)</Label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
-                    min={8}
-                    max={25}
+                    min={MIN_SIZE}
+                    max={MAX_SIZE}
                     value={selectedTable.width}
-                    onChange={(e) => updateTable({ width: parseInt(e.target.value) || 12 })}
+                    onChange={(e) => {
+                      const w = parseInt(e.target.value, 10) || 12;
+                      updateTable(
+                        selectedTable.shape === "rectangle"
+                          ? { width: w }
+                          : { width: w, height: w }
+                      );
+                    }}
                     placeholder="Width"
                   />
                   {selectedTable.shape === "rectangle" && (
                     <Input
                       type="number"
-                      min={8}
-                      max={25}
+                      min={MIN_SIZE}
+                      max={MAX_SIZE}
                       value={selectedTable.height}
-                      onChange={(e) => updateTable({ height: parseInt(e.target.value) || 12 })}
+                      onChange={(e) =>
+                        updateTable({ height: parseInt(e.target.value, 10) || 12 })
+                      }
                       placeholder="Height"
                     />
                   )}
