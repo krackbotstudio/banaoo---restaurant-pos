@@ -1,4 +1,5 @@
 import { Link2, MapPin } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FeatureGate } from "@/components/FeatureGate";
 import { OrderingLinkRow } from "@/components/customer/OrderingLinkRow";
@@ -11,6 +12,7 @@ export interface CustomerOrderingLinkCardProps {
   /** When false, show GPS reminder with optional manage link */
   hasGpsLocation?: boolean;
   manageHref?: string;
+  manageReturnTo?: string;
 }
 
 export function CustomerOrderingLinkCard({
@@ -20,6 +22,7 @@ export function CustomerOrderingLinkCard({
   orderingSlug,
   hasGpsLocation = true,
   manageHref,
+  manageReturnTo,
 }: CustomerOrderingLinkCardProps) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const directUrl = `${origin}/r/${outletId}`;
@@ -68,9 +71,13 @@ export function CustomerOrderingLinkCard({
                 No GPS location set — customers won&apos;t see distance.{" "}
                 {manageHref ? (
                   <>
-                    <a href={manageHref} className="font-medium underline">
+                    <Link
+                      to={manageHref}
+                      state={manageReturnTo ? { returnTo: manageReturnTo } : undefined}
+                      className="font-medium underline"
+                    >
                       Open outlet settings
-                    </a>{" "}
+                    </Link>{" "}
                     and pin on the map.
                   </>
                 ) : (

@@ -28,7 +28,8 @@ export type AddonType =
   | "swiggy_integration"
   | "zomato_integration"
   | "customer_ordering"
-  | "inventory_management";
+  | "inventory_management"
+  | "whatsapp_integration";
 
 export interface AddonCatalogItem {
   type: AddonType;
@@ -52,6 +53,7 @@ export interface PlanLimits {
   zomatoIntegration: boolean;
   customerOrdering: boolean;
   inventoryManagement: boolean;
+  whatsappIntegration: boolean;
   aiMenuImport: boolean;
   qrMenus: number;
 }
@@ -61,10 +63,15 @@ export const BASE_PRICES: Record<PaidPlanId, number> = {
   professional: 699,
 };
 
-/** Allowed subscription / add-on billing lengths (1-month removed). */
+/** Platform subscription billing — minimum 3 months. */
 export const BILLING_PERIOD_MONTHS = [3, 6, 12] as const;
 export type BillingPeriodMonths = (typeof BILLING_PERIOD_MONTHS)[number];
 export const DEFAULT_BILLING_PERIOD_MONTHS: BillingPeriodMonths = 3;
+
+/** Add-on billing — can start from 1 month. */
+export const ADDON_BILLING_PERIOD_MONTHS = [1, 3, 6, 12] as const;
+export type AddonBillingPeriodMonths = (typeof ADDON_BILLING_PERIOD_MONTHS)[number];
+export const DEFAULT_ADDON_BILLING_PERIOD_MONTHS: AddonBillingPeriodMonths = 1;
 
 export const DISCOUNTS: Record<number, number> = {
   3: 0.05,
@@ -74,6 +81,12 @@ export const DISCOUNTS: Record<number, number> = {
 
 export function isValidBillingPeriodMonths(months: number): months is BillingPeriodMonths {
   return (BILLING_PERIOD_MONTHS as readonly number[]).includes(months);
+}
+
+export function isValidAddonBillingPeriodMonths(
+  months: number
+): months is AddonBillingPeriodMonths {
+  return (ADDON_BILLING_PERIOD_MONTHS as readonly number[]).includes(months);
 }
 
 export function billingPeriodLabel(months: number): string {
@@ -91,6 +104,7 @@ export const ADDON_PRICES = {
   zomatoPerMonth: 499,
   customerOrderingPerMonth: 299,
   inventoryPerMonth: 399,
+  whatsappPerMonth: 349,
 } as const;
 
 export const ADDON_CATALOG: AddonCatalogItem[] = [
@@ -134,6 +148,14 @@ export const ADDON_CATALOG: AddonCatalogItem[] = [
     name: "Inventory management",
     description: "Track stock levels, low-stock alerts, and adjustments per outlet.",
     monthlyPrice: ADDON_PRICES.inventoryPerMonth,
+    stackable: false,
+  },
+  {
+    type: "whatsapp_integration",
+    name: "WhatsApp integration",
+    description:
+      "Send digital bills and order updates to customers on WhatsApp — no manual typing or paper bills.",
+    monthlyPrice: ADDON_PRICES.whatsappPerMonth,
     stackable: false,
   },
 ];
@@ -202,6 +224,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     zomatoIntegration: false,
     customerOrdering: false,
     inventoryManagement: false,
+    whatsappIntegration: false,
     aiMenuImport: false,
     qrMenus: 3,
   },
@@ -217,6 +240,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     zomatoIntegration: false,
     customerOrdering: true,
     inventoryManagement: false,
+    whatsappIntegration: false,
     aiMenuImport: false,
     qrMenus: 3,
   },
@@ -232,6 +256,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     zomatoIntegration: true,
     customerOrdering: true,
     inventoryManagement: true,
+    whatsappIntegration: true,
     aiMenuImport: true,
     qrMenus: Infinity,
   },
@@ -249,6 +274,7 @@ export const DEFAULT_LIMITS: PlanLimits = {
   zomatoIntegration: false,
   customerOrdering: false,
   inventoryManagement: false,
+  whatsappIntegration: false,
   aiMenuImport: false,
   qrMenus: 0,
 };
@@ -347,6 +373,8 @@ export const UPGRADE_MESSAGES: Record<keyof PlanLimits, string> = {
   zomatoIntegration: "Purchase the Zomato add-on or upgrade to Expand",
   customerOrdering: "Purchase the customer ordering add-on or upgrade to Growth",
   inventoryManagement: "Purchase the Inventory Management add-on or upgrade to Expand",
+  whatsappIntegration:
+    "Purchase the WhatsApp integration add-on to send digital bills and updates on WhatsApp",
   aiMenuImport: "AI Menu Import is available on the Expand plan",
   qrMenus: "Upgrade to Expand for unlimited QR menus",
 };

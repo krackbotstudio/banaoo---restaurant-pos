@@ -34,8 +34,8 @@ import {
 // ─── Hero videos ─────────────────────────────────────────────────────────────
 
 const heroVideos = [
-  "/hero-loop.mp4",
-  "/hero-orders.mp4",
+  "/Videos/hero-loop.mp4",
+  "/Videos/hero-orders.mp4",
 ];
 
 // ─── Typing words (Banaoo in multiple languages) ──────────────────────────────

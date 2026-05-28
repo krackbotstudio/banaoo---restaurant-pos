@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
@@ -88,12 +88,13 @@ import {
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 import { isBanaooNativeApp, openBillingSettingsInBrowser } from "@/lib/native-app-bridge";
 import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
-import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
+import { SettingsOutletOrderingLinks } from "@/components/settings/SettingsOutletOrderingLinks";
+import { SubscriptionBillingHub } from "@/components/settings/SubscriptionBillingHub";
 import { UpiQrUpload } from "@/components/payments/UpiQrUpload";
 
 export default function Settings() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, signOut, refreshProfile, getImageUrl } = useAuth();
   const {
     subscription,
@@ -105,7 +106,8 @@ export default function Settings() {
     cancelSubscription,
     isNativeAppBilling,
   } = useSubscription();
-  const { isWithinLimit, usage, getUpgradeMessage } = useFeatureGating();
+  const { isWithinLimit, usage, getUpgradeMessage, loading: limitsLoading, hasComplimentaryAccess } =
+    useFeatureGating();
   const { 
     notifications, 
     unreadCount, 
@@ -117,7 +119,7 @@ export default function Settings() {
   } = useNotifications();
   
   const { theme, setTheme } = useTheme();
-  const { currentOutlet, outlets, setCurrentOutlet, canSwitchOutlets } = useOutlet();
+  const { setCurrentOutlet, refreshOutlets } = useOutlet();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab") || "profile";
     if (isBanaooNativeApp() && tab === "subscription") return "profile";
@@ -132,6 +134,7 @@ export default function Settings() {
       return;
     }
     setActiveTab(nextTab);
+    setSearchParams({ tab: nextTab }, { replace: true });
     if (nextTab === "outlets") void fetchOutletsList();
   };
 
@@ -175,7 +178,7 @@ export default function Settings() {
   );
 
   // ── Outlets tab state ───────────────────────────────────────────────────────
-  interface OutletItem { id: string; name: string; address: string | null; phone: string | null; is_active: boolean; }
+  interface OutletItem { id: string; name: string; address: string | null; phone: string | null; is_active: boolean; latitude?: number | null; }
   const API_URL = import.meta.env.VITE_API_URL ?? "";
   const [outletsList, setOutletsList] = useState<OutletItem[]>([]);
   const [outletsLoading, setOutletsLoading] = useState(false);
@@ -189,6 +192,7 @@ export default function Settings() {
   const [deleteOutletPassword, setDeleteOutletPassword] = useState("");
   const [deleteOutletError, setDeleteOutletError] = useState("");
   const [isDeletingOutlet, setIsDeletingOutlet] = useState(false);
+  const [togglingOutletId, setTogglingOutletId] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("tab") === "outlets") fetchOutletsList();
@@ -199,6 +203,14 @@ export default function Settings() {
       navigate("/settings?tab=profile", { replace: true });
     }
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (!tab || tab === activeTab) return;
+    if (isBanaooNativeApp() && tab === "subscription") return;
+    setActiveTab(tab);
+    if (tab === "outlets") void fetchOutletsList();
+  }, [searchParams, activeTab]);
 
   useEffect(() => {
     if (profile) {
@@ -309,17 +321,62 @@ export default function Settings() {
       const res = await fetch(`${API_URL}/api/outlets`, { credentials: "include" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to load outlets");
-      setOutletsList((data as { outlets: OutletItem[] }).outlets || []);
+      const raw = (data as { outlets: OutletItem[] }).outlets || [];
+      setOutletsList(
+        raw.map((o) => ({
+          ...o,
+          is_active: o.is_active === true || (o as { is_active?: unknown }).is_active === "true",
+        }))
+      );
     } catch {
       setOutletsList([]);
     }
     setOutletsLoading(false);
   };
 
+  const enabledOutletId = useMemo(() => {
+    const active = outletsList.filter((o) => o.is_active);
+    if (active.length >= 1) return active[0].id;
+    return outletsList[0]?.id ?? null;
+  }, [outletsList]);
+
+  const handleActivateOutlet = async (outlet: OutletItem) => {
+    if (outlet.id === enabledOutletId || togglingOutletId) return;
+    setTogglingOutletId(outlet.id);
+    try {
+      const res = await fetch(`${API_URL}/api/outlets/${outlet.id}/activate`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((payload as { error?: string }).error || "Could not enable outlet");
+      }
+      setOutletsList((prev) =>
+        prev.map((o) => ({ ...o, is_active: o.id === outlet.id }))
+      );
+      const activated = (payload as { outlet?: OutletItem }).outlet;
+      setCurrentOutlet({
+        id: outlet.id,
+        name: activated?.name ?? outlet.name,
+      });
+      await refreshOutlets();
+      toast.success(`"${outlet.name}" is now your enabled outlet`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to enable outlet");
+      void fetchOutletsList();
+    }
+    setTogglingOutletId(null);
+  };
+
   const handleAddOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOutletName.trim()) return;
-    if (!isWithinLimit("outlets", usage.outlets)) {
+    if (
+      !limitsLoading &&
+      !hasComplimentaryAccess &&
+      !isWithinLimit("outlets", usage.outlets)
+    ) {
       toast.error(getUpgradeMessage("outlets"));
       navigate("/addons");
       return;
@@ -337,7 +394,8 @@ export default function Settings() {
       toast.success("Outlet created!");
       setNewOutletName(""); setNewOutletAddress(""); setNewOutletPhone("");
       setAddOutletOpen(false);
-      fetchOutletsList();
+      await fetchOutletsList();
+      await refreshOutlets();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create outlet");
     }
@@ -365,7 +423,8 @@ export default function Settings() {
       setDeleteOutletDialogOpen(false);
       setOutletToDelete(null);
       setDeleteOutletPassword("");
-      fetchOutletsList();
+      await fetchOutletsList();
+      await refreshOutlets();
     } catch (err: unknown) {
       setDeleteOutletError(err instanceof Error ? err.message : "Failed to delete outlet");
     }
@@ -396,7 +455,7 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-8 space-y-8">
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground mt-1">
@@ -608,53 +667,6 @@ export default function Settings() {
 
           {/* Outlets Tab */}
           <TabsContent value="outlets" className="space-y-6">
-            {/* Active outlet selector — only when user has multiple outlets */}
-            {canSwitchOutlets && outlets.length > 1 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5" />
-                    Active Outlet
-                  </CardTitle>
-                  <CardDescription>
-                    All pages (orders, menu, analytics, etc.) show data for the selected outlet. Use a different device per outlet for the best experience.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {outlets.map((outlet) => (
-                    <button
-                      key={outlet.id}
-                      type="button"
-                      onClick={() => setCurrentOutlet(outlet)}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-all ${
-                        currentOutlet?.id === outlet.id
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border hover:border-primary/40 hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Building2 className="h-4 w-4 shrink-0" />
-                        <span className="font-medium">{outlet.name}</span>
-                      </div>
-                      {currentOutlet?.id === outlet.id && (
-                        <Check className="h-4 w-4 shrink-0 text-primary" />
-                      )}
-                    </button>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {currentOutlet && (
-              <CustomerOrderingLinkCard
-                outletId={currentOutlet.id}
-                outletName={currentOutlet.name}
-                brandName={profile?.brand_name}
-                orderingSlug={profile?.ordering_slug}
-                manageHref={`/outlets/${currentOutlet.id}`}
-              />
-            )}
-
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -664,14 +676,19 @@ export default function Settings() {
                       Your Outlets
                     </CardTitle>
                     <CardDescription>
-                      Manage your restaurant locations — add, view details, or delete outlets
+                      Manage your restaurant locations. When you have multiple outlets, only one can be
+                      enabled at a time — orders and POS use the enabled outlet.
                     </CardDescription>
                     <LimitIndicator feature="outlets" currentCount={usage.outlets} label="Outlets" />
                   </div>
                   <Button
                     className="gradient-primary glow-primary shrink-0"
                     onClick={() => {
-                      if (!isWithinLimit("outlets", usage.outlets)) {
+                      if (
+                        !limitsLoading &&
+                        !hasComplimentaryAccess &&
+                        !isWithinLimit("outlets", usage.outlets)
+                      ) {
                         toast.error(getUpgradeMessage("outlets"));
                         navigate("/addons");
                         return;
@@ -702,22 +719,52 @@ export default function Settings() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {outletsList.map((outlet) => (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {outletsList.map((outlet) => {
+                      const isEnabled = outlet.id === enabledOutletId;
+                      return (
                       <div key={outlet.id} className="relative group rounded-xl border border-border hover:border-primary/40 transition-all overflow-hidden">
-                        <Link to={`/outlets/${outlet.id}`} className="block p-4 pr-10">
+                        {outletsList.length > 1 && (
+                          <div
+                            className="absolute top-3 right-10 z-10 flex items-center gap-2 rounded-lg bg-background/95 px-2 py-1 border border-border/80 shadow-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Switch
+                              id={`outlet-enabled-${outlet.id}`}
+                              checked={isEnabled}
+                              disabled={togglingOutletId !== null}
+                              onCheckedChange={(checked) => {
+                                if (checked) void handleActivateOutlet(outlet);
+                              }}
+                            />
+                            <Label
+                              htmlFor={`outlet-enabled-${outlet.id}`}
+                              className="text-xs font-medium text-muted-foreground cursor-pointer"
+                            >
+                              {isEnabled ? "Enabled" : "Disabled"}
+                            </Label>
+                            {togglingOutletId === outlet.id && (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                            )}
+                          </div>
+                        )}
+                        <Link
+                          to={`/outlets/${outlet.id}`}
+                          state={{ returnTo: "/settings?tab=outlets" }}
+                          className="block p-4 pr-10"
+                        >
                           <div className="flex items-start gap-3">
                             <div className="p-2.5 rounded-lg gradient-primary shrink-0">
                               <ChefHat className="h-4 w-4 text-primary-foreground" />
                             </div>
                             <div className="flex-1 min-w-0 space-y-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap pr-24">
                                 <p className="font-semibold truncate">{outlet.name}</p>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                                  outlet.is_active ? "bg-green-500/15 text-green-600" : "bg-muted text-muted-foreground"
-                                }`}>
-                                  {outlet.is_active ? "Active" : "Inactive"}
-                                </span>
+                                {outletsList.length === 1 && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-green-500/15 text-green-600">
+                                    Enabled
+                                  </span>
+                                )}
                               </div>
                               {outlet.address && (
                                 <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
@@ -747,11 +794,19 @@ export default function Settings() {
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            <SettingsOutletOrderingLinks
+              outlets={outletsList}
+              brandName={profile?.brand_name}
+              orderingSlug={profile?.ordering_slug}
+              loading={outletsLoading}
+            />
           </TabsContent>
 
           {/* Add Outlet Dialog */}
@@ -1131,6 +1186,11 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+
+            <SubscriptionBillingHub
+              enabled={activeTab === "subscription"}
+              canManage={profile?.role === "owner"}
+            />
 
             {/* Plans + Purchase */}
             <Card>

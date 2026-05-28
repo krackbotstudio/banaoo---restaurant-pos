@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { apiUrl } from "@/lib/api-base";
 import { useAuth } from "@/lib/auth";
 import { useFeatureGating } from "@/hooks/use-feature-gating";
 import { LimitIndicator } from "@/components/FeatureGate";
@@ -72,16 +72,6 @@ const ROLES = [
   { value: "cashier",  label: "Cashier",  color: "bg-purple-500/20 text-purple-600 border-purple-500/30" },
   { value: "staff",    label: "Staff",    color: "bg-muted text-muted-foreground border-border" },
 ] as const;
-
-const STAFF_EMAIL_DOMAIN = "banaoo-staff.app";
-// Supabase requires min 6 chars — prefix PIN internally; staff still type 4 digits
-const PIN_PREFIX = "bn_";
-
-function generateUsername(fullName: string): string {
-  const first = fullName.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, "");
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${first}.${suffix}`;
-}
 
 function generatePin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
@@ -261,26 +251,36 @@ export default function Staff() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [{ data: outletsData }, { data: staffData }] = await Promise.all([
-      supabase.from("outlets").select("id, name").eq("owner_id", user!.id).order("created_at"),
-      supabase
-        .from("staff_members")
-        .select("*, staff_outlet_links(outlet_id)")
-        .eq("owner_id", user!.id)
-        .order("created_at"),
-    ]);
+    try {
+      const [{ data: outletsData }, staffRes] = await Promise.all([
+        supabase.from("outlets").select("id, name").eq("owner_id", user!.id).order("created_at"),
+        fetch(apiUrl("/api/staff-members"), { credentials: "include" }),
+      ]);
 
-    setOutlets(outletsData ?? []);
-    setStaff(
-      (staffData ?? []).map((s: any) => ({
-        ...s,
-        outlet_ids: (s.staff_outlet_links ?? []).map((l: any) => l.outlet_id),
-        page_permissions: s.page_permissions ?? null,
-        username: s.username ?? null,
-        system_email: s.system_email ?? null,
-      }))
-    );
-    setLoading(false);
+      setOutlets(outletsData ?? []);
+
+      const staffJson = await staffRes.json();
+      if (!staffRes.ok) {
+        throw new Error(staffJson.error || "Failed to load staff");
+      }
+      setStaff(
+        (staffJson.staff ?? []).map((s: StaffMember & { outlet_ids?: string[] }) => ({
+          ...s,
+          outlet_ids: s.outlet_ids ?? [],
+          page_permissions: s.page_permissions ?? null,
+          username: s.username ?? null,
+          system_email: s.system_email ?? null,
+        }))
+      );
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Could not load staff",
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Dialog helpers ─────────────────────────────────────────────────────────
@@ -376,12 +376,7 @@ export default function Staff() {
 
     setIsSubmitting(true);
     try {
-      let staffId = editingId;
-
-      // For new staff: generate login credentials
-      const username = isNew ? generateUsername(form.full_name) : undefined;
-      const pin = isNew ? (form.pin_code || generatePin()) : form.pin_code || undefined;
-      const systemEmail = isNew ? `${username}@${STAFF_EMAIL_DOMAIN}` : undefined;
+      const pin = isNew ? (form.pin_code || generatePin()) : form.pin_code.trim() || undefined;
 
       if (isNew && pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))) {
         toast({ variant: "destructive", title: "PIN must be exactly 4 digits" });
@@ -389,64 +384,71 @@ export default function Staff() {
         return;
       }
 
-      const payload: any = {
-        owner_id: user!.id,
+      const body: Record<string, unknown> = {
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         role: form.role,
         notes: form.notes.trim() || null,
         page_permissions: form.page_permissions ?? ROLE_DEFAULT_PERMISSIONS[form.role] ?? [],
+        outlet_ids: form.outlet_ids,
       };
-
       if (isNew) {
-        payload.username = username;
-        payload.system_email = systemEmail;
-        payload.pin_code = pin;
-      } else if (pin) {
-        payload.pin_code = pin;
+        body.pin_code = pin;
+      } else if (form.pin_code.trim()) {
+        body.pin_code = form.pin_code;
       }
 
-      if (editingId) {
-        const { error } = await supabase
-          .from("staff_members")
-          .update(payload)
-          .eq("id", editingId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("staff_members")
-          .insert(payload)
-          .select("id")
-          .single();
-        if (error) throw error;
-        staffId = data.id;
-      }
-
-      // Re-sync outlet assignments
-      await supabase.from("staff_outlet_links").delete().eq("staff_member_id", staffId);
-      if (form.outlet_ids.length > 0) {
-        const { error } = await supabase.from("staff_outlet_links").insert(
-          form.outlet_ids.map((outlet_id) => ({ staff_member_id: staffId!, outlet_id }))
-        );
-        if (error) throw error;
+      const res = await fetch(
+        apiUrl(`/api/staff-members${editingId ? `/${editingId}` : ""}`),
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === "STAFF_LIMIT") {
+          navigate("/addons");
+        }
+        throw new Error(data.error || "Failed to save staff member");
       }
 
       setDialogOpen(false);
 
-      if (isNew) {
-        // Always show credentials dialog for new staff
-        setCredentials({ username: username!, pin: pin! });
-      } else if (form.pin_code.trim()) {
-        // Only show if user explicitly typed a new PIN during edit
+      if (isNew && data.credentials) {
+        setCredentials({
+          username: data.credentials.username,
+          pin: data.credentials.pin,
+        });
+      } else if (!isNew && form.pin_code.trim()) {
         const member = staff.find((s) => s.id === editingId);
         setCredentials({ username: member?.username ?? "", pin: form.pin_code });
-      } else {
+      } else if (!isNew) {
         toast({ title: "Staff member updated" });
       }
-      fetchData();
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
+
+      if (data.staff) {
+        setStaff(
+          data.staff.map((s: StaffMember & { outlet_ids?: string[] }) => ({
+            ...s,
+            outlet_ids: s.outlet_ids ?? [],
+            page_permissions: s.page_permissions ?? null,
+            username: s.username ?? null,
+            system_email: s.system_email ?? null,
+          }))
+        );
+      } else {
+        await fetchData();
+      }
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to save",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -457,9 +459,17 @@ export default function Staff() {
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
-    const { error } = await supabase.from("staff_members").delete().eq("id", deleteId);
-    if (error) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+    const res = await fetch(apiUrl(`/api/staff-members/${deleteId}`), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: data.error || "Failed to delete staff member",
+      });
     } else {
       toast({ title: "Staff member removed" });
       setStaff((prev) => prev.filter((s) => s.id !== deleteId));
@@ -471,14 +481,23 @@ export default function Staff() {
   // ── Toggle active ──────────────────────────────────────────────────────────
 
   const handleToggleActive = async (member: StaffMember) => {
-    const { error } = await supabase
-      .from("staff_members")
-      .update({ is_active: !member.is_active })
-      .eq("id", member.id);
-    if (!error) {
+    const res = await fetch(apiUrl(`/api/staff-members/${member.id}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ is_active: !member.is_active }),
+    });
+    if (res.ok) {
       setStaff((prev) =>
         prev.map((s) => (s.id === member.id ? { ...s, is_active: !s.is_active } : s))
       );
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: data.error || "Failed to update status",
+      });
     }
   };
 

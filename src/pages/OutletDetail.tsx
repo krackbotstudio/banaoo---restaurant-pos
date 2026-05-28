@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useOutlet } from "@/lib/outlet-context";
@@ -67,7 +67,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
 import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -147,6 +146,9 @@ interface Outlet {
 export default function OutletDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo ?? "/outlets";
   const { user, profile } = useAuth();
   const { currentOutlet, setCurrentOutlet } = useOutlet();
   const { toast } = useToast();
@@ -190,7 +192,7 @@ export default function OutletDetail() {
 
     if (error) {
       toast({ variant: "destructive", title: "Error", description: "Outlet not found" });
-      navigate("/outlets");
+      navigate(returnTo);
       return;
     }
 
@@ -277,9 +279,11 @@ export default function OutletDetail() {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } else {
       toast({ title: "Deleted", description: "Outlet has been deleted" });
-      navigate("/outlets");
+      navigate(returnTo);
     }
   };
+
+  const goBack = () => navigate(returnTo);
 
   if (loading) {
     return (
@@ -303,10 +307,10 @@ export default function OutletDetail() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
         {/* Back Button & Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/outlets")}>
+          <Button variant="ghost" size="icon" onClick={goBack} aria-label="Go back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
@@ -643,14 +647,6 @@ export default function OutletDetail() {
               </Card>
             )}
             </div>
-
-            <CustomerOrderingLinkCard
-              outletId={outlet.id}
-              outletName={outlet.name}
-              brandName={profile?.brand_name}
-              orderingSlug={profile?.ordering_slug}
-              hasGpsLocation={!!outlet.latitude}
-            />
 
             <OutletPaymentSettings outletId={outlet.id} outletName={outlet.name} />
 

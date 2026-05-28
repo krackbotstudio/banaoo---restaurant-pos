@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { AppLayout } from "@/components/AppLayout";
-import { useAuth } from "@/lib/auth";
 import { API_URL } from "@/lib/api-url";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -16,7 +12,6 @@ import {
   Mail,
   Phone,
   Building2,
-  ChefHat,
   Download,
   Smartphone,
   Wallet,
@@ -36,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Link } from "react-router-dom";
 
 interface Account {
   id: string;
@@ -52,6 +48,9 @@ interface Account {
   terms_version: string | null;
   terms_accepted_ip: string | null;
   terms_accepted_user_agent: string | null;
+  is_test_account?: boolean;
+  billing_exempt?: boolean;
+  complimentary_plan?: string | null;
 }
 
 interface MobileAppLead {
@@ -99,9 +98,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   rejected: { label: "Rejected", variant: "destructive" },
 };
 
-export default function AdminAccounts() {
-  const { profile, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
+export function AccountsPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [leads, setLeads] = useState<MobileAppLead[]>([]);
   const [affiliates, setAffiliates] = useState<AffiliateApplication[]>([]);
@@ -113,13 +110,6 @@ export default function AdminAccounts() {
   const [actioning, setActioning] = useState<string | null>(null);
   const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
   const [adminTab, setAdminTab] = useState<"accounts" | "affiliates" | "payouts" | "leads">("accounts");
-
-  // Redirect non-admins back to the landing page
-  useEffect(() => {
-    if (!authLoading && profile && !profile.is_admin) {
-      navigate("/");
-    }
-  }, [profile, authLoading, navigate]);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -141,8 +131,8 @@ export default function AdminAccounts() {
   }, [filter]);
 
   useEffect(() => {
-    if (profile?.is_admin) fetchAccounts();
-  }, [fetchAccounts, profile]);
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const fetchLeads = useCallback(async () => {
     setLeadsLoading(true);
@@ -162,9 +152,8 @@ export default function AdminAccounts() {
   }, []);
 
   useEffect(() => {
-    if (!profile?.is_admin) return;
     if (adminTab === "leads") void fetchLeads();
-  }, [adminTab, fetchLeads, profile]);
+  }, [adminTab, fetchLeads]);
 
   const fetchAffiliates = useCallback(async () => {
     setAffiliatesLoading(true);
@@ -201,10 +190,9 @@ export default function AdminAccounts() {
   }, []);
 
   useEffect(() => {
-    if (!profile?.is_admin) return;
     if (adminTab === "affiliates") void fetchAffiliates();
     if (adminTab === "payouts") void fetchAffiliatePayouts();
-  }, [adminTab, fetchAffiliates, fetchAffiliatePayouts, profile]);
+  }, [adminTab, fetchAffiliates, fetchAffiliatePayouts]);
 
   const downloadLeadsCsv = () => {
     if (leads.length === 0) {
@@ -302,29 +290,20 @@ export default function AdminAccounts() {
     }
   };
 
-  if (authLoading || !profile?.is_admin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const pendingCount = accounts.filter((a) => a.account_status === "pending").length;
 
   return (
-    <AppLayout>
-      <div className="container max-w-5xl py-8 space-y-6">
+    <div className="max-w-5xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <ChefHat className="h-3.5 w-3.5" />
-              <span>banaoo Admin</span>
+              <img src="/tectangle-logo.png" alt="" className="h-4 w-4 object-contain" />
+              <span>Tectangle CMS</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Customer management</h1>
             <p className="text-muted-foreground mt-1">
-              Manage owners, affiliates, payouts, and app leads
+              Approve owners, manage affiliates, payouts, and app download leads
             </p>
           </div>
           {adminTab === "accounts" ? (
@@ -445,6 +424,16 @@ export default function AdminAccounts() {
                                   {account.onboarding_completed && (
                                     <Badge variant="outline" className="text-xs">Onboarding done</Badge>
                                   )}
+                                  {account.is_test_account && (
+                                    <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
+                                      Test account
+                                    </Badge>
+                                  )}
+                                  {account.billing_exempt && !account.is_test_account && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Complimentary · {account.complimentary_plan || "plan"}
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
                                   {account.email && (
@@ -525,6 +514,9 @@ export default function AdminAccounts() {
 
                               {account.account_status === "pending" && (
                                 <div className="flex gap-2 flex-shrink-0">
+                                  <Button size="sm" variant="outline" asChild>
+                                    <Link to={`/cms/customers/${account.user_id}`}>View account</Link>
+                                  </Button>
                                   <Button
                                     size="sm"
                                     className="h-9 gap-1.5 bg-green-600 hover:bg-green-700 text-white border-0"
@@ -551,27 +543,37 @@ export default function AdminAccounts() {
                                 </div>
                               )}
                               {account.account_status === "approved" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 flex-shrink-0"
-                                  onClick={() => handleAction(account.user_id, "reject")}
-                                  disabled={actioning === account.user_id}
-                                >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  Revoke
-                                </Button>
+                                <div className="flex gap-2 flex-shrink-0">
+                                  <Button size="sm" variant="outline" asChild>
+                                    <Link to={`/cms/customers/${account.user_id}`}>View account</Link>
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-9 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 flex-shrink-0"
+                                    onClick={() => handleAction(account.user_id, "reject")}
+                                    disabled={actioning === account.user_id}
+                                  >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    Revoke
+                                  </Button>
+                                </div>
                               )}
                               {account.account_status === "rejected" && (
-                                <Button
-                                  size="sm"
-                                  className="h-9 gap-1.5 bg-green-600 hover:bg-green-700 text-white border-0 flex-shrink-0"
-                                  onClick={() => handleAction(account.user_id, "approve")}
-                                  disabled={actioning === account.user_id}
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Approve
-                                </Button>
+                                <div className="flex gap-2 flex-shrink-0">
+                                  <Button size="sm" variant="outline" asChild>
+                                    <Link to={`/cms/customers/${account.user_id}`}>View account</Link>
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-9 gap-1.5 bg-green-600 hover:bg-green-700 text-white border-0 flex-shrink-0"
+                                    onClick={() => handleAction(account.user_id, "approve")}
+                                    disabled={actioning === account.user_id}
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Approve
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           </CardContent>
@@ -791,7 +793,6 @@ export default function AdminAccounts() {
             )}
           </TabsContent>
         </Tabs>
-      </div>
-    </AppLayout>
+    </div>
   );
 }

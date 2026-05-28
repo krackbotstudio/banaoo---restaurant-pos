@@ -288,6 +288,7 @@ RN app reads `{ minVersion, forceUpdate, message }` from env vars.
 - **Auth**: `none`
 - `MOBILE_MIN_VERSION` / `MOBILE_FORCE_UPDATE` / `MOBILE_FORCE_UPDATE_MESSAGE`.
 - `Cache-Control: no-store`.
+- If `forceUpdate=true` and an authenticated user calls this endpoint, backend also creates a deduped in-app notification (`type: app_update`) once per 24h.
 
 ### `POST /api/mobile-app/download-request`
 
@@ -436,15 +437,122 @@ Files written by `POST /api/upload`. `express.static(<server>/uploads)`. **No pe
 
 ---
 
-## 10. Admin
+## 10. Admin & CMS
 
-All require `admin` (i.e. `requireAuth` + `profiles.is_admin = true`). See [`backend.md`](backend.md) §11.
+### CMS auth (`/api/cms/*`)
 
-### `GET /api/admin/accounts`
+Requires a CMS session (`req.session.cmsAdmin`). Separate from restaurant owner Passport auth.
+
+#### `POST /api/cms/login`
+
+- **Auth**: none
+- **Body**: `{ email, password }`
+- Sets `req.session.cmsAdmin`. Supports `admin_users` table or legacy `profiles.is_admin` owner.
+
+#### `GET /api/cms/me`
+
+- **Auth**: CMS session
+- Returns `{ admin: { id, email, full_name, role, source } }`.
+
+#### `POST /api/cms/logout`
+
+- **Auth**: CMS session (optional)
+- Clears CMS session; logs audit entry.
+
+#### `GET /api/cms/dashboard`
+
+- **Auth**: CMS session
+- Returns platform KPIs (`total_owners`, `pending_approvals`, `active_subscriptions`, `pending_affiliates`, `mobile_app_leads`) and `recent_signups`.
+
+#### `GET /api/cms/subscriptions`
+
+- **Auth**: CMS session
+- **Query**: `?status=all|trialing|active|past_due|cancelled`, `?search=<text>`.
+- Returns subscription rows joined with owner email/profile for CMS operations.
+
+#### `PATCH /api/cms/subscriptions/:id`
+
+- **Auth**: CMS session with role `super_admin` or `billing`.
+- **Body (partial)**: `{ status?, plan_type?, period_months?, expires_at? }`
+- Writes audit entry with action `cms.subscriptions.update`.
+
+#### `GET /api/cms/payments`
+
+- **Auth**: CMS session
+- **Query**: `?status=all|trialing|active|past_due|cancelled`, `?search=<text>`.
+- Returns subscription-linked Razorpay payment history for CMS (read-only).
+
+#### `GET /api/cms/marketing/overview`
+
+- **Auth**: CMS session
+- Returns lead/affiliate marketing KPIs and top lead sources.
+
+#### `GET /api/cms/marketing/leads`
+
+- **Auth**: CMS session
+- **Query**: `?search=<text>`, `?source=<source|all>`, `?limit=N`.
+- Returns mobile app download leads.
+
+#### `GET /api/cms/marketing/leads/export`
+
+- **Auth**: CMS session
+- Returns CSV export of filtered leads; logs audit action.
+
+#### `GET /api/cms/marketing/affiliates`
+
+- **Auth**: CMS session
+- **Query**: `?status=pending|approved|suspended|all`.
+- Returns affiliate applications for marketing pipeline view.
+
+#### `GET /api/cms/customers/:userId/overview`
+
+- **Auth**: CMS session
+- Returns profile + usage counters + latest subscription for one customer.
+
+#### `GET /api/cms/customers/:userId/orders`
+
+- **Auth**: CMS session
+- **Query**: `?limit=1..200` (default 50)
+- Returns recent orders across all outlets for that owner.
+
+#### `GET /api/cms/customers/:userId/payments`
+
+- **Auth**: CMS session
+- Returns subscription payment records and order payment records.
+
+#### `GET /api/cms/customers/:userId/subscriptions`
+
+- **Auth**: CMS session
+- Returns subscription history for that owner.
+
+#### `PATCH /api/cms/customers/:userId/profile`
+
+- **Auth**: CMS session role-gated (`super_admin|support|billing`)
+- **Body (partial)**: `{ full_name?, phone?, business_type?, account_status?, onboarding_completed? }`.
+- Updates owner profile/admin status fields and writes audit entry.
+
+#### `PATCH /api/cms/customers/:userId/subscriptions/:subscriptionId`
+
+- **Auth**: CMS session role-gated (`super_admin|billing`)
+- **Body (partial)**: `{ status?, plan_type?, period_months?, expires_at? }`.
+- Updates one customer subscription row and writes audit entry.
+
+#### `GET /api/cms/customers/:userId/audit`
+
+- **Auth**: CMS session
+- Returns recent admin audit rows linked to the customer.
+
+---
+
+### Legacy admin API (`/api/admin/*`)
+
+All require **`requireAdminAccess`**: CMS session **or** Passport session with `profiles.is_admin = true`. See [`admin-cms.md`](admin-cms.md).
+
+#### `GET /api/admin/accounts`
 
 List owner profiles + T&C audit + `users.email`.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Query**: `?status=approved|pending|rejected|all` (default `all`).
 - Returns rows including `terms_accepted_at`, `terms_version`, `terms_accepted_ip`, `terms_accepted_user_agent`.
 
@@ -452,7 +560,7 @@ List owner profiles + T&C audit + `users.email`.
 
 Approve or reject an owner account.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Body**: `{ target_user_id, action: 'approve' | 'reject' }`
 - Updates `profiles.account_status` and inserts a `public.notifications` row. Approval's notification routes the user to `/select-plan`.
 
@@ -460,14 +568,14 @@ Approve or reject an owner account.
 
 List affiliates joined to `users` + `profiles`.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Query**: `?status=pending|approved|suspended|all`.
 
 ### `POST /api/admin/affiliates/action`
 
 Approve or suspend an affiliate.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Body**: `{ affiliate_id, action: 'approve' | 'suspend' }`
 - Stamps `approved_at = NOW()` on approve.
 
@@ -475,7 +583,7 @@ Approve or suspend an affiliate.
 
 List affiliate payout requests.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Query**: `?status=requested|processing|completed|failed|all`.
 - Ordered by `requested_at DESC`.
 
@@ -483,7 +591,7 @@ List affiliate payout requests.
 
 Move a payout through its lifecycle.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Body**: `{ payout_id, status: 'requested'|'processing'|'completed'|'failed', transaction_id?, notes? }`
 - Stamps `processed_at` when status becomes `completed`. Uses `COALESCE` so partial updates don't clear existing fields.
 
@@ -491,7 +599,7 @@ Move a payout through its lifecycle.
 
 Recent leads from the APK download form.
 
-- **Auth**: `admin`
+- **Auth**: CMS session or legacy admin
 - **Query**: `?limit=N` (clamped 1–1000, default 250).
 - Ordered by `created_at DESC`.
 
@@ -549,7 +657,11 @@ For a one-screen list, group everything by area:
 
 `GET /api/public/outlets/:outletId/payment-settings` · `POST /api/public/customer-orders` · `GET /api/public/orders/:orderId/payment` · `POST /api/public/orders/:orderId/submit-upi` · `GET /api/order-payments` · `PATCH /api/order-payments/:paymentId` · `POST /api/webhooks/swiggy` · `POST /api/webhooks/zomato`
 
-### Admin (7)
+### CMS endpoints (18)
+
+`POST /api/cms/login` · `GET /api/cms/me` · `POST /api/cms/logout` · `GET /api/cms/dashboard` · `GET /api/cms/subscriptions` · `PATCH /api/cms/subscriptions/:id` · `GET /api/cms/payments` · `GET /api/cms/marketing/overview` · `GET /api/cms/marketing/leads` · `GET /api/cms/marketing/leads/export` · `GET /api/cms/marketing/affiliates` · `GET /api/cms/customers/:userId/overview` · `GET /api/cms/customers/:userId/orders` · `GET /api/cms/customers/:userId/payments` · `GET /api/cms/customers/:userId/subscriptions` · `PATCH /api/cms/customers/:userId/profile` · `PATCH /api/cms/customers/:userId/subscriptions/:subscriptionId` · `GET /api/cms/customers/:userId/audit`
+
+### Admin API (7)
 
 `GET /api/admin/accounts` · `POST /api/admin/accounts/action` · `GET /api/admin/affiliates` · `POST /api/admin/affiliates/action` · `GET /api/admin/affiliate-payouts` · `POST /api/admin/affiliate-payouts/action` · `GET /api/admin/mobile-app-leads`
 
@@ -557,7 +669,7 @@ For a one-screen list, group everything by area:
 
 `GET /uploads/*` · `GET /downloads/*` · `GET /api/manifest`
 
-**Total: ~54 active endpoints** (excluding the `GET /uploads/*` and `GET /downloads/*` wildcards which match any file).
+**Total: ~72 active endpoints** (excluding the `GET /uploads/*` and `GET /downloads/*` wildcards which match any file).
 
 ---
 

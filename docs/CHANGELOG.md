@@ -2,7 +2,7 @@
 
 **Purpose:** Single living document for frontend, backend, mobile, and ops. Update this file whenever we ship or plan a change (add a dated entry under [Change log](#change-log)).
 
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-27
 
 ---
 
@@ -37,6 +37,41 @@ Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo
 ---
 
 ## Change log
+
+### 2026-05-27 — Notification reliability hardening
+
+**Summary:** Strengthened in-app notifications so order/new-order/cancel signals and app-update alerts are more reliable across environments.
+
+| Area | Changes |
+|------|---------|
+| **Backend** | New `server/notifications-bootstrap.js` auto-provisions `notifications` table/indexes, realtime publication link, and `orders` trigger (`notify_on_order_change`) on startup. |
+| **Backend** | `GET /api/mobile-app/update-policy` now writes a deduped `app_update` notification (max once per 24h per user) when force update is enabled and user is authenticated. |
+| **Frontend** | `useNotifications()` realtime subscription now uses user-scoped channels and listens to `INSERT`, `UPDATE`, and `DELETE` events for better unread/read sync. |
+| **Frontend** | `NotificationCenter` adds dedicated icon/color handling for `app_update` notifications. |
+
+### 2026-05-27 — Tectangle Admin CMS modules (Phase 2–6)
+
+**Summary:** Expanded CMS beyond dashboard/customers with functional Subscriptions, Payments, Marketing, and Roles modules backed by new `/api/cms/*` endpoints.
+
+| Area | Changes |
+|------|---------|
+| **Backend** | `server/admin/subscriptions.js`, `payments.js`, `marketing.js`, `admin-users.js` — list/update subscriptions, read payments, marketing overview/leads/export/affiliates, CMS admin user CRUD. |
+| **Backend** | `server/admin/customers.js` — customer 360 APIs (`overview`, `orders`, `payments`, `subscriptions`, `profile update`, `subscription update`, `audit`). |
+| **Frontend** | `src/pages/cms/Subscriptions.tsx`, `Payments.tsx`, `Marketing.tsx`, `Roles.tsx`, `CustomerDetail.tsx` — live data tables, filters, CSV export, super-admin staff management, and per-customer control panel. |
+| **Docs** | `docs/admin-cms.md`, `docs/api.md`, `docs/frontend.md` updated with customer-detail route and CMS API expansion. |
+
+### 2026-05-27 — Tectangle Admin CMS (Phase 0–1)
+
+**Summary:** Introduced a dedicated platform admin panel at `/cms` with separate login, dashboard KPIs, and migrated customer management from the legacy `/admin/accounts` POS route.
+
+| Area | Changes |
+|------|---------|
+| **DB** | `supabase/migrations/20260527000001_admin_cms.sql` — `admin_users`, `admin_audit_log`, RLS (server-only). |
+| **Backend** | New `server/admin/` module: CMS auth (`/api/cms/login`, `/me`, `/logout`), dashboard stats, audit logging, `requireAdminAccess` on all `/api/admin/*`. Seed script `server/scripts/seed-cms-admin.js`. |
+| **Frontend** | `CmsAuthProvider`, `CmsLayout`, `CmsSidebar`, `CmsProtectedRoute`; pages under `src/pages/cms/` (login, dashboard, customers). `AccountsPanel` extracted in `pages/admin/Accounts.tsx`. Routes in `App.tsx`; `/admin/*` → `/cms/customers`. Admin OAuth redirect → `/cms/dashboard`. |
+| **SEO** | `public/robots.txt` — `Disallow: /cms/` |
+| **Docs** | New [`docs/admin-cms.md`](admin-cms.md); updated `docs/README.md`, `docs/api.md`, `docs/frontend.md`. |
+| **Deploy** | Apply CMS migration in Supabase; run seed script; restart Express. |
 
 ### 2026-05-26 — Backend error handler + April schema back-fill
 

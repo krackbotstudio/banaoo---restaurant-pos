@@ -13,6 +13,7 @@ export interface SubscriptionAddons {
   zomato: boolean;
   customer_ordering: boolean;
   inventory: boolean;
+  whatsapp: boolean;
 }
 
 export const EMPTY_ADDONS: SubscriptionAddons = {
@@ -22,6 +23,7 @@ export const EMPTY_ADDONS: SubscriptionAddons = {
   zomato: false,
   customer_ordering: false,
   inventory: false,
+  whatsapp: false,
 };
 
 export function aggregateAddonsFromRows(
@@ -95,6 +97,7 @@ export function computeEffectiveLimits(
     inventoryManagement: base.inventoryManagement || addons.inventory,
     swiggyIntegration: base.swiggyIntegration || addons.swiggy,
     zomatoIntegration: base.zomatoIntegration || addons.zomato,
+    whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };

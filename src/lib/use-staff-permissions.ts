@@ -36,8 +36,8 @@ export const ALL_MODULES = [
 export type ModuleKey = typeof ALL_MODULES[number]["key"];
 
 interface StaffPermissionsResult {
-  /** null = owner, no restrictions. string[] = allowed page keys for staff. */
-  permissions: string[] | null;
+  /** undefined = still resolving. null = owner (no restrictions). string[] = staff keys. */
+  permissions: string[] | null | undefined;
   loading: boolean;
 }
 
@@ -50,12 +50,21 @@ interface StaffPermissionsResult {
  */
 export function useStaffPermissions(): StaffPermissionsResult {
   const { profile, user } = useAuth();
-  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [permissions, setPermissions] = useState<string[] | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile || !user) {
+    let cancelled = false;
+
+    if (!user) {
+      setPermissions(undefined);
       setLoading(false);
+      return;
+    }
+
+    if (!profile) {
+      setPermissions(undefined);
+      setLoading(true);
       return;
     }
 
@@ -65,6 +74,8 @@ export function useStaffPermissions(): StaffPermissionsResult {
       setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     // For staff roles, look up their staff_member record by email
     const email = user.email;
@@ -76,28 +87,39 @@ export function useStaffPermissions(): StaffPermissionsResult {
       return;
     }
 
-    supabase
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .from("staff_members" as any)
-      .select("role, page_permissions")
-      .eq("system_email", email)   // system_email = "username@banaoo-staff.app" (what staff log in with)
-      .maybeSingle()
-      .then(({ data }: { data: any }) => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from("staff_members" as any)
+          .select("role, page_permissions")
+          .eq("system_email", email) // system_email = "username@banaoo-staff.app" (what staff log in with)
+          .maybeSingle();
+
+        if (cancelled) return;
+
         if (data) {
-          // Use explicit permissions if set, otherwise fall back to role defaults
           const perms: string[] | null = data.page_permissions;
-          if (perms && perms.length > 0) {
+          if (Array.isArray(perms) && perms.length > 0) {
             setPermissions(perms);
           } else {
             const role = data.role as string;
             setPermissions(ROLE_DEFAULT_PERMISSIONS[role] ?? ["orders", "menu"]);
           }
         } else {
-          // No staff_members record — fall back to profile role defaults
           setPermissions(ROLE_DEFAULT_PERMISSIONS[profile.role] ?? ["orders", "menu"]);
         }
-        setLoading(false);
-      });
+      } catch {
+        if (cancelled) return;
+        setPermissions(ROLE_DEFAULT_PERMISSIONS[profile.role] ?? ["orders", "menu"]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [profile, user]);
 
   return { permissions, loading };

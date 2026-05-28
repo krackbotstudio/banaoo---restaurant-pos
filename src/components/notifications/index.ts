@@ -1,1 +1,6 @@
-export { NotificationCenter } from "./NotificationCenter";
+export {
+  NotificationCenter,
+  NotificationPanel,
+  NotificationPanelProvider,
+  NotificationTrigger,
+} from "./NotificationCenter";

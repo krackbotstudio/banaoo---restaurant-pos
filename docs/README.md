@@ -32,6 +32,7 @@ Design documents for features that aren't built yet. Each one has a "DECISIONS �
 | File | What | Status |
 |---|---|---|
 | [`wallet-system-plan.md`](wallet-system-plan.md) | Online Order Wallet & Integration Management System — prepaid credit ledger that meters Swiggy/Zomato (and future) syncs, with admin pricing/packages/refunds. | Proposed — awaiting product decisions |
+| [`admin-cms.md`](admin-cms.md) | Tectangle Admin CMS — separate `/cms` panel for platform operators (customers, subscriptions, payments, roles). | Phase 1 shipped — see doc for roadmap |
 
 ---
 
@@ -57,6 +58,7 @@ Design documents for features that aren't built yet. Each one has a "DECISIONS �
 | Changing SEO meta / structured data / sitemap | `SEO.md` |
 | Planning marketing video content | `demo-guide-videos.md` |
 | Proposing a feature that doesn't exist yet | Add a new file under "Plans & proposals" (see `wallet-system-plan.md` for the format) |
+| Shipping or extending the Tectangle CMS | `admin-cms.md` (always) + `api.md` + `CHANGELOG.md` |
 
 For schema/SQL history (legacy snapshots, one-off DB scripts), see [`../db-archive/`](../db-archive/).
 

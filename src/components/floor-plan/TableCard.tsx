@@ -18,6 +18,7 @@ interface TableCardProps {
   /** Live order number to display */
   liveOrderNumber?: string;
   onClick?: () => void;
+  onLiveOrderClick?: () => void;
   className?: string;
 }
 
@@ -39,9 +40,11 @@ export function TableCard({
   liveOrderStatus,
   liveOrderNumber,
   onClick,
+  onLiveOrderClick,
   className,
 }: TableCardProps) {
   const hasLiveOrder = !!liveOrderStatus;
+  const handleClick = hasLiveOrder && onLiveOrderClick ? onLiveOrderClick : onClick;
   const live = liveOrderStatus ? liveOrderColors[liveOrderStatus] : null;
 
   const staticStyles = {
@@ -92,11 +95,17 @@ export function TableCard({
 
   return (
     <div
-      onClick={hasLiveOrder ? undefined : onClick}
-      title={hasLiveOrder ? `Table ${tableNumber} has a live ${live!.label} order` : undefined}
+      onClick={handleClick}
+      title={
+        hasLiveOrder
+          ? onLiveOrderClick
+            ? `Open ${live!.label} order on Table ${tableNumber}`
+            : `Table ${tableNumber} has a live ${live!.label} order`
+          : undefined
+      }
       className={cn(
         "relative transition-all py-6 px-4",
-        hasLiveOrder ? "cursor-not-allowed opacity-80" : "cursor-pointer",
+        handleClick ? "cursor-pointer" : hasLiveOrder ? "cursor-not-allowed opacity-80" : "cursor-pointer",
         className
       )}
     >
@@ -107,7 +116,8 @@ export function TableCard({
           "relative rounded-xl border-2 p-4 min-h-[100px] flex flex-col items-center justify-center transition-all",
           borderStyle,
           isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary shadow-lg",
-          "hover:shadow-md"
+          onLiveOrderClick && hasLiveOrder && "hover:ring-2 hover:ring-primary/40 hover:shadow-md",
+          !hasLiveOrder && "hover:shadow-md"
         )}
       >
         {/* Lock + pulsing dot for live orders */}
@@ -117,7 +127,9 @@ export function TableCard({
               <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", live!.dot)} />
               <span className={cn("relative inline-flex rounded-full h-2 w-2", live!.dot)} />
             </span>
-            <Lock className="absolute bottom-2 right-2 h-3 w-3 text-muted-foreground/50" />
+            {!onLiveOrderClick && (
+              <Lock className="absolute bottom-2 right-2 h-3 w-3 text-muted-foreground/50" />
+            )}
           </>
         )}
 

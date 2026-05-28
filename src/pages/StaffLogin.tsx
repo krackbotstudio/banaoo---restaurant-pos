@@ -14,7 +14,7 @@ const PIN_PREFIX = "bn_";
 export default function StaffLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn, user, profile } = useAuth();
+  const { signIn, signOut, user, profile } = useAuth();
 
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState(["", "", "", ""]);
@@ -87,6 +87,12 @@ export default function StaffLogin() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleOwnerLogin = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    await signOut();
+    navigate("/auth?mode=login&switch=1");
   };
 
   return (
@@ -176,7 +182,8 @@ export default function StaffLogin() {
         {/* Back to owner login */}
         <div className="text-center">
           <Link
-            to="/auth?mode=login"
+            to="/auth?mode=login&switch=1"
+            onClick={(e) => void handleOwnerLogin(e)}
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />

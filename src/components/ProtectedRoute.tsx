@@ -16,11 +16,14 @@ const ONBOARDING_EXEMPT_ROUTES = [
 /** Maps a URL pathname to the permission key needed to access it (staff only). */
 function getRoutePermissionKey(pathname: string): string | null {
   if (pathname === "/dashboard") return "dashboard";
+  if (pathname.startsWith("/outlets")) return "outlets";
   if (pathname.startsWith("/menu")) return "menu";
   if (pathname.startsWith("/orders")) return "orders";
   if (pathname === "/kitchen") return "kitchen";
+  if (pathname === "/payments") return "payments";
   if (pathname === "/analytics") return "analytics";
   if (pathname === "/customers") return "customers";
+  if (pathname === "/inventory") return "inventory";
   if (pathname === "/order-history") return "order-history";
   if (pathname === "/staff") return "staff";
   if (pathname === "/integrations") return "integrations";
@@ -30,11 +33,14 @@ function getRoutePermissionKey(pathname: string): string | null {
 
 const ROUTE_MAP: Record<string, string> = {
   dashboard: "/dashboard",
+  outlets: "/outlets",
   menu: "/menu",
   orders: "/orders",
   kitchen: "/kitchen",
+  payments: "/payments",
   analytics: "/analytics",
   customers: "/customers",
+  inventory: "/inventory",
   "order-history": "/order-history",
   staff: "/staff",
   integrations: "/integrations",
@@ -136,8 +142,18 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Profile failed to load — useEffect will sign out
   if (!profile) return redirectLoader;
 
-  // Staff and admins: render immediately
-  if (profile.role !== "owner" || profile.is_admin) return <>{children}</>;
+  // Admins: render immediately
+  if (profile.is_admin) return <>{children}</>;
+
+  // Staff: wait for permissions to avoid unauthorized page flash.
+  if (profile.role !== "owner") {
+    if (permissionsLoading || permissions === undefined) return redirectLoader;
+    const routeKey = getRoutePermissionKey(location.pathname);
+    if (routeKey && Array.isArray(permissions) && !permissions.includes(routeKey)) {
+      return redirectLoader;
+    }
+    return <>{children}</>;
+  }
 
   // Block: onboarding not done
   if (!isOnboardingExempt && !profile.onboarding_completed) return redirectLoader;

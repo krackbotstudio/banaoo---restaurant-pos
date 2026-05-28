@@ -318,7 +318,7 @@ export default function Kitchen() {
             <div className="p-2.5 rounded-xl gradient-accent glow-accent">
               <ChefHat className="h-5 w-5 text-accent-foreground" />
             </div>
-            <div>
+            <div data-tour="kitchen-header">
               <h1 className="font-display text-2xl font-bold">Kitchen Display</h1>
               <p className="text-sm text-muted-foreground">
                 {currentOutlet?.name ? `${currentOutlet.name} · ` : ""}
