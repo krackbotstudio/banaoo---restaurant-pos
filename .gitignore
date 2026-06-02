@@ -29,6 +29,7 @@ dist-ssr
 *.sw?
 
 .claude
-public/*.mp4
+##public/*.mp4
 
 public/downloads/*.apk
+.cursorrules

@@ -187,22 +187,31 @@ export function useSubscription() {
   );
   const [loading, setLoading] = useState(true);
   const fetchGenerationRef = useRef(0);
+  const lastFetchAtRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const subscription = entitlements.subscription;
 
   const fetchSubscription = useCallback(
-    async (attemptNumber = 0) => {
+    async (attemptNumber = 0, options?: { silent?: boolean }) => {
       if (!user) {
+        setEntitlements(parseEntitlementsResponse(null));
+        setLoading(false);
+        hasLoadedOnceRef.current = false;
+        return;
+      }
+
+      if (profileLoading) return;
+
+      if (!profile) {
         setEntitlements(parseEntitlementsResponse(null));
         setLoading(false);
         return;
       }
 
-      if (profileLoading) return;
-      if (!profile) return;
-
+      const silent = options?.silent === true && hasLoadedOnceRef.current;
       const generation = ++fetchGenerationRef.current;
-      setLoading(true);
+      if (!silent) setLoading(true);
       try {
         const res = await fetch(apiUrl("/api/subscription"), {
           credentials: "include",
@@ -212,7 +221,7 @@ export function useSubscription() {
         if (res.status === 401 && attemptNumber < 3) {
           const delay = (attemptNumber + 1) * 500;
           await new Promise((resolve) => setTimeout(resolve, delay));
-          await fetchSubscription(attemptNumber + 1);
+          await fetchSubscription(attemptNumber + 1, options);
           return;
         }
 
@@ -220,10 +229,12 @@ export function useSubscription() {
         const data = await res.json();
         if (generation !== fetchGenerationRef.current) return;
         setEntitlements(parseEntitlementsResponse(data));
+        hasLoadedOnceRef.current = true;
+        lastFetchAtRef.current = Date.now();
       } catch (error) {
         console.error("Error fetching subscription:", error);
       } finally {
-        if (generation === fetchGenerationRef.current) {
+        if (generation === fetchGenerationRef.current && !silent) {
           setLoading(false);
         }
       }
@@ -246,13 +257,14 @@ export function useSubscription() {
   }, [fetchSubscription]);
 
   useEffect(() => {
-    const onFocus = () => {
-      void fetchSubscription();
+    const REFETCH_MIN_MS = 60_000;
+    const maybeRefetch = () => {
+      if (Date.now() - lastFetchAtRef.current < REFETCH_MIN_MS) return;
+      void fetchSubscription(0, { silent: true });
     };
+    const onFocus = () => maybeRefetch();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void fetchSubscription();
-      }
+      if (document.visibilityState === "visible") maybeRefetch();
     };
 
     window.addEventListener("focus", onFocus);

@@ -27,6 +27,8 @@ import { registerBillingMobileRoutes } from './billing-mobile.js';
 import { registerBillingRoutes } from './billing.js';
 import { registerDashboardQuickActionRoutes } from './dashboard-quick-actions.js';
 import { registerStaffRoutes } from './staff-api.js';
+import { registerInventoryRoutes, warmInventorySchema } from './inventory-api.js';
+import { clearUnmodifiedSampleMenu } from './sample-menu.js';
 import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction } from './admin/routes.js';
 import { ensureNotificationsInfra } from './notifications-bootstrap.js';
 import { getDefaultOperationMode } from './business-types.js';
@@ -1237,12 +1239,15 @@ app.post('/api/onboarding/complete', async (req, res) => {
 
       const operationMode = getDefaultOperationMode(business_type);
 
+      let outletId;
       if (existing.length === 0) {
-        await pool.query(
+        const { rows: created } = await pool.query(
           `INSERT INTO public.outlets (name, phone, address, owner_id, operation_mode)
-           VALUES ($1, $2, $3, $4, $5)`,
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
           [brand_name.trim(), phone || null, city || null, req.user.id, operationMode]
         );
+        outletId = created[0]?.id;
       } else {
         // Owner already has an outlet (legacy 'My Restaurant' sample row, or
         // an earlier onboarding attempt). Update it in place instead of
@@ -1255,6 +1260,11 @@ app.post('/api/onboarding/complete', async (req, res) => {
            WHERE id = $3`,
           [brand_name.trim(), operationMode, existing[0].id]
         );
+        outletId = existing[0].id;
+      }
+
+      if (outletId) {
+        await clearUnmodifiedSampleMenu(pool, outletId);
       }
     }
     res.json({ success: true });
@@ -2481,7 +2491,10 @@ registerBillingRoutes(app, { requireAuth });
 registerDashboardBannerPublicRoutes(app, { requireAuth });
 registerDashboardQuickActionRoutes(app, { requireAuth });
 registerStaffRoutes(app, { requireAuth });
+registerInventoryRoutes(app, { requireAuth });
+void warmInventorySchema();
 console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');
+console.log('[api] Inventory routes: /api/outlets/:outletId/inventory, /api/inventory/:itemId');
 console.log('[api] Dashboard routes: GET /api/dashboard/banners, GET|PUT /api/dashboard/quick-actions');
 
 // =============================================================================

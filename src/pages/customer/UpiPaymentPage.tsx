@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
 import { buildUpiPayUrl } from "@/lib/upi";
-import { resolveImageUrl } from "@/lib/image-url";
+import { API_URL } from "@/lib/api-url";
+import { UpiPaymentQr } from "@/components/customer/UpiPaymentQr";
 import { useToast } from "@/hooks/use-toast";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 interface Outlet {
   id: string;
@@ -145,16 +144,9 @@ export default function UpiPaymentPage({
           <p className="text-xs text-gray-500 mt-1">Order {data.order_number}</p>
         </div>
 
-        {data.upi_qr_url && (
-          <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col items-center">
-            <img
-              src={resolveImageUrl(data.upi_qr_url)}
-              alt="UPI QR"
-              className="w-48 h-48 object-contain rounded-lg"
-            />
-            <p className="text-xs text-gray-500 mt-2">Scan with any UPI app</p>
-          </div>
-        )}
+        {data.upi_vpa ? (
+          <UpiPaymentQr payUrl={payUrl} uploadedQrUrl={data.upi_qr_url} />
+        ) : null}
 
         <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
           <p className="text-sm font-semibold text-gray-900">Or pay manually</p>

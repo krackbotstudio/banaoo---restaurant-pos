@@ -11,6 +11,11 @@ $ErrorActionPreference = "Stop"
 
 Invoke-WithShortMobilePath $MobileRoot {
   param($workRoot)
+  $generated = Join-Path $workRoot "android\app\build\generated"
+  if (Test-Path $generated) {
+    Write-Host "Removing stale android/app/build/generated …" -ForegroundColor Yellow
+    Remove-Item -Recurse -Force $generated
+  }
   Push-Location (Join-Path $workRoot "android")
   try {
     .\gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
