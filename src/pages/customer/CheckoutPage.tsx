@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/cart-context";
 import { useCustomer } from "@/context/customer-context";
 import { CustomerTablePicker } from "@/components/customer/CustomerTablePicker";
+import { supabase } from "@/integrations/supabase/client";
+import { API_URL } from "@/lib/api-url";
 import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, MapPin, Edit2, Truck, Smartphone } from "lucide-react";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 interface Outlet {
   id: string;
@@ -20,7 +20,7 @@ interface PaymentSettings {
 export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
   const resolvedBase = basePath ?? `/r/${outlet.id}`;
   const navigate = useNavigate();
-  const { items, total, itemCount, clearCart } = useCart();
+  const { items, total, itemCount, clearCart, removeItem } = useCart();
   const { customer, saveCustomer } = useCustomer();
 
   const defaultAddr = customer?.customer_addresses?.find((a) => a.is_default);
@@ -53,8 +53,35 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
       .catch(() => setPaymentSettings({ online_payments_enabled: false, upi_vpa: null }));
   }, [outlet.id]);
 
+  useEffect(() => {
+    if (itemCount === 0) {
+      navigate(resolvedBase, { replace: true });
+    }
+  }, [itemCount, navigate, resolvedBase]);
+
+  useEffect(() => {
+    if (!outlet.id || items.length === 0) return;
+    const ids = items.map((i) => i.menu_item_id);
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("menu_items")
+        .select("id")
+        .eq("outlet_id", outlet.id)
+        .eq("is_available", true)
+        .in("id", ids);
+      if (cancelled) return;
+      const valid = new Set((data ?? []).map((r) => r.id));
+      ids.forEach((id) => {
+        if (!valid.has(id)) removeItem(id);
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outlet.id, items.map((i) => i.menu_item_id).join(","), removeItem]);
+
   if (itemCount === 0) {
-    navigate(resolvedBase);
     return null;
   }
 

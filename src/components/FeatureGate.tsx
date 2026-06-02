@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useFeatureGating, FeatureKey } from "@/hooks/use-feature-gating";
-import { Lock, Sparkles } from "lucide-react";
+import { Lock, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,15 @@ export function FeatureGate({
   className,
 }: FeatureGateProps) {
   const navigate = useNavigate();
-  const { canAccess, getUpgradeMessage, isAddonFeature } = useFeatureGating();
+  const { canAccess, getUpgradeMessage, isAddonFeature, loading } = useFeatureGating();
+
+  if (loading) {
+    return (
+      <div className={cn("flex justify-center items-center py-16", className)}>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (canAccess(feature)) {
     return <>{children}</>;

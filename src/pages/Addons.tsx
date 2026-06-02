@@ -41,6 +41,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { NativeBillingLinkButton } from "@/components/billing/NativeBillingLinkButton";
+import { AddonCardIcon } from "@/components/addons/AddonBrandLogo";
 import { isBanaooNativeApp } from "@/lib/native-app-bridge";
 import type { LucideIcon } from "lucide-react";
 
@@ -300,8 +301,8 @@ export default function Addons() {
                     <CardHeader className="relative pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-background/90 border border-border/60 shadow-sm">
-                            <Icon className="h-5 w-5 text-primary" />
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-background/90 border border-border/60 shadow-sm shrink-0">
+                            <AddonCardIcon type={item.type} fallbackIcon={Icon} />
                           </div>
                           <CardTitle className="text-base leading-snug">{item.name}</CardTitle>
                         </div>

@@ -152,6 +152,27 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         }
       }
 
+      const menuIds = items.map((it) => it.menu_item_id).filter(Boolean);
+      if (menuIds.length > 0) {
+        const { rows: menuRows } = await client.query(
+          `SELECT id FROM public.menu_items
+           WHERE outlet_id = $1 AND id = ANY($2::uuid[]) AND is_available = true`,
+          [outlet_id, menuIds]
+        );
+        const validIds = new Set(menuRows.map((r) => r.id));
+        const staleLines = items.filter(
+          (it) => it.menu_item_id && !validIds.has(it.menu_item_id)
+        );
+        if (staleLines.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error:
+              'Some items in your cart are no longer available. Please refresh the menu and try again.',
+            stale_items: staleLines.map((it) => it.item_name || it.menu_item_id),
+          });
+        }
+      }
+
       const subtotal = items.reduce(
         (sum, it) => sum + Number(it.unit_price) * Number(it.quantity),
         0

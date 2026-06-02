@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw, CheckSquare, Pencil } from "lucide-react";
+import { Loader2, Plus, UtensilsCrossed, Leaf, Flame, Tag, IndianRupee, Trash2, Camera, Search, X, ImageIcon, Star, Percent, RefreshCw, CheckSquare, Pencil, AlertTriangle } from "lucide-react";
+import { isUnmodifiedSampleMenu } from "@/lib/sample-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
@@ -466,6 +467,34 @@ export default function Menu() {
         .filter((item) => vegFilter === null || item.is_veg === vegFilter),
     [menuItems, selectedCategory, vegFilter]
   );
+
+  const showSampleMenuBanner = useMemo(
+    () => isUnmodifiedSampleMenu(categories, menuItems),
+    [categories, menuItems]
+  );
+
+  const handleClearSampleMenu = async () => {
+    if (!currentOutlet?.id) return;
+    const { error: itemsErr } = await supabase
+      .from("menu_items")
+      .delete()
+      .eq("outlet_id", currentOutlet.id);
+    if (itemsErr) {
+      toast({ variant: "destructive", title: "Could not clear menu", description: itemsErr.message });
+      return;
+    }
+    const { error: catErr } = await supabase
+      .from("menu_categories")
+      .delete()
+      .eq("outlet_id", currentOutlet.id);
+    if (catErr) {
+      toast({ variant: "destructive", title: "Could not clear categories", description: catErr.message });
+      return;
+    }
+    toast({ title: "Sample menu removed", description: "Start building your own menu." });
+    fetchCategories();
+    fetchMenuItems();
+  };
 
   const selectedCount = selectedIds.size;
   const allFilteredSelected =
@@ -961,6 +990,23 @@ export default function Menu() {
             </Dialog>
           </div>
         </div>
+
+        {showSampleMenuBanner ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+            <div className="flex items-start gap-2 text-sm text-amber-950">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Sample menu detected</p>
+                <p className="text-amber-900/80">
+                  This looks like demo items (Butter Chicken, Paneer Tikka, etc.). Remove them to start fresh.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 bg-white" onClick={() => void handleClearSampleMenu()}>
+              Remove sample menu
+            </Button>
+          </div>
+        ) : null}
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-4 max-w-full overflow-x-auto pb-2">
