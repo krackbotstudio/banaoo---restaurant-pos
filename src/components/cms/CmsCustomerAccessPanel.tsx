@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Loader2, Save, Sparkles, Shield } from "lucide-react";
+import { CalendarRange, Loader2, Save, Sparkles, Shield } from "lucide-react";
 import { API_URL } from "@/lib/api-url";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,15 @@ import type { FeatureOverrides } from "@/lib/cms-features";
 
 type PlanType = "starter" | "professional" | "enterprise";
 
+const PERIOD_PRESETS = [1, 3, 6, 12, 24, 36] as const;
+
 export interface CustomerAccessState {
   is_test_account: boolean;
   billing_exempt: boolean;
   complimentary_plan: PlanType | null;
+  complimentary_starts_at?: string | null;
   complimentary_expires_at: string | null;
+  period_months?: number | null;
   is_active: boolean;
   effective_plan: PlanType | null;
   feature_summary: string[];
@@ -38,11 +42,53 @@ interface Props {
   onSaved: () => void;
 }
 
-function toDateInputValue(iso: string | null) {
+function toDateInputValue(iso: string | null | undefined) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addCalendarMonths(dateStr: string, months: number) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  if (d.getDate() !== day) d.setDate(0);
+  return d.toISOString().slice(0, 10);
+}
+
+function inferPeriodMonths(startStr: string, endStr: string) {
+  if (!startStr || !endStr) return null;
+  const start = new Date(`${startStr}T12:00:00`);
+  const end = new Date(`${endStr}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
+  const diffMs = end.getTime() - start.getTime();
+  return Math.max(1, Math.min(36, Math.round(diffMs / (30 * 24 * 60 * 60 * 1000))));
+}
+
+function resolveInitialPeriod(access: CustomerAccessState) {
+  if (access.period_months && PERIOD_PRESETS.includes(access.period_months as (typeof PERIOD_PRESETS)[number])) {
+    return String(access.period_months);
+  }
+  if (access.period_months) return "custom";
+  return "12";
+}
+
+function resolveInitialStarts(access: CustomerAccessState) {
+  return toDateInputValue(access.complimentary_starts_at) || todayInputValue();
+}
+
+function resolveInitialExpires(access: CustomerAccessState, starts: string, periodKey: string) {
+  const fromAccess = toDateInputValue(access.complimentary_expires_at);
+  if (fromAccess) return fromAccess;
+  if (periodKey !== "custom") {
+    return addCalendarMonths(starts, Number(periodKey));
+  }
+  return addCalendarMonths(starts, 12);
 }
 
 export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
@@ -50,34 +96,134 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
   const [isTestAccount, setIsTestAccount] = useState(access.is_test_account);
   const [billingExempt, setBillingExempt] = useState(access.billing_exempt);
   const [plan, setPlan] = useState<PlanType>(access.complimentary_plan || "professional");
-  const [expiresAt, setExpiresAt] = useState(toDateInputValue(access.complimentary_expires_at));
+  const [periodKey, setPeriodKey] = useState(() => resolveInitialPeriod(access));
+  const [customMonths, setCustomMonths] = useState(() =>
+    access.period_months && !PERIOD_PRESETS.includes(access.period_months as (typeof PERIOD_PRESETS)[number])
+      ? String(access.period_months)
+      : "12"
+  );
+  const [startsAt, setStartsAt] = useState(() => resolveInitialStarts(access));
+  const [expiresAt, setExpiresAt] = useState(() =>
+    resolveInitialExpires(access, resolveInitialStarts(access), resolveInitialPeriod(access))
+  );
   const [featureOverrides, setFeatureOverrides] = useState<FeatureOverrides>(
     access.feature_overrides ?? {}
   );
 
   useEffect(() => {
+    const nextStarts = resolveInitialStarts(access);
+    const nextPeriod = resolveInitialPeriod(access);
     setIsTestAccount(access.is_test_account);
     setBillingExempt(access.billing_exempt);
     setPlan(access.complimentary_plan || "professional");
-    setExpiresAt(toDateInputValue(access.complimentary_expires_at));
+    setPeriodKey(nextPeriod);
+    setCustomMonths(
+      access.period_months &&
+        !PERIOD_PRESETS.includes(access.period_months as (typeof PERIOD_PRESETS)[number])
+        ? String(access.period_months)
+        : "12"
+    );
+    setStartsAt(nextStarts);
+    setExpiresAt(resolveInitialExpires(access, nextStarts, nextPeriod));
     setFeatureOverrides(access.feature_overrides ?? {});
   }, [access]);
 
+  const effectiveMonths = useMemo(() => {
+    if (periodKey === "custom") {
+      const n = Number(customMonths);
+      return Number.isInteger(n) && n >= 1 && n <= 36 ? n : null;
+    }
+    return Number(periodKey);
+  }, [periodKey, customMonths]);
+
+  const periodPreview = useMemo(() => {
+    if (!startsAt || !expiresAt) return null;
+    const start = new Date(`${startsAt}T12:00:00`);
+    const end = new Date(`${expiresAt}T12:00:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
+    const months = effectiveMonths ?? inferPeriodMonths(startsAt, expiresAt);
+    return { start, end, months };
+  }, [startsAt, expiresAt, effectiveMonths]);
+
+  const applyPeriodToEnd = (start: string, months: number) => {
+    setExpiresAt(addCalendarMonths(start, months));
+  };
+
+  const handlePeriodChange = (value: string) => {
+    setPeriodKey(value);
+    if (value !== "custom") {
+      applyPeriodToEnd(startsAt, Number(value));
+      return;
+    }
+    const n = Number(customMonths);
+    if (Number.isInteger(n) && n >= 1 && n <= 36) {
+      applyPeriodToEnd(startsAt, n);
+    }
+  };
+
+  const handleStartsChange = (value: string) => {
+    setStartsAt(value);
+    if (periodKey !== "custom") {
+      applyPeriodToEnd(value, Number(periodKey));
+    } else if (effectiveMonths) {
+      applyPeriodToEnd(value, effectiveMonths);
+    }
+  };
+
+  const handleExpiresChange = (value: string) => {
+    setExpiresAt(value);
+    const inferred = inferPeriodMonths(startsAt, value);
+    if (inferred && PERIOD_PRESETS.includes(inferred as (typeof PERIOD_PRESETS)[number])) {
+      setPeriodKey(String(inferred));
+    } else if (inferred) {
+      setPeriodKey("custom");
+      setCustomMonths(String(inferred));
+    }
+  };
+
+  const handleCustomMonthsChange = (value: string) => {
+    setCustomMonths(value);
+    const n = Number(value);
+    if (Number.isInteger(n) && n >= 1 && n <= 36) {
+      applyPeriodToEnd(startsAt, n);
+    }
+  };
+
+  const showSubscriptionPeriod = isTestAccount || billingExempt || access.is_active;
+
   const saveAccess = async () => {
+    if (showSubscriptionPeriod && periodPreview == null && !isTestAccount) {
+      toast.error("Set a valid subscription period (start before expiration)");
+      return;
+    }
+
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        is_test_account: isTestAccount,
+        billing_exempt: isTestAccount ? true : billingExempt,
+        complimentary_plan: isTestAccount ? "enterprise" : plan,
+        feature_overrides: featureOverrides,
+        sync_subscription: isTestAccount || billingExempt,
+      };
+
+      if (showSubscriptionPeriod && (billingExempt || isTestAccount)) {
+        if (startsAt) {
+          payload.complimentary_starts_at = new Date(`${startsAt}T00:00:00`).toISOString();
+        }
+        if (expiresAt) {
+          payload.complimentary_expires_at = new Date(`${expiresAt}T23:59:59`).toISOString();
+        }
+        if (effectiveMonths) {
+          payload.period_months = effectiveMonths;
+        }
+      }
+
       const res = await fetch(`${API_URL}/api/cms/customers/${userId}/access`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          is_test_account: isTestAccount,
-          billing_exempt: isTestAccount ? true : billingExempt,
-          complimentary_plan: isTestAccount ? "enterprise" : plan,
-          complimentary_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-          feature_overrides: featureOverrides,
-          sync_subscription: true,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update access");
@@ -101,7 +247,9 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
           is_test_account: false,
           billing_exempt: false,
           complimentary_plan: null,
+          complimentary_starts_at: null,
           complimentary_expires_at: null,
+          period_months: null,
           sync_subscription: false,
         }),
       });
@@ -126,8 +274,8 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
               Access & billing
             </CardTitle>
             <CardDescription>
-              Grant subscription and module access without Razorpay payment. Test accounts get full
-              Enterprise features.
+              Activate a subscription for this customer with plan tier, billing period, and expiration
+              dates — no Razorpay payment required.
             </CardDescription>
           </div>
           {access.is_active && (
@@ -167,8 +315,7 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
               Complimentary subscription
             </Label>
             <p className="text-sm text-muted-foreground">
-              Enable an active plan without collecting payment (starter, professional, or
-              enterprise).
+              Enable an active plan without collecting payment (starter, professional, or enterprise).
             </p>
           </div>
           <Switch
@@ -179,38 +326,103 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
           />
         </div>
 
-        {!isTestAccount && (billingExempt || access.is_active) && (
-          <div className="grid gap-4 md:grid-cols-2">
+        {showSubscriptionPeriod && (
+          <div className="space-y-4 rounded-lg border p-4">
             <div className="space-y-1">
-              <Label>Plan tier</Label>
-              <Select value={plan} onValueChange={(v) => setPlan(v as PlanType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="starter">Starter</SelectItem>
-                  <SelectItem value="professional">Professional</SelectItem>
-                  <SelectItem value="enterprise">Enterprise</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-base flex items-center gap-2">
+                <CalendarRange className="h-4 w-4" />
+                Subscription period
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Choose billing period in months and set the active window from start to expiration.
+              </p>
             </div>
-            <div className="space-y-1">
-              <Label>Access expires (optional)</Label>
-              <Input
-                type="date"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">Leave empty for 1 year from save.</p>
+
+            {!isTestAccount && (billingExempt || access.is_active) && (
+              <div className="space-y-1">
+                <Label>Plan tier</Label>
+                <Select value={plan} onValueChange={(v) => setPlan(v as PlanType)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="starter">Starter</SelectItem>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Billing period</Label>
+                <Select value={periodKey} onValueChange={handlePeriodChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PERIOD_PRESETS.map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} month{m === 1 ? "" : "s"}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Custom months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {periodKey === "custom" && (
+                <div className="space-y-1">
+                  <Label>Custom months (1–36)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={36}
+                    value={customMonths}
+                    onChange={(e) => handleCustomMonthsChange(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>From (start date)</Label>
+                <Input type="date" value={startsAt} onChange={(e) => handleStartsChange(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>To (expiration date)</Label>
+                <Input type="date" value={expiresAt} onChange={(e) => handleExpiresChange(e.target.value)} />
+              </div>
+            </div>
+
+            {periodPreview && (
+              <p className="text-sm rounded-md bg-muted/60 px-3 py-2">
+                Active from{" "}
+                <span className="font-medium">{format(periodPreview.start, "MMM d, yyyy")}</span> to{" "}
+                <span className="font-medium">{format(periodPreview.end, "MMM d, yyyy")}</span>
+                {periodPreview.months != null && (
+                  <>
+                    {" "}
+                    · {periodPreview.months} month{periodPreview.months === 1 ? "" : "s"}
+                  </>
+                )}
+              </p>
+            )}
+
+            {isTestAccount && (
+              <p className="text-xs text-muted-foreground">
+                Test accounts default to long-term access (10 years) if dates are left empty on save.
+              </p>
+            )}
           </div>
         )}
 
         <div className="space-y-2 border-t pt-4">
           <p className="text-sm font-medium">Module access overrides</p>
           <p className="text-sm text-muted-foreground">
-            Toggle features for this user beyond their plan. Switches marked &quot;customized&quot;
-            override the plan default.
+            Toggle features for this user beyond their plan. Switches marked &quot;customized&quot; override
+            the plan default.
           </p>
           <CmsFeatureToggles
             planType={isTestAccount ? "enterprise" : plan}
@@ -224,12 +436,6 @@ export function CmsCustomerAccessPanel({ userId, access, onSaved }: Props) {
             </p>
           )}
         </div>
-
-        {access.complimentary_expires_at && access.is_active && (
-          <p className="text-sm text-muted-foreground">
-            Expires: {format(new Date(access.complimentary_expires_at), "MMM d, yyyy")}
-          </p>
-        )}
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => void saveAccess()} disabled={saving}>
