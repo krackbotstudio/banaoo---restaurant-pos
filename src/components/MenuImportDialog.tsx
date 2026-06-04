@@ -28,9 +28,16 @@ interface MenuImportDialogProps {
   outletId: string;
   categories: { id: string; name: string }[];
   onImportComplete: () => void;
+  /** Use CMS server APIs (bypasses owner Supabase RLS) */
+  cmsMode?: boolean;
 }
 
-export function MenuImportDialog({ outletId, categories, onImportComplete }: MenuImportDialogProps) {
+export function MenuImportDialog({
+  outletId,
+  categories,
+  onImportComplete,
+  cmsMode = false,
+}: MenuImportDialogProps) {
   const { toast } = useToast();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -59,9 +66,11 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
       // Compress & convert to base64 (max 1024px, 80% JPEG — keeps payload under 1 MB)
       const { base64, mimeType: compressedMime } = await compressAndEncode(file);
 
-      // Call Express API endpoint
       const API_URL = import.meta.env.VITE_API_URL ?? "";
-      const response = await fetch(`${API_URL}/api/extract-menu`, {
+      const extractUrl = cmsMode
+        ? `${API_URL}/api/cms/outlets/${outletId}/menu/extract`
+        : `${API_URL}/api/extract-menu`;
+      const response = await fetch(extractUrl, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -138,32 +147,97 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
     setIsImporting(true);
 
     try {
-      // Create categories first if they don't exist
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+      if (cmsMode) {
+        const res = await fetch(`${API_URL}/api/cms/outlets/${outletId}/menu/import`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: selectedItems.map((item) => ({
+              name: item.name,
+              description: item.description,
+              price: item.price,
+              is_veg: item.is_veg,
+              category: item.category,
+            })),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Import failed');
+
+        toast({
+          title: 'Import successful!',
+          description: `Added ${data.imported ?? selectedItems.length} items. Photos loading…`,
+        });
+        setIsOpen(false);
+        setExtractedItems([]);
+        setPreviewUrl(null);
+        onImportComplete();
+
+        const assignImages = async () => {
+          for (const item of selectedItems) {
+            try {
+              const imgResponse = await fetch(`${API_URL}/api/generate-menu-image`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_name: item.name }),
+              });
+              const imgData = await imgResponse.json();
+              const photo = imgData?.photos?.[0];
+              if (photo?.url) {
+                const menuRes = await fetch(`${API_URL}/api/cms/outlets/${outletId}/menu`, {
+                  credentials: 'include',
+                });
+                const menuData = await menuRes.json();
+                const match = (menuData.items ?? []).find(
+                  (row: { name: string; image_url: string | null }) =>
+                    row.name === item.name && !row.image_url
+                );
+                if (match?.id) {
+                  await fetch(`${API_URL}/api/cms/outlets/${outletId}/menu/items/${match.id}`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: photo.url }),
+                  });
+                }
+              }
+            } catch {
+              // optional
+            }
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          onImportComplete();
+        };
+        void assignImages();
+        return;
+      }
+
       const uniqueCategories = [...new Set(selectedItems.map(item => item.category).filter(Boolean))];
       const categoryMap: Record<string, string> = {};
 
       for (const catName of uniqueCategories) {
         if (!catName) continue;
-        
-        // Check if category exists
+
         const existingCat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
         if (existingCat) {
           categoryMap[catName] = existingCat.id;
         } else {
-          // Create new category
           const { data: newCat, error } = await supabase
             .from('menu_categories')
             .insert({ name: catName, outlet_id: outletId })
             .select()
             .single();
-          
+
           if (!error && newCat) {
             categoryMap[catName] = newCat.id;
           }
         }
       }
 
-      // Insert menu items
       const itemsToInsert = selectedItems.map(item => ({
         name: item.name,
         description: item.description || null,
@@ -183,10 +257,7 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
       setPreviewUrl(null);
       onImportComplete();
 
-      // Auto-assign images in background for all imported items
-      // Sequential with a small gap to be gentle on the API
       const assignImages = async () => {
-        const API_URL = import.meta.env.VITE_API_URL ?? "";
         for (const item of selectedItems) {
           try {
             const imgResponse = await fetch(`${API_URL}/api/generate-menu-image`, {
@@ -203,16 +274,16 @@ export function MenuImportDialog({ outletId, categories, onImportComplete }: Men
                 .update({ image_url: photo.url })
                 .eq('outlet_id', outletId)
                 .eq('name', item.name)
-                .is('image_url', null); // only update if still unset
+                .is('image_url', null);
             }
           } catch {
-            // silent — image is optional
+            // silent
           }
-          await new Promise(r => setTimeout(r, 300)); // 300ms gap between items
+          await new Promise(r => setTimeout(r, 300));
         }
-        onImportComplete(); // final refresh once all images are in
+        onImportComplete();
       };
-      assignImages(); // fire and forget
+      assignImages();
     } catch (error: any) {
       console.error('Import error:', error);
       toast({ variant: "destructive", title: "Import failed", description: error.message });

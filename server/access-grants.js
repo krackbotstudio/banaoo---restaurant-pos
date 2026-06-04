@@ -63,6 +63,38 @@ export async function fetchProfileAccess(userId) {
   }
 }
 
+export async function fetchComplimentarySubscriptionWindow(userId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT period_months, current_period_start, expires_at
+       FROM public.subscriptions
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+    const sub = rows[0];
+    if (!sub) {
+      return {
+        period_months: null,
+        complimentary_starts_at: null,
+        complimentary_expires_at: null,
+      };
+    }
+    return {
+      period_months: sub.period_months ?? null,
+      complimentary_starts_at: sub.current_period_start ?? null,
+      complimentary_expires_at: sub.expires_at ?? null,
+    };
+  } catch {
+    return {
+      period_months: null,
+      complimentary_starts_at: null,
+      complimentary_expires_at: null,
+    };
+  }
+}
+
 export function mergeLimitsWithProfileOverrides(limits, profileAccess) {
   if (!profileAccess?.feature_overrides) return limits;
   const merged = applyFeatureOverrides(limits, profileAccess.feature_overrides);
@@ -171,16 +203,61 @@ async function fetchActiveAddonsSafe(userId) {
   }
 }
 
-export async function syncComplimentarySubscription(userId, planType, expiresAt) {
+function addCalendarMonths(date, months) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  if (d.getDate() !== day) d.setDate(0);
+  return d;
+}
+
+/** Resolve CMS manual subscription window from start, end, and/or period months. */
+export function resolveManualSubscriptionPeriod({ starts_at, expires_at, period_months } = {}) {
+  const start = starts_at ? new Date(starts_at) : new Date();
+  if (Number.isNaN(start.getTime())) {
+    throw new Error('Invalid complimentary_starts_at');
+  }
+
+  let months =
+    period_months !== undefined && period_months !== null && period_months !== ''
+      ? Number(period_months)
+      : null;
+  if (months != null && (!Number.isInteger(months) || months < 1 || months > 36)) {
+    throw new Error('period_months must be an integer between 1 and 36');
+  }
+
+  let expires = expires_at ? new Date(expires_at) : null;
+  if (expires_at && Number.isNaN(expires.getTime())) {
+    throw new Error('Invalid complimentary_expires_at');
+  }
+
+  if (!expires && months != null) {
+    expires = addCalendarMonths(start, months);
+  } else if (!expires) {
+    months = 12;
+    expires = addCalendarMonths(start, months);
+  } else if (months == null) {
+    const diffMs = expires.getTime() - start.getTime();
+    months = Math.max(1, Math.min(36, Math.round(diffMs / (30 * 24 * 60 * 60 * 1000))));
+  }
+
+  if (expires.getTime() <= start.getTime()) {
+    throw new Error('Expiration date must be after the start date');
+  }
+
+  return {
+    startsAt: start,
+    expiresAt: expires,
+    periodMonths: months,
+  };
+}
+
+export async function syncComplimentarySubscription(userId, planType, periodOptions = {}) {
   if (!PLAN_TYPES.has(planType)) {
     throw new Error('Invalid plan type');
   }
 
-  const exp = expiresAt ? new Date(expiresAt) : new Date();
-  if (!expiresAt) {
-    exp.setFullYear(exp.getFullYear() + 1);
-  }
-  const now = new Date();
+  const { startsAt, expiresAt, periodMonths } = resolveManualSubscriptionPeriod(periodOptions);
   const orderId = `cms-grant-${userId}`;
 
   await pool.query(
@@ -210,9 +287,9 @@ export async function syncComplimentarySubscription(userId, planType, expiresAt)
     [
       userId,
       planType,
-      Math.max(1, Math.round((exp.getTime() - now.getTime()) / (30 * 24 * 60 * 60 * 1000))),
-      exp.toISOString(),
-      now.toISOString(),
+      periodMonths,
+      expiresAt.toISOString(),
+      startsAt.toISOString(),
       orderId,
     ]
   );
@@ -225,7 +302,9 @@ export async function applyProfileAccessUpdate(userId, body) {
     is_test_account,
     billing_exempt,
     complimentary_plan,
+    complimentary_starts_at,
     complimentary_expires_at,
+    period_months,
     feature_overrides,
     sync_subscription = true,
   } = body;
@@ -275,15 +354,28 @@ export async function applyProfileAccessUpdate(userId, body) {
 
   let subscription = null;
   if (sync_subscription && (isTest || exempt)) {
-    const exp = complimentary_expires_at
-      ? new Date(complimentary_expires_at)
-      : null;
-    if (isTest && !exp) {
+    const periodOptions = {
+      starts_at: complimentary_starts_at || null,
+      expires_at: complimentary_expires_at || null,
+      period_months: period_months ?? null,
+    };
+    if (isTest && !complimentary_expires_at && period_months == null) {
       const far = new Date();
       far.setFullYear(far.getFullYear() + 10);
-      subscription = await syncComplimentarySubscription(userId, 'enterprise', far.toISOString());
-    } else {
-      subscription = await syncComplimentarySubscription(userId, plan, exp ? exp.toISOString() : null);
+      periodOptions.expires_at = far.toISOString();
+      periodOptions.period_months = 120;
+    }
+    subscription = await syncComplimentarySubscription(
+      userId,
+      isTest ? 'enterprise' : plan,
+      periodOptions
+    );
+    if (subscription?.expires_at) {
+      await pool.query(
+        `UPDATE public.profiles SET complimentary_expires_at = $2 WHERE user_id = $1`,
+        [userId, subscription.expires_at]
+      );
+      rows[0].complimentary_expires_at = subscription.expires_at;
     }
   }
 

@@ -5,6 +5,7 @@ import { buildEntitlementsPayload } from '../entitlements.js';
 import {
   applyProfileAccessUpdate,
   fetchProfileAccess,
+  fetchComplimentarySubscriptionWindow,
   isComplimentaryAccessActive,
   listPlanFeatureSummary,
   resolveComplimentaryPlan,
@@ -26,7 +27,7 @@ export function registerCmsCustomerRoutes(app) {
   app.get('/api/cms/customers/:userId/overview', requireCmsAuth, async (req, res) => {
     const { userId } = req.params;
     try {
-      const [profileRes, usageRes, subscriptionRes] = await Promise.all([
+      const [profileRes, usageRes, outletsRes, subscriptionRes] = await Promise.all([
         pool.query(
           `SELECT p.*, u.email
            FROM public.profiles p
@@ -40,7 +41,14 @@ export function registerCmsCustomerRoutes(app) {
           pool.query('SELECT COUNT(*)::int AS count FROM public.staff_members WHERE owner_id = $1', [userId]),
         ]),
         pool.query(
-          `SELECT id, plan_type, status, period_months, expires_at, current_period_end, created_at
+          `SELECT id, name, address, phone, is_active, created_at
+           FROM public.outlets
+           WHERE owner_id = $1
+           ORDER BY name ASC`,
+          [userId]
+        ),
+        pool.query(
+          `SELECT id, plan_type, status, period_months, expires_at, current_period_start, current_period_end, created_at
            FROM public.subscriptions
            WHERE user_id = $1
            ORDER BY created_at DESC
@@ -60,18 +68,26 @@ export function registerCmsCustomerRoutes(app) {
       }
 
       const effectivePlan = resolveComplimentaryPlan(profile);
+      const subscriptionWindow = await fetchComplimentarySubscriptionWindow(userId);
       res.json({
         profile,
         usage: {
           outlets: usageRes[0].rows[0]?.count ?? 0,
           staff: usageRes[1].rows[0]?.count ?? 0,
         },
+        outlets: outletsRes.rows,
         latest_subscription: subscriptionRes.rows[0] ?? null,
         access: {
           is_test_account: !!profile.is_test_account,
           billing_exempt: !!profile.billing_exempt,
           complimentary_plan: profile.complimentary_plan ?? null,
-          complimentary_expires_at: profile.complimentary_expires_at ?? null,
+          complimentary_starts_at:
+            subscriptionWindow.complimentary_starts_at ?? null,
+          complimentary_expires_at:
+            profile.complimentary_expires_at ??
+            subscriptionWindow.complimentary_expires_at ??
+            null,
+          period_months: subscriptionWindow.period_months ?? null,
           feature_overrides: profile.feature_overrides ?? {},
           is_active: isComplimentaryAccessActive(profile),
           effective_plan: effectivePlan,
@@ -81,6 +97,23 @@ export function registerCmsCustomerRoutes(app) {
       });
     } catch (err) {
       console.error('GET /api/cms/customers/:userId/overview:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/cms/customers/:userId/outlets', requireCmsAuth, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, name, address, phone, is_active, created_at
+         FROM public.outlets
+         WHERE owner_id = $1
+         ORDER BY name ASC`,
+        [userId]
+      );
+      res.json({ outlets: rows });
+    } catch (err) {
+      console.error('GET /api/cms/customers/:userId/outlets:', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -276,10 +309,17 @@ export function registerCmsCustomerRoutes(app) {
       const profile = await fetchProfileAccess(userId);
       if (!profile) return res.status(404).json({ error: 'Customer not found' });
       const effectivePlan = resolveComplimentaryPlan(profile);
+      const subscriptionWindow = await fetchComplimentarySubscriptionWindow(userId);
       const entitlements = await buildEntitlementsPayload(userId);
       res.json({
         access: {
           ...profile,
+          complimentary_starts_at: subscriptionWindow.complimentary_starts_at ?? null,
+          complimentary_expires_at:
+            profile.complimentary_expires_at ??
+            subscriptionWindow.complimentary_expires_at ??
+            null,
+          period_months: subscriptionWindow.period_months ?? null,
           is_active: isComplimentaryAccessActive(profile),
           effective_plan: effectivePlan,
           feature_summary: effectivePlan ? listPlanFeatureSummary(effectivePlan) : [],
@@ -312,7 +352,9 @@ export function registerCmsCustomerRoutes(app) {
           is_test_account: result.profile.is_test_account,
           billing_exempt: result.profile.billing_exempt,
           complimentary_plan: result.profile.complimentary_plan,
+          complimentary_starts_at: result.subscription?.current_period_start ?? body.complimentary_starts_at ?? null,
           complimentary_expires_at: result.profile.complimentary_expires_at,
+          period_months: result.subscription?.period_months ?? body.period_months ?? null,
         },
         req,
       });
@@ -324,7 +366,12 @@ export function registerCmsCustomerRoutes(app) {
       });
     } catch (err) {
       console.error('PATCH /api/cms/customers/:userId/access:', err);
-      res.status(err.message === 'Customer not found' ? 404 : 500).json({ error: err.message });
+      const validation =
+        err.message?.includes('Invalid') ||
+        err.message?.includes('must be') ||
+        err.message?.includes('Expiration');
+      const status = err.message === 'Customer not found' ? 404 : validation ? 400 : 500;
+      res.status(status).json({ error: err.message });
     }
   });
 

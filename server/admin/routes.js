@@ -6,6 +6,7 @@ import { registerCmsPaymentsRoutes } from './payments.js';
 import { registerCmsMarketingRoutes } from './marketing.js';
 import { registerCmsBannerRoutes, registerDashboardBannerPublicRoutes } from './banners.js';
 import { registerCmsCustomerRoutes } from './customers.js';
+import { registerCmsMenuRoutes } from './menu.js';
 
 /**
  * Register all CMS-specific routes under /api/cms/*
@@ -20,6 +21,7 @@ export function registerCmsRoutes(app) {
   registerCmsMarketingRoutes(app);
   registerCmsBannerRoutes(app);
   registerCmsCustomerRoutes(app);
+  registerCmsMenuRoutes(app);
 }
 
 export { registerDashboardBannerPublicRoutes };

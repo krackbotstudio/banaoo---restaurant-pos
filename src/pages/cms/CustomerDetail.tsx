@@ -17,6 +17,7 @@ import {
   CmsCustomerAccessPanel,
   type CustomerAccessState,
 } from "@/components/cms/CmsCustomerAccessPanel";
+import { CmsCustomerMenuPanel } from "@/components/cms/CmsCustomerMenuPanel";
 
 type AccountStatus = "pending" | "approved" | "rejected";
 type PlanType = "starter" | "professional" | "enterprise";
@@ -36,6 +37,7 @@ interface Profile {
 interface OverviewResponse {
   profile: Profile;
   usage: { outlets: number; staff: number };
+  outlets?: Array<{ id: string; name: string; address: string | null; is_active: boolean }>;
   access?: CustomerAccessState;
   latest_subscription: null | {
     id: string;
@@ -289,6 +291,7 @@ export default function CmsCustomerDetail() {
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="orders">Orders</TabsTrigger>
+          <TabsTrigger value="menu">Menu</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
         </TabsList>
@@ -428,6 +431,18 @@ export default function CmsCustomerDetail() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="menu" className="mt-4">
+          <CmsCustomerMenuPanel
+            userId={userId}
+            initialOutlets={overview?.outlets?.map((o) => ({
+              id: o.id,
+              name: o.name,
+              address: o.address,
+              is_active: o.is_active,
+            }))}
+          />
         </TabsContent>
 
         <TabsContent value="orders" className="mt-4">
