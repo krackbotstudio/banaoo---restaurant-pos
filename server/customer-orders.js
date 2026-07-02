@@ -64,6 +64,11 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       table_id,
       table_number,
       delivery_address,
+      delivery_pincode,
+      delivery_city,
+      delivery_state,
+      delivery_latitude,
+      delivery_longitude,
       customer_name,
       customer_phone,
       notes,
@@ -82,6 +87,19 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
     }
     if (order_type === 'delivery' && !delivery_address?.trim()) {
       return res.status(400).json({ error: 'Delivery address is required' });
+    }
+    if (order_type === 'delivery') {
+      if (!req.body.delivery_pincode?.trim() || !req.body.delivery_city?.trim() || !req.body.delivery_state?.trim()) {
+        return res.status(400).json({ error: 'Delivery pincode, city, and state are required' });
+      }
+      const lat = Number(req.body.delivery_latitude);
+      const lng = Number(req.body.delivery_longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: 'Delivery location pin is required on the map' });
+      }
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: 'Invalid delivery coordinates' });
+      }
     }
     const payMethod = payment_method === 'upi' ? 'upi' : 'cod';
 
@@ -180,12 +198,19 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const orderNumber = `ONL-${Date.now().toString(36).toUpperCase()}`;
       const paymentStatus = payMethod === 'upi' ? 'pending' : 'not_required';
 
+      const deliveryLat =
+        order_type === 'delivery' ? Number(delivery_latitude) : null;
+      const deliveryLng =
+        order_type === 'delivery' ? Number(delivery_longitude) : null;
+
       const { rows: orderRows } = await client.query(
         `INSERT INTO public.orders (
           outlet_id, order_number, order_type, table_number, table_id, delivery_address,
+          delivery_pincode, delivery_city, delivery_state,
+          delivery_latitude, delivery_longitude,
           subtotal, total, notes, status, source, customer_name, customer_phone,
           payment_method, payment_status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','online',$10,$11,$12,$13)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending','online',$15,$16,$17,$18)
         RETURNING id, order_number, total, payment_method, payment_status`,
         [
           outlet_id,
@@ -194,6 +219,11 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           order_type === 'dine_in' ? resolvedTableNumber : null,
           order_type === 'dine_in' ? table_id || null : null,
           order_type === 'delivery' ? delivery_address.trim() : null,
+          order_type === 'delivery' ? delivery_pincode.trim() : null,
+          order_type === 'delivery' ? delivery_city.trim() : null,
+          order_type === 'delivery' ? delivery_state.trim() : null,
+          deliveryLat,
+          deliveryLng,
           subtotal,
           subtotal,
           notes?.trim() || null,

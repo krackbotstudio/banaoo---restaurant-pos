@@ -28,6 +28,8 @@ import { registerBillingRoutes } from './billing.js';
 import { registerDashboardQuickActionRoutes } from './dashboard-quick-actions.js';
 import { registerStaffRoutes } from './staff-api.js';
 import { registerInventoryRoutes, warmInventorySchema } from './inventory-api.js';
+import { registerShiprocketRoutes } from './shiprocket/routes.js';
+import { startShiprocketJobs } from './shiprocket/jobs.js';
 import { clearUnmodifiedSampleMenu } from './sample-menu.js';
 import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction, getCmsAdmin } from './admin/routes.js';
 import { extractMenuItemsFromImage } from './menu-extract.js';
@@ -1725,6 +1727,27 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
 
     const qty = normalizeAddonQuantity(addon_type, quantity);
     const amountRupees = calcAddonAmount(addon_type, qty, months);
+
+    if (amountRupees === 0) {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + months);
+
+      await pool.query(
+        `INSERT INTO public.subscription_addons
+         (user_id, addon_type, quantity, status, period_months, expires_at)
+         VALUES ($1, $2, $3, 'active', $4, $5)`,
+        [req.user.id, addon_type, qty, months, expiresAt]
+      );
+
+      const payload = await buildEntitlementsPayload(req.user.id);
+      return res.json({
+        free: true,
+        success: true,
+        expires_at: expiresAt,
+        ...payload,
+      });
+    }
+
     const amountPaise = amountRupees * 100;
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
@@ -2429,7 +2452,9 @@ registerDashboardBannerPublicRoutes(app, { requireAuth });
 registerDashboardQuickActionRoutes(app, { requireAuth });
 registerStaffRoutes(app, { requireAuth });
 registerInventoryRoutes(app, { requireAuth });
+registerShiprocketRoutes(app, { requireAuth });
 void warmInventorySchema();
+startShiprocketJobs();
 console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');
 console.log('[api] Inventory routes: /api/outlets/:outletId/inventory, /api/inventory/:itemId');
 console.log('[api] Dashboard routes: GET /api/dashboard/banners, GET|PUT /api/dashboard/quick-actions');

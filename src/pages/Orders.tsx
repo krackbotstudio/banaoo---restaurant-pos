@@ -33,6 +33,8 @@ import {
   type InlinePosSession,
 } from "@/components/orders";
 import type { TableActivatePayload } from "@/components/floor-plan/TableGridView";
+import { API_URL } from "@/lib/api-url";
+import { OrderDeliveryPanel } from "@/components/delivery/OrderDeliveryPanel";
 
 interface Order {
   id: string;
@@ -467,6 +469,12 @@ export default function Orders() {
         prev.map((o) => o.id === order.id ? { ...o, status: newStatus } : o)
       );
       syncSpotContext(order.id);
+      if (newStatus === "preparing" && order.order_type === "delivery") {
+        void fetch(`${API_URL}/api/orders/${order.id}/shiprocket/schedule`, {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => {});
+      }
       if (newStatus === "cancelled") {
         const cancelItems = orderItems
           .filter((i) => i.status !== "completed")
@@ -1392,6 +1400,12 @@ export default function Orders() {
                         <span>{selectedOrder.delivery_address}</span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {selectedOrder.order_type === "delivery" && (
+                  <div className="mt-3">
+                    <OrderDeliveryPanel orderId={selectedOrder.id} />
                   </div>
                 )}
               </SheetHeader>

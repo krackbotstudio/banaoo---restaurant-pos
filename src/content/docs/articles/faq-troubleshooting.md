@@ -51,6 +51,20 @@ Pair printer in Android **Settings → Bluetooth** first, then scan in Banaoo na
 **GST wrong on bill.**  
 Set GST % on each menu item. Discounts affect taxable amount before GST calculation.
 
+## Shiprocket delivery
+
+**Invalid email and password when connecting.**  
+Use a **Shiprocket API user** (Settings → API in Shiprocket), not your main Shiprocket login. The API email must differ from your registered account email.
+
+**No rider booked after Preparing.**  
+Enable **Auto-book delivery** in **Settings → Delivery → Shiprocket**. Confirm the outlet is connected and pickup address is complete.
+
+**Booking failed on an order.**  
+Open the order → **Retry booking**. Check customer pincode/city/state and your package weight settings.
+
+**Shiprocket add-on activate fails.**  
+Restart the API server after updates. The add-on is free — no Razorpay checkout. See [Shiprocket delivery](/docs/shiprocket-delivery).
+
 ## Still stuck?
 
 - Email **connect@banaoo.in**
@@ -61,4 +75,5 @@ Set GST % on each menu item. Discounts affect taxable amount before GST calculat
 
 - [Printers](/docs/printers)
 - [Mobile app](/docs/mobile-app)
+- [Shiprocket delivery](/docs/shiprocket-delivery)
 - [Getting started](/docs/getting-started)

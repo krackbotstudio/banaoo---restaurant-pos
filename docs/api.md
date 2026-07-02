@@ -198,7 +198,7 @@ Verify Razorpay signature, persist subscription, send Brevo confirmation email.
 Create a Razorpay Order for an add-on.
 
 - **Auth**: `owner` / `staff`
-- **Body**: `{ addon_type, quantity, period_months }`. `addon_type ∈ {extra_outlet, extra_staff, swiggy_integration, zomato_integration, customer_ordering, inventory_management}`. `quantity` is normalized to 1–50 for stackable types, else 1.
+- **Body**: `{ addon_type, quantity, period_months }`. `addon_type` includes `shiprocket_delivery` (free — activates without Razorpay when amount is ₹0). Stackable: `extra_outlet`, `extra_staff`. Others quantity = 1.
 - Returns the same shape as `create-order`.
 
 ### `POST /api/payments/verify-addon-payment`
@@ -363,9 +363,10 @@ UPI settings (outlet → profile → brand fallback). Only returns when the outl
 Create a public diner order + items (+ optional UPI payment row).
 
 - **Auth**: `none`
-- **Body**: `{ outlet_id, order_type, table_number?, customer_name, customer_phone, items: [{ menu_item_id, quantity, notes? }], payment_method: 'cod' | 'upi' }`
+- **Body**: `{ outlet_id, order_type, table_number?, customer_name, customer_phone, items: [{ menu_item_id, quantity, notes? }], payment_method: 'cod' | 'upi', delivery_address?, delivery_pincode?, delivery_city?, delivery_state?, notes? }`
 - Validation:
   - `order_type ∈ {dine_in, takeaway, delivery}`.
+  - For `delivery`: `delivery_address`, `delivery_pincode`, `delivery_city`, and `delivery_state` are required.
   - For `dine_in`: `table_number` must be present, the table must be available, and there must be no concurrent active order on the same table.
   - `payment_method='upi'` requires UPI configured on outlet or profile.
 - Server computes subtotal/total from menu prices and generates an `ONL-<base36>` order number.
@@ -418,6 +419,63 @@ Receive a Swiggy order webhook.
 Mirror of the Swiggy webhook for Zomato. Same protection model.
 
 - **Auth**: `none` (verified via `?outlet_id=` + `platform_integrations.platform='zomato'`)
+
+### `GET /api/public/orders/:orderId/delivery-status`
+
+Customer delivery timeline for native delivery orders.
+
+- **Auth**: `none`
+- **Query**: `?phone=` — must match `orders.customer_phone` when provided.
+- Returns `{ order_status, delivery_status, label, awb_code, courier_name, tracking_url, timeline }`.
+
+### `POST /api/webhooks/shiprocket`
+
+Shiprocket tracking webhook (per outlet).
+
+- **Auth**: `none` (optional `x-api-key` header if `webhook_secret` set in outlet Shiprocket settings)
+- **Query**: `?outlet_id=<uuid>`
+- Updates `shiprocket_shipments`, `orders.delivery_status`, `shiprocket_tracking_events`.
+
+---
+
+## 8b. Shiprocket delivery (owner)
+
+Defined in `server/shiprocket/routes.js`. See [`shiprocket.md`](shiprocket.md).
+
+All routes require Passport session; outlet must belong to `req.user.id`. Entitlement: Expand or `shiprocket_delivery` add-on.
+
+### `GET /api/outlets/:outletId/shiprocket`
+
+Connection status + settings (no secrets). Includes `webhook_url`.
+
+### `POST /api/outlets/:outletId/shiprocket/connect`
+
+- **Body**: `{ email, password }` — Shiprocket **API user** credentials.
+- Validates via Shiprocket login API; stores encrypted.
+
+### `POST /api/outlets/:outletId/shiprocket/disconnect`
+
+Clears tokens and marks disconnected.
+
+### `PATCH /api/outlets/:outletId/shiprocket/settings`
+
+- **Body**: `auto_delivery_enabled`, `prep_time_minutes`, `default_weight_kg`, `dimensions`, `pickup_address`, `pickup_location_name`, `cod_enabled`, retry fields, `webhook_secret`.
+
+### `GET /api/orders/:orderId/shiprocket`
+
+Shipment row + `shiprocket_tracking_events` for order detail UI.
+
+### `POST /api/orders/:orderId/shiprocket/retry` · `POST .../cancel` · `POST .../schedule`
+
+Retry failed booking, cancel Shiprocket shipment, or schedule booking after Preparing.
+
+### `PATCH /api/orders/:orderId/status`
+
+- **Body**: `{ status }` — updates order and triggers Shiprocket schedule on `→ preparing` for delivery orders.
+
+### `GET /api/dashboard/delivery-overview?outlet_id=`
+
+KPI counts: pending booking, awaiting pickup, out for delivery, delivered today, cancelled, avg minutes.
 
 ---
 
@@ -653,9 +711,13 @@ For a one-screen list, group everything by area:
 
 `POST /api/upload` · `POST /api/extract-menu` · `POST /api/generate-menu-image` · `POST /api/voice-order` · `POST /api/support-chat`
 
-### Public ordering & webhooks (8)
+### Public ordering, webhooks & delivery (11)
 
-`GET /api/public/outlets/:outletId/payment-settings` · `POST /api/public/customer-orders` · `GET /api/public/orders/:orderId/payment` · `POST /api/public/orders/:orderId/submit-upi` · `GET /api/order-payments` · `PATCH /api/order-payments/:paymentId` · `POST /api/webhooks/swiggy` · `POST /api/webhooks/zomato`
+`GET /api/public/outlets/:outletId/payment-settings` · `POST /api/public/customer-orders` · `GET /api/public/orders/:orderId/payment` · `POST /api/public/orders/:orderId/submit-upi` · `GET /api/public/orders/:orderId/delivery-status` · `GET /api/order-payments` · `PATCH /api/order-payments/:paymentId` · `POST /api/webhooks/swiggy` · `POST /api/webhooks/zomato` · `POST /api/webhooks/shiprocket`
+
+### Shiprocket (owner) (9)
+
+`GET /api/outlets/:outletId/shiprocket` · `POST /api/outlets/:outletId/shiprocket/connect` · `POST /api/outlets/:outletId/shiprocket/disconnect` · `PATCH /api/outlets/:outletId/shiprocket/settings` · `GET /api/orders/:orderId/shiprocket` · `POST /api/orders/:orderId/shiprocket/retry` · `POST /api/orders/:orderId/shiprocket/cancel` · `POST /api/orders/:orderId/shiprocket/schedule` · `GET /api/dashboard/delivery-overview`
 
 ### CMS endpoints (18)
 
@@ -701,3 +763,4 @@ Surfaces handled outside this server:
 - **Which frontend page or hook calls each endpoint**: [`frontend.md`](frontend.md)
 - **Which mobile bridge handler triggers which endpoint**: [`mobile-app.md`](mobile-app.md)
 - **Libraries used**: [`techstack.md`](techstack.md)
+- **Shiprocket delivery integration**: [`shiprocket.md`](shiprocket.md)

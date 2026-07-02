@@ -14,6 +14,7 @@ export interface SubscriptionAddons {
   customer_ordering: boolean;
   inventory: boolean;
   whatsapp: boolean;
+  shiprocket: boolean;
 }
 
 export const EMPTY_ADDONS: SubscriptionAddons = {
@@ -24,6 +25,7 @@ export const EMPTY_ADDONS: SubscriptionAddons = {
   customer_ordering: false,
   inventory: false,
   whatsapp: false,
+  shiprocket: false,
 };
 
 export function aggregateAddonsFromRows(
@@ -50,6 +52,12 @@ export function aggregateAddonsFromRows(
         break;
       case "inventory_management":
         out.inventory = out.inventory || qty > 0;
+        break;
+      case "whatsapp_integration":
+        out.whatsapp = out.whatsapp || qty > 0;
+        break;
+      case "shiprocket_delivery":
+        out.shiprocket = out.shiprocket || qty > 0;
         break;
       default:
         break;
@@ -98,6 +106,7 @@ export function computeEffectiveLimits(
     swiggyIntegration: base.swiggyIntegration || addons.swiggy,
     zomatoIntegration: base.zomatoIntegration || addons.zomato,
     whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
+    shiprocketDelivery: base.shiprocketDelivery || addons.shiprocket,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };

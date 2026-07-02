@@ -23,6 +23,7 @@ import { PlatformConfigModal } from "@/components/integrations/PlatformConfigMod
 import { FeatureGate } from "@/components/FeatureGate";
 import type { FeatureKey } from "@/hooks/use-feature-gating";
 import { Link } from "react-router-dom";
+import { ShiprocketLogo } from "@/components/shiprocket/ShiprocketLogo";
 
 interface PlatformIntegration {
   id: string;
@@ -229,9 +230,9 @@ export default function Integrations() {
               <h1 className="font-display text-3xl font-bold tracking-tight">Integrations</h1>
               <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
                 Connect Swiggy, Zomato, and more so aggregator orders flow into the same kitchen
-                queue as your POS. Online ordering links for customers live in{" "}
-                <Link to="/settings?tab=outlets" className="text-primary font-medium hover:underline">
-                  Settings → Outlets
+                queue as your POS. Online ordering links for customers live on each{" "}
+                <Link to="/outlets" className="text-primary font-medium hover:underline">
+                  outlet&apos;s detail page
                 </Link>
                 .
               </p>
@@ -390,6 +391,29 @@ export default function Integrations() {
             );
           })}
         </div>
+
+        <FeatureGate feature="shiprocketDelivery" showUpgradePrompt>
+          <Card className="border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-background to-transparent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2.5">
+                <ShiprocketLogo variant="full" className="h-7" />
+                <span>Quick — Food Delivery</span>
+              </CardTitle>
+              <CardDescription>
+                Auto-book Shiprocket Quick 2-wheeler riders for in-city food delivery. Connect and configure in Settings → Delivery.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="gap-2">
+                <Link to="/settings?tab=delivery">
+                  <Settings2 className="h-4 w-4" />
+                  Open Delivery settings
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </FeatureGate>
 
         {/* Help + addons CTA */}
         <div className="grid gap-4 lg:grid-cols-2">

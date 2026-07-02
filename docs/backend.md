@@ -14,6 +14,13 @@ server/
 ├── db.js                   # Single shared pg.Pool (SSL auto-detect)
 ├── entitlements.js         # Plan + add-on math used by /api/subscription
 ├── customer-orders.js      # Public unauthenticated customer ordering + UPI payments
+├── shiprocket/             # Per-outlet Shiprocket delivery (see shiprocket.md)
+│   ├── routes.js           # Connect, settings, shipment actions, dashboard
+│   ├── delivery-service.js # Schedule, book, retry, cancel, tracking sync
+│   ├── client.js           # apiv2.shiprocket.in HTTP client
+│   ├── auth.js             # Encrypted credentials + token refresh
+│   ├── jobs.js             # 30s background runner
+│   └── webhook.js          # Webhook + public delivery-status
 ├── billing-mobile.js       # Mobile→browser checkout handoff (15-min JWT)
 ├── business-types.js       # business_type → default outlet operation_mode
 ├── legal.js                # CURRENT_TERMS_VERSION + extractClientIp()

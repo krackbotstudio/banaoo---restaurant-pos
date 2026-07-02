@@ -13,6 +13,7 @@ const ADDON_FEATURES: FeatureKey[] = [
   "whatsappIntegration",
   "swiggyIntegration",
   "zomatoIntegration",
+  "shiprocketDelivery",
 ];
 
 export function useFeatureGating() {

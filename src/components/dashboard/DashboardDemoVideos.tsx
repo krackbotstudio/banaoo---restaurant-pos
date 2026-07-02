@@ -1,9 +1,10 @@
 import { useState } from "react";
 import {
-  DEMO_VIDEO_DESCRIPTION,
-  DEMO_VIDEO_PLACEHOLDER_LABEL,
-  DEMO_VIDEO_TITLE,
-  DEMO_VIDEO_YOUTUBE_ID,
+  DEMO_VIDEOS,
+  DEMO_VIDEOS_FOLDER_URL,
+  DemoVideo,
+  driveEmbedUrl,
+  driveThumbnailUrl,
 } from "@/content/demo-videos";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,87 +16,111 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Maximize2, Minimize2, Play, Video } from "lucide-react";
+import { ExternalLink, Maximize2, Minimize2, Play, Video } from "lucide-react";
 
-const hasYoutubeVideo = Boolean(DEMO_VIDEO_YOUTUBE_ID?.trim());
+function DriveVideoPlayer({
+  video,
+  autoplay,
+}: {
+  video: DemoVideo;
+  autoplay?: boolean;
+}) {
+  return (
+    <iframe
+      title={video.title}
+      className="absolute inset-0 h-full w-full border-0"
+      src={driveEmbedUrl(video.driveFileId, autoplay)}
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  );
+}
 
-function DemoVideoPlayer({ autoplay }: { autoplay?: boolean }) {
-  if (hasYoutubeVideo) {
-    const params = new URLSearchParams({
-      autoplay: autoplay ? "1" : "0",
-      rel: "0",
-      modestbranding: "1",
-    });
-    return (
-      <iframe
-        title={DEMO_VIDEO_TITLE}
-        className="absolute inset-0 h-full w-full border-0"
-        src={`https://www.youtube-nocookie.com/embed/${DEMO_VIDEO_YOUTUBE_ID}?${params}`}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
-    );
-  }
+function VideoCard({
+  video,
+  onPlay,
+}: {
+  video: DemoVideo;
+  onPlay: () => void;
+}) {
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
-        <Play className="h-6 w-6 text-white/90 ml-0.5" />
-      </div>
-      <p className="text-xs font-medium">{DEMO_VIDEO_PLACEHOLDER_LABEL}</p>
-    </div>
+    <button type="button" onClick={onPlay} className="w-full text-left group">
+      <Card className="overflow-hidden shadow-none border-primary/15 transition-all hover:border-primary/40 hover:shadow-sm">
+        <div className="relative aspect-video w-full bg-muted overflow-hidden">
+          {!thumbFailed ? (
+            <img
+              src={driveThumbnailUrl(video.driveFileId)}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              loading="lazy"
+              onError={() => setThumbFailed(true)}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/35 transition-colors">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg ring-4 ring-primary/25 group-hover:scale-105 transition-transform">
+              <Play className="h-4 w-4 fill-current ml-0.5" />
+            </div>
+          </div>
+        </div>
+        <div className="p-2.5 space-y-0.5">
+          <p className="text-xs font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+            {video.title}
+          </p>
+          <p className="text-[11px] text-muted-foreground line-clamp-2">{video.description}</p>
+        </div>
+      </Card>
+    </button>
   );
 }
 
 export function DashboardDemoVideos() {
-  const [open, setOpen] = useState(false);
+  const [activeVideo, setActiveVideo] = useState<DemoVideo | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) setExpanded(false);
+    if (!next) {
+      setActiveVideo(null);
+      setExpanded(false);
+    }
   };
 
   return (
     <>
       <section className="space-y-2" data-tour="dashboard-demo-videos">
-        <div className="flex items-center gap-2 px-1">
-          <Video className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Videos</h3>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <Video className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Videos
+            </h3>
+          </div>
+          <a
+            href={DEMO_VIDEOS_FOLDER_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-primary font-medium inline-flex items-center gap-0.5 shrink-0 hover:underline"
+          >
+            All
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
 
-        <button type="button" onClick={() => setOpen(true)} className="w-full text-left group">
-          <Card className="overflow-hidden shadow-none border-primary/20 transition-all hover:border-primary/40 hover:shadow-sm">
-            <div className="relative aspect-video w-full bg-muted overflow-hidden">
-              {hasYoutubeVideo ? (
-                <img
-                  src={`https://img.youtube.com/vi/${DEMO_VIDEO_YOUTUBE_ID}/hqdefault.jpg`}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
-              )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/35 transition-colors">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg ring-4 ring-primary/25 group-hover:scale-105 transition-transform">
-                  <Play className="h-5 w-5 fill-current ml-0.5" />
-                </div>
-              </div>
-            </div>
-            <div className="p-3 space-y-0.5">
-              <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">
-                {DEMO_VIDEO_TITLE}
-              </p>
-              <p className="text-xs text-muted-foreground line-clamp-2">
-                {hasYoutubeVideo ? DEMO_VIDEO_DESCRIPTION : DEMO_VIDEO_PLACEHOLDER_LABEL}
-              </p>
-              <span className="inline-block text-xs font-medium text-primary pt-1">Watch video →</span>
-            </div>
-          </Card>
-        </button>
+        <div className="max-h-[min(52vh,520px)] overflow-y-auto pr-0.5 space-y-2 scrollbar-thin">
+          {DEMO_VIDEOS.map((video) => (
+            <VideoCard key={video.id} video={video} onPlay={() => setActiveVideo(video)} />
+          ))}
+        </div>
+
+        <p className="text-[11px] text-muted-foreground px-1">
+          {DEMO_VIDEOS.length} onboarding guides from Google Drive
+        </p>
       </section>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={!!activeVideo} onOpenChange={handleOpenChange}>
         <DialogContent
           className={cn(
             "gap-0 p-0 overflow-hidden",
@@ -104,37 +129,53 @@ export function DashboardDemoVideos() {
               : "max-w-3xl w-[calc(100%-2rem)]"
           )}
         >
-          <div className="flex items-start justify-between gap-3 border-b px-4 py-3 pr-12">
-            <DialogHeader className="text-left space-y-1">
-              <DialogTitle>{DEMO_VIDEO_TITLE}</DialogTitle>
-              <DialogDescription>{DEMO_VIDEO_DESCRIPTION}</DialogDescription>
-            </DialogHeader>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="absolute right-12 top-3 h-8 w-8 shrink-0"
-              onClick={() => setExpanded((v) => !v)}
-              aria-label={expanded ? "Exit expanded view" : "Expand video"}
-            >
-              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-          </div>
+          {activeVideo && (
+            <>
+              <div className="flex items-start justify-between gap-3 border-b px-4 py-3 pr-12">
+                <DialogHeader className="text-left space-y-1">
+                  <DialogTitle className="text-base leading-snug pr-2">
+                    {activeVideo.title}
+                  </DialogTitle>
+                  <DialogDescription>{activeVideo.description}</DialogDescription>
+                </DialogHeader>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="absolute right-12 top-3 h-8 w-8 shrink-0"
+                  onClick={() => setExpanded((v) => !v)}
+                  aria-label={expanded ? "Exit expanded view" : "Expand video"}
+                >
+                  {expanded ? (
+                    <Minimize2 className="h-4 w-4" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
 
-          <div
-            className={cn(
-              "relative w-full bg-black",
-              expanded ? "aspect-auto h-[min(78vh,720px)]" : "aspect-video"
-            )}
-          >
-            <DemoVideoPlayer autoplay={open} />
-          </div>
+              <div
+                className={cn(
+                  "relative w-full bg-black",
+                  expanded ? "aspect-auto h-[min(78vh,720px)]" : "aspect-video"
+                )}
+              >
+                <DriveVideoPlayer video={activeVideo} autoplay />
+              </div>
 
-          {!hasYoutubeVideo && (
-            <p className="text-xs text-muted-foreground px-4 py-3 border-t bg-muted/30">
-              Placeholder preview — connect your YouTube link in{" "}
-              <span className="font-mono">src/content/demo-videos.ts</span> when ready.
-            </p>
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-t bg-muted/30 text-xs text-muted-foreground">
+                <span>Hosted on Google Drive</span>
+                <a
+                  href={`https://drive.google.com/file/d/${activeVideo.driveFileId}/view`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary font-medium inline-flex items-center gap-1 hover:underline"
+                >
+                  Open in Drive
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>

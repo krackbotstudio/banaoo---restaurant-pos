@@ -43,7 +43,8 @@ Suggested how-to videos for restaurant owners, managers, and staff.
 | 3.2 | How to switch between outlets | Outlet switcher in header; data scoped per outlet | P0 |
 | 3.3 | How to edit outlet details and operation mode | Outlet detail: standard vs self-service counter, map/GPS pin | P1 |
 | 3.4 | How to delete an outlet | Delete flow, password confirmation | P2 |
-| 3.5 | How to set up customer ordering link & QR | Customer ordering link card, share link, print QR | P1 |
+| 3.5 | How to set up customer ordering link & QR | Outlets → [outlet] → Customer Ordering Link; brand link in Settings → Branding | P1 |
+| 3.6 | Shiprocket delivery setup & daily use | Add-ons activate free → Settings → Delivery → connect API user → mark Preparing | P1 |
 
 ---
 

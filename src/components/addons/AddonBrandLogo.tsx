@@ -6,6 +6,7 @@ const BRAND_LOGO_SRC: Partial<Record<AddonType, string>> = {
   whatsapp_integration: "/brands/whatsapp.png",
   swiggy_integration: "/brands/swiggy.png",
   zomato_integration: "/brands/zomato.png",
+  shiprocket_delivery: "/brands/shiprocket-icon.svg",
 };
 
 export function hasAddonBrandLogo(type: AddonType): boolean {
@@ -29,7 +30,11 @@ export function AddonCardIcon({ type, fallbackIcon: FallbackIcon, className }: A
     <img
       src={src}
       alt=""
-      className={cn("h-9 w-9 rounded-lg object-cover", className)}
+      className={cn(
+        "h-9 w-9 rounded-lg",
+        src.endsWith(".svg") ? "object-contain p-1" : "object-cover",
+        className
+      )}
       loading="lazy"
     />
   );
