@@ -474,29 +474,27 @@ export default function Auth() {
                       )}
                     </Button>
 
-                    {googleEnabled !== false && (
-                      <>
-                        <div className="relative py-1">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-border/60" />
-                          </div>
-                          <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
-                            <span className="bg-background px-3 text-muted-foreground">or</span>
-                          </div>
+                    <>
+                      <div className="relative py-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-border/60" />
                         </div>
+                        <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                          <span className="bg-background px-3 text-muted-foreground">or</span>
+                        </div>
+                      </div>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full h-12 text-base font-medium gap-3"
-                          onClick={() => handleGoogleSignIn(false)}
-                          disabled={isSubmitting || googleEnabled === null}
-                        >
-                          <GoogleIcon />
-                          Continue with Google
-                        </Button>
-                      </>
-                    )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 text-base font-medium gap-3"
+                        onClick={() => handleGoogleSignIn(false)}
+                        disabled={isSubmitting || googleEnabled === null}
+                      >
+                        <GoogleIcon />
+                        Continue with Google
+                      </Button>
+                    </>
 
                     <p className="text-center text-sm text-muted-foreground pt-2">
                       Don't have an account?{" "}
@@ -657,34 +655,32 @@ export default function Auth() {
                       )}
                     </Button>
 
-                    {googleEnabled !== false && (
-                      <>
-                        <div className="relative py-1">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-border/60" />
-                          </div>
-                          <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
-                            <span className="bg-background px-3 text-muted-foreground">or</span>
-                          </div>
+                    <>
+                      <div className="relative py-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-border/60" />
                         </div>
+                        <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+                          <span className="bg-background px-3 text-muted-foreground">or</span>
+                        </div>
+                      </div>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full h-12 text-base font-medium gap-3"
-                          onClick={() => handleGoogleSignIn(true)}
-                          disabled={isSubmitting || !signupAcceptedTerms || googleEnabled === null}
-                          title={
-                            !signupAcceptedTerms
-                              ? "Please accept the Terms & Policies first"
-                              : undefined
-                          }
-                        >
-                          <GoogleIcon />
-                          Sign up with Google
-                        </Button>
-                      </>
-                    )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 text-base font-medium gap-3"
+                        onClick={() => handleGoogleSignIn(true)}
+                        disabled={isSubmitting || !signupAcceptedTerms || googleEnabled === null}
+                        title={
+                          !signupAcceptedTerms
+                            ? "Please accept the Terms & Policies first"
+                            : undefined
+                        }
+                      >
+                        <GoogleIcon />
+                        Sign up with Google
+                      </Button>
+                    </>
 
                     <p className="text-center text-sm text-muted-foreground pt-2">
                       Already have an account?{" "}

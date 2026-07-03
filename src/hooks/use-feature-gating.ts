@@ -14,6 +14,7 @@ const ADDON_FEATURES: FeatureKey[] = [
   "swiggyIntegration",
   "zomatoIntegration",
   "shiprocketDelivery",
+  "razorpayPayments",
 ];
 
 export function useFeatureGating() {

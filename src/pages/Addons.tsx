@@ -40,6 +40,7 @@ import {
   Percent,
   MessageCircle,
   Truck,
+  Wallet,
 } from "lucide-react";
 import { NativeBillingLinkButton } from "@/components/billing/NativeBillingLinkButton";
 import { AddonCardIcon } from "@/components/addons/AddonBrandLogo";
@@ -59,6 +60,7 @@ function addonOwnedLabel(type: AddonType, addons: SubscriptionAddons): string | 
   if (type === "inventory_management" && addons.inventory) return "Inventory active";
   if (type === "whatsapp_integration" && addons.whatsapp) return "WhatsApp active";
   if (type === "shiprocket_delivery" && addons.shiprocket) return "Shiprocket delivery active";
+  if (type === "razorpay_payments" && addons.razorpay) return "Razorpay payments active";
   return null;
 }
 
@@ -112,6 +114,12 @@ const ADDON_META: Record<
     icon: Truck,
     gradient: "from-sky-500/12 via-sky-500/5 to-transparent",
     accent: "border-sky-500/30",
+    category: "Integrations",
+  },
+  razorpay_payments: {
+    icon: Wallet,
+    gradient: "from-indigo-500/12 via-indigo-500/5 to-transparent",
+    accent: "border-indigo-500/30",
     category: "Integrations",
   },
 };
@@ -285,6 +293,8 @@ export default function Addons() {
                         ? limits.whatsappIntegration
                         : item.type === "shiprocket_delivery"
                           ? limits.shiprocketDelivery
+                          : item.type === "razorpay_payments"
+                            ? limits.razorpayPayments
                           : item.type === "swiggy_integration"
                           ? limits.swiggyIntegration
                           : item.type === "zomato_integration"

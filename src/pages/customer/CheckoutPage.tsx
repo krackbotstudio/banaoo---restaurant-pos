@@ -19,7 +19,9 @@ interface Outlet {
 
 interface PaymentSettings {
   online_payments_enabled: boolean;
-  upi_vpa: string | null;
+  online_checkout_enabled?: boolean;
+  razorpay_connected?: boolean;
+  allow_cod?: boolean;
 }
 
 export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
@@ -44,7 +46,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
     lng: defaultAddr?.lng ?? null,
   });
   const [locationError, setLocationError] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "upi">("cod");
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -92,9 +94,9 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
       .then((r) => r.json())
       .then((s: PaymentSettings) => {
         setPaymentSettings(s);
-        if (!s.upi_vpa || !s.online_payments_enabled) setPaymentMethod("cod");
+        if (!s.online_checkout_enabled) setPaymentMethod("cod");
       })
-      .catch(() => setPaymentSettings({ online_payments_enabled: false, upi_vpa: null }));
+      .catch(() => setPaymentSettings({ online_payments_enabled: false }));
   }, [outlet.id]);
 
   useEffect(() => {
@@ -129,8 +131,8 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
     return null;
   }
 
-  const upiAvailable =
-    paymentSettings?.online_payments_enabled && !!paymentSettings?.upi_vpa;
+  const onlineAvailable = Boolean(paymentSettings?.online_checkout_enabled);
+  const codAvailable = paymentSettings?.allow_cod !== false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,8 +158,12 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
         return;
       }
     }
-    if (paymentMethod === "upi" && !upiAvailable) {
-      setError("UPI payment is not available. Choose pay at counter.");
+    if (paymentMethod === "online" && !onlineAvailable) {
+      setError("Online payment is not available for this outlet right now.");
+      return;
+    }
+    if (paymentMethod === "cod" && !codAvailable) {
+      setError("Cash on delivery is disabled for this outlet.");
       return;
     }
 
@@ -211,7 +217,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
       clearCart();
 
-      if (json.requires_upi) {
+      if (json.requires_online_payment) {
         navigate(`${resolvedBase}/payment/${json.order_id}`, { replace: true });
         return;
       }
@@ -321,29 +327,30 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
             <button
               type="button"
               onClick={() => setPaymentMethod("cod")}
+              disabled={!codAvailable}
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors ${
                 paymentMethod === "cod"
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-gray-200 text-gray-600"
-              }`}
+              } ${!codAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
               <Banknote className="h-4 w-4" /> Pay at counter
             </button>
             <button
               type="button"
-              onClick={() => upiAvailable && setPaymentMethod("upi")}
-              disabled={!upiAvailable}
+              onClick={() => onlineAvailable && setPaymentMethod("online")}
+              disabled={!onlineAvailable}
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                paymentMethod === "upi"
+                paymentMethod === "online"
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-gray-200 text-gray-600"
-              } ${!upiAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
+              } ${!onlineAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
-              <Smartphone className="h-4 w-4" /> UPI now
+              <Smartphone className="h-4 w-4" /> Online payment
             </button>
           </div>
-          {!upiAvailable && (
-            <p className="text-xs text-gray-500">UPI not set up for this restaurant — pay at counter only.</p>
+          {!onlineAvailable && (
+            <p className="text-xs text-gray-500">Online payment is currently unavailable for this outlet.</p>
           )}
         </div>
 
@@ -390,7 +397,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
             <><Loader2 className="h-4 w-4 animate-spin" /> Placing Order...</>
           ) : (
             <>
-              {paymentMethod === "upi" ? "Continue to UPI" : "Place Order"} · ₹{total.toFixed(0)}
+              {paymentMethod === "online" ? "Continue to payment" : "Place Order"} · ₹{total.toFixed(0)}
             </>
           )}
         </button>

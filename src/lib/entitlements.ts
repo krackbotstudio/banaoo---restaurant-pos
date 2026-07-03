@@ -15,6 +15,7 @@ export interface SubscriptionAddons {
   inventory: boolean;
   whatsapp: boolean;
   shiprocket: boolean;
+  razorpay: boolean;
 }
 
 export const EMPTY_ADDONS: SubscriptionAddons = {
@@ -26,6 +27,7 @@ export const EMPTY_ADDONS: SubscriptionAddons = {
   inventory: false,
   whatsapp: false,
   shiprocket: false,
+  razorpay: false,
 };
 
 export function aggregateAddonsFromRows(
@@ -58,6 +60,9 @@ export function aggregateAddonsFromRows(
         break;
       case "shiprocket_delivery":
         out.shiprocket = out.shiprocket || qty > 0;
+        break;
+      case "razorpay_payments":
+        out.razorpay = out.razorpay || qty > 0;
         break;
       default:
         break;
