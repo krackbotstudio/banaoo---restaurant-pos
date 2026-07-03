@@ -1,10 +1,21 @@
 import pool from './db.js';
+import crypto from 'crypto';
+import { getMerchantAuth, isRazorpayConnectionActive, getCheckoutKeyId } from './razorpay/auth.js';
+import { createOrderForMerchant, fetchPaymentForMerchant } from './razorpay/client.js';
 
-function resolvePaymentSettings(outlet, profile) {
+function resolvePaymentSettings(outlet, profile, razorpayConn) {
   const online =
     outlet.online_payments_enabled ??
     profile?.online_payments_enabled ??
     true;
+  const rzSettings =
+    razorpayConn?.settings && typeof razorpayConn.settings === 'object'
+      ? razorpayConn.settings
+      : {};
+  const rzOnlineEnabled = rzSettings.online_payments_enabled !== false;
+  const allowCod = rzSettings.allow_cod !== false;
+  const razorpayConnected = isRazorpayConnectionActive(razorpayConn);
+
   return {
     upi_vpa: (outlet.upi_vpa?.trim() || profile?.upi_vpa?.trim() || null) ?? null,
     upi_display_name:
@@ -15,6 +26,22 @@ function resolvePaymentSettings(outlet, profile) {
       null,
     upi_qr_url: outlet.upi_qr_url?.trim() || profile?.upi_qr_url?.trim() || null,
     online_payments_enabled: online !== false,
+    razorpay_connected: razorpayConnected,
+    razorpay_account_id: razorpayConn?.account_id || razorpayConn?.merchant_key_id || null,
+    allow_cod: allowCod,
+    online_checkout_enabled: online !== false && rzOnlineEnabled && razorpayConnected,
+  };
+}
+
+function razorpayConnFromRow(row) {
+  return {
+    is_connected: row.razorpay_connected,
+    connection_mode: row.razorpay_connection_mode,
+    account_id: row.razorpay_account_id,
+    merchant_key_id: row.razorpay_merchant_key_id,
+    merchant_key_secret_enc: row.razorpay_merchant_key_secret_enc,
+    access_token_enc: row.razorpay_access_token_enc,
+    settings: row.razorpay_settings,
   };
 }
 
@@ -26,9 +53,14 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         `SELECT o.id, o.name, o.is_active, o.upi_vpa, o.upi_display_name, o.upi_qr_url, o.online_payments_enabled,
                 p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name
+                p.brand_name,
+                rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
+                rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
+                rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
+         LEFT JOIN public.razorpay_connections rc ON rc.owner_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
         [outletId]
       );
@@ -48,7 +80,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           upi_qr_url: o.profile_upi_qr_url,
           online_payments_enabled: o.profile_online_payments_enabled,
           brand_name: o.brand_name,
-        }
+        },
+        razorpayConnFromRow(o)
       );
       res.json(settings);
     } catch (err) {
@@ -101,7 +134,10 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         return res.status(400).json({ error: 'Invalid delivery coordinates' });
       }
     }
-    const payMethod = payment_method === 'upi' ? 'upi' : 'cod';
+    const payMethod =
+      payment_method === 'online' || payment_method === 'upi'
+        ? 'online'
+        : 'cod';
 
     const client = await pool.connect();
     try {
@@ -110,9 +146,14 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const { rows: outlets } = await client.query(
         `SELECT o.*, p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name
+                p.brand_name,
+                rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
+                rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
+                rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
+         LEFT JOIN public.razorpay_connections rc ON rc.owner_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
         [outlet_id]
       );
@@ -157,16 +198,12 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         upi_qr_url: outlet.profile_upi_qr_url,
         online_payments_enabled: outlet.profile_online_payments_enabled,
         brand_name: outlet.brand_name,
-      });
+      }, razorpayConnFromRow(outlet));
 
-      if (payMethod === 'upi') {
-        if (!settings.online_payments_enabled) {
+      if (payMethod === 'online') {
+        if (!settings.online_checkout_enabled) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Online payments are disabled for this outlet' });
-        }
-        if (!settings.upi_vpa) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'UPI is not configured for this restaurant' });
+          return res.status(400).json({ error: 'Online payments are not enabled for this outlet' });
         }
       }
 
@@ -196,7 +233,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         0
       );
       const orderNumber = `ONL-${Date.now().toString(36).toUpperCase()}`;
-      const paymentStatus = payMethod === 'upi' ? 'pending' : 'not_required';
+      const paymentStatus = payMethod === 'online' ? 'pending' : 'not_required';
 
       const deliveryLat =
         order_type === 'delivery' ? Number(delivery_latitude) : null;
@@ -209,8 +246,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           delivery_pincode, delivery_city, delivery_state,
           delivery_latitude, delivery_longitude,
           subtotal, total, notes, status, source, customer_name, customer_phone,
-          payment_method, payment_status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending','online',$15,$16,$17,$18)
+          payment_method, payment_status, payment_gateway
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending','online',$15,$16,$17,$18,$19)
         RETURNING id, order_number, total, payment_method, payment_status`,
         [
           outlet_id,
@@ -231,6 +268,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           customer_phone?.trim() || null,
           payMethod,
           paymentStatus,
+          payMethod === 'online' ? 'razorpay' : null,
         ]
       );
       const order = orderRows[0];
@@ -252,27 +290,87 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       }
 
       let paymentId = null;
-      if (payMethod === 'upi') {
+      if (payMethod === 'online') {
         const { rows: payRows } = await client.query(
-          `INSERT INTO public.order_payments (order_id, outlet_id, amount, method, status, upi_vpa)
-           VALUES ($1,$2,$3,'upi','pending',$4)
+          `INSERT INTO public.order_payments (order_id, outlet_id, amount, method, status, gateway, currency, metadata)
+           VALUES ($1,$2,$3,'online','pending','razorpay','INR',$4)
            RETURNING id`,
-          [order.id, outlet_id, subtotal, settings.upi_vpa]
+          [
+            order.id,
+            outlet_id,
+            subtotal,
+            JSON.stringify({
+              owner_id: outlet.owner_id,
+              outlet_id,
+              outlet_name: outlet.name,
+              order_id: order.id,
+              order_number: order.order_number,
+              customer_name: customer_name.trim(),
+            }),
+          ]
         );
         paymentId = payRows[0].id;
       }
 
       await client.query('COMMIT');
 
-      res.json({
+      const payload = {
         order_id: order.id,
         order_number: order.order_number,
         total: Number(order.total),
         payment_method: order.payment_method,
         payment_status: order.payment_status,
         payment_id: paymentId,
-        requires_upi: payMethod === 'upi',
-      });
+        requires_online_payment: payMethod === 'online',
+      };
+
+      if (payMethod === 'online') {
+        const merchantAuth = await getMerchantAuth(outlet.owner_id);
+        if (!merchantAuth) throw new Error('Razorpay account is not connected for this restaurant');
+        const checkoutKeyId =
+          merchantAuth.mode === 'api_keys'
+            ? merchantAuth.keyId
+            : getCheckoutKeyId(razorpayConnFromRow(outlet));
+        if (!checkoutKeyId) throw new Error('Razorpay checkout key is not available for this restaurant');
+
+        const rpOrder = await createOrderForMerchant(merchantAuth, {
+          amount: Math.round(Number(order.total) * 100),
+          currency: 'INR',
+          receipt: order.order_number,
+          notes: {
+            owner_id: outlet.owner_id,
+            restaurant_name: outlet.brand_name || outlet.name,
+            outlet_id,
+            outlet_name: outlet.name,
+            order_id: order.id,
+            order_number: order.order_number,
+            customer_name: customer_name.trim(),
+          },
+        });
+
+        await pool.query(
+          `UPDATE public.order_payments
+             SET status = 'created',
+                 gateway_order_id = $2,
+                 metadata = metadata || $3::jsonb
+           WHERE id = $1`,
+          [paymentId, rpOrder.id, JSON.stringify({ razorpay_order: rpOrder })]
+        );
+        await pool.query(
+          `UPDATE public.orders SET payment_status = 'created' WHERE id = $1`,
+          [order.id]
+        );
+
+        payload.payment_status = 'created';
+        payload.razorpay = {
+          order_id: rpOrder.id,
+          amount: rpOrder.amount,
+          currency: rpOrder.currency,
+          key_id: checkoutKeyId,
+        };
+      }
+
+      res.json(payload);
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('POST customer-orders:', err);
@@ -288,15 +386,20 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const { rows } = await pool.query(
         `SELECT o.id, o.order_number, o.total, o.payment_method, o.payment_status, o.outlet_id,
                 op.id AS payment_id, op.status AS payment_record_status, op.customer_reference,
-                op.upi_vpa,
+                op.upi_vpa, op.gateway, op.gateway_order_id, op.gateway_payment_id, op.currency,
                 out.name AS outlet_name, out.upi_vpa AS outlet_upi_vpa, out.upi_display_name, out.upi_qr_url,
                 out.online_payments_enabled AS outlet_online_payments_enabled,
                 p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name
+                p.brand_name,
+                rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
+                rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
+                rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
          FROM public.orders o
          JOIN public.outlets out ON out.id = o.outlet_id
          JOIN public.profiles p ON p.user_id = out.owner_id
+         LEFT JOIN public.razorpay_connections rc ON rc.owner_id = out.owner_id
          LEFT JOIN public.order_payments op ON op.order_id = o.id
          WHERE o.id = $1 AND o.source = 'online'`,
         [orderId]
@@ -317,8 +420,10 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           upi_qr_url: row.profile_upi_qr_url,
           online_payments_enabled: row.profile_online_payments_enabled,
           brand_name: row.brand_name,
-        }
+        },
+        razorpayConnFromRow(row)
       );
+      const checkoutKeyId = getCheckoutKeyId(razorpayConnFromRow(row));
       res.json({
         order_id: row.id,
         order_number: row.order_number,
@@ -327,6 +432,11 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         payment_status: row.payment_status,
         payment_id: row.payment_id,
         payment_record_status: row.payment_record_status,
+        gateway: row.gateway,
+        gateway_order_id: row.gateway_order_id,
+        gateway_payment_id: row.gateway_payment_id,
+        currency: row.currency || 'INR',
+        razorpay_key_id: row.payment_method === 'online' ? checkoutKeyId : null,
         customer_reference: row.customer_reference,
         upi_vpa: row.upi_vpa || settings.upi_vpa,
         ...settings,
@@ -373,6 +483,90 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
     } catch (err) {
       console.error('POST submit-upi:', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/public/orders/:orderId/verify-online-payment', async (req, res) => {
+    const { orderId } = req.params;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing payment verification fields' });
+    }
+
+    try {
+      const { rows } = await pool.query(
+        `SELECT o.id, o.payment_status, o.outlet_id, out.owner_id,
+                op.id AS payment_id, op.gateway_order_id, op.status AS payment_record_status
+         FROM public.orders o
+         JOIN public.outlets out ON out.id = o.outlet_id
+         LEFT JOIN public.order_payments op ON op.order_id = o.id
+         WHERE o.id = $1 AND o.source = 'online' AND o.payment_method = 'online'
+         LIMIT 1`,
+        [orderId]
+      );
+      const row = rows[0];
+      if (!row) return res.status(404).json({ error: 'Order not found' });
+      if (!row.payment_id) return res.status(400).json({ error: 'No payment record found' });
+      if (row.payment_status === 'paid') return res.json({ success: true, payment_status: 'paid' });
+
+      const merchantAuth = await getMerchantAuth(row.owner_id);
+      if (!merchantAuth) return res.status(400).json({ error: 'Razorpay is not connected for this restaurant' });
+      const keySecret =
+        merchantAuth.mode === 'api_keys'
+          ? merchantAuth.keySecret
+          : process.env.RAZORPAY_KEY_SECRET;
+      if (!keySecret) return res.status(500).json({ error: 'Razorpay secret is not configured' });
+
+      const expected = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+      if (expected !== razorpay_signature) {
+        return res.status(400).json({ error: 'Payment signature verification failed' });
+      }
+      if (row.gateway_order_id && row.gateway_order_id !== razorpay_order_id) {
+        return res.status(409).json({ error: 'Order ID mismatch for this payment attempt' });
+      }
+
+      const payment = await fetchPaymentForMerchant(merchantAuth, razorpay_payment_id);
+
+      await pool.query(
+        `UPDATE public.order_payments
+           SET status = CASE WHEN $2 = 'captured' THEN 'paid' ELSE 'authorized' END,
+               gateway_order_id = COALESCE(gateway_order_id, $1),
+               gateway_payment_id = $3,
+               gateway_signature = $4,
+               authorized_at = CASE WHEN $2 IN ('authorized', 'captured') THEN now() ELSE authorized_at END,
+               paid_at = CASE WHEN $2 = 'captured' THEN now() ELSE paid_at END,
+               metadata = metadata || $5::jsonb
+         WHERE id = $6`,
+        [
+          razorpay_order_id,
+          payment.status || 'authorized',
+          razorpay_payment_id,
+          razorpay_signature,
+          JSON.stringify({ verified_payment: payment }),
+          row.payment_id,
+        ]
+      );
+
+      const status = payment.status === 'captured' ? 'paid' : 'authorized';
+      await pool.query(
+        `UPDATE public.orders
+           SET payment_status = $2,
+               paid_at = CASE WHEN $2 = 'paid' THEN now() ELSE paid_at END
+         WHERE id = $1`,
+        [orderId, status]
+      );
+
+      return res.json({
+        success: true,
+        payment_status: status,
+        payment_method: 'online',
+      });
+    } catch (err) {
+      console.error('POST verify-online-payment:', err);
+      return res.status(500).json({ error: err.message || 'Payment verification failed' });
     }
   });
 
