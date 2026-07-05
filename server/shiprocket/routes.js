@@ -65,8 +65,9 @@ function publicConnection(conn, outletId, req) {
       retry_interval_seconds: settings.retry_interval_seconds,
       delivery_mode: settings.delivery_mode || 'quick_hyperlocal',
       vehicle_mode: settings.vehicle_mode || '2_wheeler',
+      webhook_secret: settings.webhook_secret || null,
     },
-    webhook_url: `${base}/api/webhooks/shiprocket?outlet_id=${outletId}`,
+    webhook_url: `${base}/api/webhooks/sr-callback?outlet_id=${outletId}`,
   };
 }
 
@@ -231,7 +232,7 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
     });
   });
 
-  app.post('/api/webhooks/shiprocket', async (req, res) => {
+  const handleWebhookRoute = async (req, res) => {
     const outletId = req.query.outlet_id;
     if (!outletId) return res.status(400).json({ error: 'outlet_id required' });
     try {
@@ -242,7 +243,10 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
       console.error('shiprocket webhook:', err);
       res.status(500).json({ error: err.message });
     }
-  });
+  };
+
+  app.post('/api/webhooks/shiprocket', handleWebhookRoute);
+  app.post('/api/webhooks/sr-callback', handleWebhookRoute);
 
   app.post('/api/orders/:orderId/shiprocket/schedule', requireAuth, async (req, res) => {
     const access = await assertOrderOwner(req.params.orderId, req.user.id);

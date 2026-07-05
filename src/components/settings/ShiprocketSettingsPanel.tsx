@@ -45,6 +45,7 @@ interface ShiprocketSettings {
   cod_enabled: boolean;
   retry_max_attempts: number;
   retry_interval_seconds: number;
+  webhook_secret: string | null;
 }
 
 interface ShiprocketState {
@@ -65,6 +66,7 @@ const DEFAULT_SETTINGS: ShiprocketSettings = {
   cod_enabled: true,
   retry_max_attempts: 3,
   retry_interval_seconds: 120,
+  webhook_secret: null,
 };
 
 export function ShiprocketSettingsPanel() {
@@ -278,13 +280,77 @@ export function ShiprocketSettingsPanel() {
               </div>
 
               {state?.webhook_url && (
-                <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
-                  <Label className="text-xs">Webhook URL (paste in Shiprocket panel)</Label>
-                  <div className="flex gap-2">
-                    <Input readOnly value={state.webhook_url} className="text-xs font-mono" />
-                    <Button type="button" variant="outline" size="icon" onClick={copyWebhook}>
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
+                <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">Webhook URL (paste in Shiprocket panel)</Label>
+                    <div className="flex gap-2">
+                      <Input readOnly value={state.webhook_url} className="text-xs font-mono" />
+                      <Button type="button" variant="outline" size="icon" onClick={copyWebhook}>
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Webhook Signature Verification</Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Reject incoming webhooks that do not contain a valid secret.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={!!settings.webhook_secret}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            const randomSecret = Math.random().toString(36).substring(2, 10) +
+                              Math.random().toString(36).substring(2, 10);
+                            setSettings((s) => ({ ...s, webhook_secret: randomSecret }));
+                          } else {
+                            setSettings((s) => ({ ...s, webhook_secret: null }));
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {settings.webhook_secret && (
+                      <div className="space-y-2 animate-in fade-in-50 duration-200">
+                        <Label className="text-xs font-medium">Webhook Secret Key (Header: x-api-key)</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={settings.webhook_secret}
+                            className="text-xs font-mono bg-background"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(settings.webhook_secret || "");
+                              toast({ title: "Copied", description: "Webhook secret copied to clipboard." });
+                            }}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const randomSecret = Math.random().toString(36).substring(2, 10) +
+                                Math.random().toString(36).substring(2, 10);
+                              setSettings((s) => ({ ...s, webhook_secret: randomSecret }));
+                            }}
+                          >
+                            Regenerate
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Remember to click <strong>Save settings</strong> below to apply changes.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -115,7 +115,7 @@ export function CmsCustomerMenuPanel({ userId, initialOutlets }: Props) {
       if (!res.ok) {
         const hint =
           data.error === "Not found"
-            ? "Menu API not available — restart the API server (port 5001)."
+            ? "Menu API not available — restart the API server (port 5000)."
             : data.error;
         throw new Error(hint || "Failed to load outlets");
       }

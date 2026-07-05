@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCustomer } from "@/context/customer-context";
 import { CustomerDeliveryTimeline } from "@/components/customer/CustomerDeliveryTimeline";
+import { useCart } from "@/context/cart-context";
 
 interface Outlet {
   id: string;
@@ -26,6 +27,11 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
   const state = location.state as LocationState | null;
   const [status, setStatus] = useState<string>("pending");
   const { customer } = useCustomer();
+  const { clearCart } = useCart();
+
+  useEffect(() => {
+    clearCart();
+  }, [clearCart]);
 
   useEffect(() => {
     if (!state?.order_id) return;

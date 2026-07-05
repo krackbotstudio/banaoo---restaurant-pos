@@ -215,8 +215,6 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to create order");
 
-      clearCart();
-
       if (json.requires_online_payment) {
         navigate(`${resolvedBase}/payment/${json.order_id}`, { replace: true });
         return;

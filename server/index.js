@@ -923,6 +923,39 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
   });
 });
 
+app.get('/api/manifest', (req, res) => {
+  const name = String(req.query?.name || 'Order Food');
+  const startUrl = String(req.query?.start_url || '/');
+  const color = String(req.query?.color || '#f97316');
+
+  const shortName = name.length > 12 ? name.slice(0, 12) : name;
+
+  const manifest = {
+    name,
+    short_name: shortName,
+    description: `Order food from ${name}`,
+    start_url: startUrl,
+    scope: startUrl,
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: color,
+    orientation: 'any',
+    icons: [
+      {
+        src: '/logo.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+    ],
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.json(manifest);
+});
+
 /** At most one outlet per owner may be is_active; fixes legacy rows with multiple enabled. */
 async function ensureSingleActiveOutlet(ownerId) {
   const { rows: activeRows } = await pool.query(
@@ -1890,7 +1923,7 @@ app.post('/api/payments/cancel-subscription', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
 // Upload endpoint
 app.post('/api/upload', (req, res) => {
   if (!req.isAuthenticated() && !getCmsAdmin(req)) {

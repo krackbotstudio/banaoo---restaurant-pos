@@ -469,7 +469,7 @@ export async function getShipmentDetails(orderId) {
 }
 
 export async function onOrderStatusChange(orderId, oldStatus, newStatus) {
-  if (oldStatus === newStatus || newStatus !== 'preparing') return;
+  if (oldStatus === newStatus) return;
 
   const { rows } = await pool.query(
     `SELECT o.*, out.owner_id FROM public.orders o
@@ -482,5 +482,35 @@ export async function onOrderStatusChange(orderId, oldStatus, newStatus) {
   if (order.order_type !== 'delivery') return;
   if (['swiggy', 'zomato'].includes(order.source)) return;
 
-  return scheduleShipmentBooking(orderId, order.outlet_id);
+  if (newStatus === 'preparing') {
+    return scheduleShipmentBooking(orderId, order.outlet_id);
+  }
+
+  if (newStatus === 'ready') {
+    try {
+      const { rows: shipments } = await pool.query(
+        `SELECT * FROM public.shiprocket_shipments WHERE order_id = $1 LIMIT 1`,
+        [orderId]
+      );
+      let ship = shipments[0];
+      if (!ship) {
+        ship = await scheduleShipmentBooking(orderId, order.outlet_id);
+      }
+      if (ship && ['booking', 'booking_failed'].includes(ship.status)) {
+        await pool.query(
+          `UPDATE public.shiprocket_shipments SET
+             status = 'booking',
+             booking_scheduled_at = now(),
+             updated_at = now()
+           WHERE id = $1`,
+          [ship.id]
+        );
+        // Call bookShipment asynchronously so it doesn't block the status patch response
+        void bookShipment({ ...ship, status: 'booking', booking_scheduled_at: new Date().toISOString() })
+          .catch(err => console.error('[shiprocket] auto-book on ready failed:', orderId, err.message));
+      }
+    } catch (err) {
+      console.warn('[shiprocket] failed to auto-book on ready status:', err.message);
+    }
+  }
 }

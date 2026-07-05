@@ -233,8 +233,70 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         0
       );
       const orderNumber = `ONL-${Date.now().toString(36).toUpperCase()}`;
-      const paymentStatus = payMethod === 'online' ? 'pending' : 'not_required';
 
+      if (payMethod === 'online') {
+        const merchantAuth = await getMerchantAuth(outlet.owner_id);
+        if (!merchantAuth) throw new Error('Razorpay account is not connected for this restaurant');
+        const checkoutKeyId =
+          merchantAuth.mode === 'api_keys'
+            ? merchantAuth.keyId
+            : getCheckoutKeyId(razorpayConnFromRow(outlet));
+        if (!checkoutKeyId) throw new Error('Razorpay checkout key is not available for this restaurant');
+
+        const sessionId = crypto.randomUUID();
+
+        const rpOrder = await createOrderForMerchant(merchantAuth, {
+          amount: Math.round(Number(subtotal) * 100),
+          currency: 'INR',
+          receipt: orderNumber,
+          notes: {
+            owner_id: outlet.owner_id,
+            restaurant_name: outlet.brand_name || outlet.name,
+            outlet_id,
+            outlet_name: outlet.name,
+            order_id: sessionId,
+            order_number: orderNumber,
+            customer_name: customer_name.trim(),
+          },
+        });
+
+        await client.query(
+          `INSERT INTO public.checkout_sessions (id, outlet_id, gateway_order_id, payload)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            sessionId,
+            outlet_id,
+            rpOrder.id,
+            JSON.stringify({
+              body: req.body,
+              order_number: orderNumber,
+              subtotal,
+              total: subtotal,
+              resolved_table_number: resolvedTableNumber,
+            }),
+          ]
+        );
+
+        await client.query('COMMIT');
+
+        return res.json({
+          order_id: sessionId,
+          order_number: orderNumber,
+          total: Number(subtotal),
+          payment_method: 'online',
+          payment_status: 'created',
+          payment_id: null,
+          requires_online_payment: true,
+          razorpay: {
+            order_id: rpOrder.id,
+            amount: rpOrder.amount,
+            currency: rpOrder.currency,
+            key_id: checkoutKeyId,
+          },
+        });
+      }
+
+      // COD flow
       const deliveryLat =
         order_type === 'delivery' ? Number(delivery_latitude) : null;
       const deliveryLng =
@@ -267,8 +329,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           customer_name.trim(),
           customer_phone?.trim() || null,
           payMethod,
-          paymentStatus,
-          payMethod === 'online' ? 'razorpay' : null,
+          'not_required',
+          null,
         ]
       );
       const order = orderRows[0];
@@ -289,88 +351,17 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         );
       }
 
-      let paymentId = null;
-      if (payMethod === 'online') {
-        const { rows: payRows } = await client.query(
-          `INSERT INTO public.order_payments (order_id, outlet_id, amount, method, status, gateway, currency, metadata)
-           VALUES ($1,$2,$3,'online','pending','razorpay','INR',$4)
-           RETURNING id`,
-          [
-            order.id,
-            outlet_id,
-            subtotal,
-            JSON.stringify({
-              owner_id: outlet.owner_id,
-              outlet_id,
-              outlet_name: outlet.name,
-              order_id: order.id,
-              order_number: order.order_number,
-              customer_name: customer_name.trim(),
-            }),
-          ]
-        );
-        paymentId = payRows[0].id;
-      }
-
       await client.query('COMMIT');
 
-      const payload = {
+      res.json({
         order_id: order.id,
         order_number: order.order_number,
         total: Number(order.total),
         payment_method: order.payment_method,
         payment_status: order.payment_status,
-        payment_id: paymentId,
-        requires_online_payment: payMethod === 'online',
-      };
-
-      if (payMethod === 'online') {
-        const merchantAuth = await getMerchantAuth(outlet.owner_id);
-        if (!merchantAuth) throw new Error('Razorpay account is not connected for this restaurant');
-        const checkoutKeyId =
-          merchantAuth.mode === 'api_keys'
-            ? merchantAuth.keyId
-            : getCheckoutKeyId(razorpayConnFromRow(outlet));
-        if (!checkoutKeyId) throw new Error('Razorpay checkout key is not available for this restaurant');
-
-        const rpOrder = await createOrderForMerchant(merchantAuth, {
-          amount: Math.round(Number(order.total) * 100),
-          currency: 'INR',
-          receipt: order.order_number,
-          notes: {
-            owner_id: outlet.owner_id,
-            restaurant_name: outlet.brand_name || outlet.name,
-            outlet_id,
-            outlet_name: outlet.name,
-            order_id: order.id,
-            order_number: order.order_number,
-            customer_name: customer_name.trim(),
-          },
-        });
-
-        await pool.query(
-          `UPDATE public.order_payments
-             SET status = 'created',
-                 gateway_order_id = $2,
-                 metadata = metadata || $3::jsonb
-           WHERE id = $1`,
-          [paymentId, rpOrder.id, JSON.stringify({ razorpay_order: rpOrder })]
-        );
-        await pool.query(
-          `UPDATE public.orders SET payment_status = 'created' WHERE id = $1`,
-          [order.id]
-        );
-
-        payload.payment_status = 'created';
-        payload.razorpay = {
-          order_id: rpOrder.id,
-          amount: rpOrder.amount,
-          currency: rpOrder.currency,
-          key_id: checkoutKeyId,
-        };
-      }
-
-      res.json(payload);
+        payment_id: null,
+        requires_online_payment: false,
+      });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('POST customer-orders:', err);
@@ -404,7 +395,66 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
          WHERE o.id = $1 AND o.source = 'online'`,
         [orderId]
       );
-      if (rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+      if (rows.length === 0) {
+        const { rows: sessionRows } = await pool.query(
+          `SELECT cs.id, cs.outlet_id, cs.gateway_order_id, cs.payload,
+                  out.name AS outlet_name, out.upi_vpa AS outlet_upi_vpa, out.upi_display_name, out.upi_qr_url,
+                  out.online_payments_enabled AS outlet_online_payments_enabled,
+                  p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
+                  p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
+                  p.brand_name,
+                  rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
+                  rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
+                  rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                  rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
+           FROM public.checkout_sessions cs
+           JOIN public.outlets out ON out.id = cs.outlet_id
+           JOIN public.profiles p ON p.user_id = out.owner_id
+           LEFT JOIN public.razorpay_connections rc ON rc.owner_id = out.owner_id
+           WHERE cs.id = $1`,
+          [orderId]
+        );
+        if (sessionRows.length === 0) {
+          return res.status(404).json({ error: 'Order not found' });
+        }
+        const sRow = sessionRows[0];
+        const sPayload = sRow.payload;
+        const settings = resolvePaymentSettings(
+          {
+            upi_vpa: sRow.outlet_upi_vpa,
+            upi_display_name: sRow.upi_display_name,
+            upi_qr_url: sRow.upi_qr_url,
+            online_payments_enabled: sRow.outlet_online_payments_enabled,
+            name: sRow.outlet_name,
+          },
+          {
+            upi_vpa: sRow.profile_upi_vpa,
+            upi_display_name: sRow.profile_upi_display_name,
+            upi_qr_url: sRow.profile_upi_qr_url,
+            online_payments_enabled: sRow.profile_online_payments_enabled,
+            brand_name: sRow.brand_name,
+          },
+          razorpayConnFromRow(sRow)
+        );
+        const checkoutKeyId = getCheckoutKeyId(razorpayConnFromRow(sRow));
+        return res.json({
+          order_id: sRow.id,
+          order_number: sPayload.order_number,
+          total: Number(sPayload.total),
+          payment_method: 'online',
+          payment_status: 'created',
+          payment_id: null,
+          payment_record_status: 'created',
+          gateway: 'razorpay',
+          gateway_order_id: sRow.gateway_order_id,
+          gateway_payment_id: null,
+          currency: 'INR',
+          razorpay_key_id: checkoutKeyId,
+          customer_reference: null,
+          upi_vpa: settings.upi_vpa,
+          ...settings,
+        });
+      }
       const row = rows[0];
       const settings = resolvePaymentSettings(
         {
@@ -494,7 +544,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
     }
 
     try {
-      const { rows } = await pool.query(
+      // 1. Check if order already exists in database
+      const { rows: orderRows } = await pool.query(
         `SELECT o.id, o.payment_status, o.outlet_id, out.owner_id,
                 op.id AS payment_id, op.gateway_order_id, op.status AS payment_record_status
          FROM public.orders o
@@ -504,12 +555,28 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
          LIMIT 1`,
         [orderId]
       );
-      const row = rows[0];
-      if (!row) return res.status(404).json({ error: 'Order not found' });
-      if (!row.payment_id) return res.status(400).json({ error: 'No payment record found' });
-      if (row.payment_status === 'paid') return res.json({ success: true, payment_status: 'paid' });
 
-      const merchantAuth = await getMerchantAuth(row.owner_id);
+      let ownerId = null;
+      let existingOrder = orderRows[0];
+
+      if (existingOrder) {
+        ownerId = existingOrder.owner_id;
+      } else {
+        // Query checkout session
+        const { rows: sessionRows } = await pool.query(
+          `SELECT cs.outlet_id, out.owner_id
+           FROM public.checkout_sessions cs
+           JOIN public.outlets out ON out.id = cs.outlet_id
+           WHERE cs.id = $1`,
+          [orderId]
+        );
+        if (sessionRows.length === 0) {
+          return res.status(404).json({ error: 'Order or payment session not found' });
+        }
+        ownerId = sessionRows[0].owner_id;
+      }
+
+      const merchantAuth = await getMerchantAuth(ownerId);
       if (!merchantAuth) return res.status(400).json({ error: 'Razorpay is not connected for this restaurant' });
       const keySecret =
         merchantAuth.mode === 'api_keys'
@@ -517,6 +584,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           : process.env.RAZORPAY_KEY_SECRET;
       if (!keySecret) return res.status(500).json({ error: 'Razorpay secret is not configured' });
 
+      // Verify Razorpay signature
       const expected = crypto
         .createHmac('sha256', keySecret)
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -524,44 +592,60 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       if (expected !== razorpay_signature) {
         return res.status(400).json({ error: 'Payment signature verification failed' });
       }
-      if (row.gateway_order_id && row.gateway_order_id !== razorpay_order_id) {
-        return res.status(409).json({ error: 'Order ID mismatch for this payment attempt' });
-      }
 
       const payment = await fetchPaymentForMerchant(merchantAuth, razorpay_payment_id);
+      const paymentStatus = payment.status === 'captured' ? 'captured' : 'authorized';
 
-      await pool.query(
-        `UPDATE public.order_payments
-           SET status = CASE WHEN $2 = 'captured' THEN 'paid' ELSE 'authorized' END,
-               gateway_order_id = COALESCE(gateway_order_id, $1),
-               gateway_payment_id = $3,
-               gateway_signature = $4,
-               authorized_at = CASE WHEN $2 IN ('authorized', 'captured') THEN now() ELSE authorized_at END,
-               paid_at = CASE WHEN $2 = 'captured' THEN now() ELSE paid_at END,
-               metadata = metadata || $5::jsonb
-         WHERE id = $6`,
-        [
-          razorpay_order_id,
-          payment.status || 'authorized',
+      if (!existingOrder) {
+        // Create the order now!
+        const createdOrder = await createOrderFromSession(
+          orderId,
           razorpay_payment_id,
           razorpay_signature,
-          JSON.stringify({ verified_payment: payment }),
-          row.payment_id,
-        ]
-      );
+          paymentStatus
+        );
+        return res.json({
+          success: true,
+          payment_status: createdOrder.payment_status,
+          payment_method: 'online',
+        });
+      }
 
-      const status = payment.status === 'captured' ? 'paid' : 'authorized';
-      await pool.query(
-        `UPDATE public.orders
-           SET payment_status = $2,
-               paid_at = CASE WHEN $2 = 'paid' THEN now() ELSE paid_at END
-         WHERE id = $1`,
-        [orderId, status]
-      );
+      // If order already existed, update the payment status if it was not paid
+      if (existingOrder.payment_status !== 'paid') {
+        await pool.query(
+          `UPDATE public.order_payments
+             SET status = CASE WHEN $2 = 'captured' THEN 'paid' ELSE 'authorized' END,
+                 gateway_order_id = COALESCE(gateway_order_id, $1),
+                 gateway_payment_id = $3,
+                 gateway_signature = $4,
+                 authorized_at = CASE WHEN $2 IN ('authorized', 'captured') THEN now() ELSE authorized_at END,
+                 paid_at = CASE WHEN $2 = 'captured' THEN now() ELSE paid_at END,
+                 metadata = metadata || $5::jsonb
+           WHERE id = $6`,
+          [
+            razorpay_order_id,
+            payment.status || 'authorized',
+            razorpay_payment_id,
+            razorpay_signature,
+            JSON.stringify({ verified_payment: payment }),
+            existingOrder.payment_id,
+          ]
+        );
+
+        const status = paymentStatus === 'captured' ? 'paid' : 'authorized';
+        await pool.query(
+          `UPDATE public.orders
+             SET payment_status = $2,
+                 paid_at = CASE WHEN $2 = 'paid' THEN now() ELSE paid_at END
+           WHERE id = $1`,
+          [orderId, status]
+        );
+      }
 
       return res.json({
         success: true,
-        payment_status: status,
+        payment_status: paymentStatus === 'captured' ? 'paid' : 'authorized',
         payment_method: 'online',
       });
     } catch (err) {
@@ -647,4 +731,138 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       res.status(500).json({ error: err.message });
     }
   });
+}
+
+export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewaySignature, paymentStatus) {
+  // 1. Check if the order already exists in public.orders
+  const { rows: existing } = await pool.query(
+    'SELECT id, order_number, total, payment_method, payment_status FROM public.orders WHERE id = $1 LIMIT 1',
+    [sessionId]
+  );
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  // 2. Fetch the session from public.checkout_sessions
+  const { rows: sessionRows } = await pool.query(
+    'SELECT * FROM public.checkout_sessions WHERE id = $1 LIMIT 1',
+    [sessionId]
+  );
+  const session = sessionRows[0];
+  if (!session) {
+    throw new Error('Checkout session not found or expired');
+  }
+
+  const { body, order_number, subtotal, total, resolved_table_number } = session.payload;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Fetch outlet owner
+    const { rows: outletRows } = await client.query(
+      'SELECT owner_id, name FROM public.outlets WHERE id = $1 LIMIT 1',
+      [session.outlet_id]
+    );
+    const outlet = outletRows[0];
+    if (!outlet) {
+      throw new Error('Outlet not found');
+    }
+
+    // Create the order
+    const deliveryLat = body.order_type === 'delivery' ? Number(body.delivery_latitude) : null;
+    const deliveryLng = body.order_type === 'delivery' ? Number(body.delivery_longitude) : null;
+
+    const { rows: orderRows } = await client.query(
+      `INSERT INTO public.orders (
+        id, outlet_id, order_number, order_type, table_number, table_id, delivery_address,
+        delivery_pincode, delivery_city, delivery_state,
+        delivery_latitude, delivery_longitude,
+        subtotal, total, notes, status, source, customer_name, customer_phone,
+        payment_method, payment_status, payment_gateway
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending','online',$16,$17,'online',$18,'razorpay')
+      RETURNING id, order_number, total, payment_method, payment_status`,
+      [
+        sessionId,
+        session.outlet_id,
+        order_number,
+        body.order_type,
+        resolved_table_number,
+        body.order_type === 'dine_in' ? body.table_id || null : null,
+        body.order_type === 'delivery' ? body.delivery_address.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_pincode.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_city.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_state.trim() : null,
+        deliveryLat,
+        deliveryLng,
+        subtotal,
+        total,
+        body.notes?.trim() || null,
+        body.customer_name.trim(),
+        body.customer_phone?.trim() || null,
+        paymentStatus === 'captured' ? 'paid' : 'authorized',
+      ]
+    );
+    const order = orderRows[0];
+
+    // Insert order items
+    for (const it of body.items) {
+      await client.query(
+        `INSERT INTO public.order_items (order_id, menu_item_id, item_name, quantity, unit_price, total_price, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          order.id,
+          it.menu_item_id,
+          it.item_name,
+          it.quantity,
+          it.unit_price,
+          it.unit_price * it.quantity,
+          it.notes || null,
+        ]
+      );
+    }
+
+    // Insert order payments
+    await client.query(
+      `INSERT INTO public.order_payments (
+        order_id, outlet_id, amount, method, status, gateway, currency,
+        gateway_order_id, gateway_payment_id, gateway_signature, authorized_at, paid_at, metadata
+      ) VALUES ($1,$2,$3,'online',$4,'razorpay','INR',$5,$6,$7,
+        CASE WHEN $4 IN ('authorized', 'paid') THEN now() ELSE null END,
+        CASE WHEN $4 = 'paid' THEN now() ELSE null END,
+        $8
+      )`,
+      [
+        order.id,
+        session.outlet_id,
+        subtotal,
+        paymentStatus === 'captured' ? 'paid' : 'authorized',
+        session.gateway_order_id,
+        gatewayPaymentId,
+        gatewaySignature,
+        JSON.stringify({
+          owner_id: outlet.owner_id,
+          outlet_id: session.outlet_id,
+          outlet_name: outlet.name,
+          order_id: order.id,
+          order_number: order.order_number,
+          customer_name: body.customer_name.trim(),
+        }),
+      ]
+    );
+
+    // Delete the checkout session
+    await client.query(
+      'DELETE FROM public.checkout_sessions WHERE id = $1',
+      [sessionId]
+    );
+
+    await client.query('COMMIT');
+    return order;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

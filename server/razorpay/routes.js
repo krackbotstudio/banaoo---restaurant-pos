@@ -9,7 +9,8 @@ import {
   isRazorpayConnectionActive,
   saveApiKeyConnection,
 } from './auth.js';
-import { createRefundForAccount, fetchPaymentForAccount } from './client.js';
+import { createRefundForAccount } from './client.js';
+import { createOrderFromSession } from '../customer-orders.js';
 import {
   getRazorpayOAuthClientId,
   isRazorpayOAuthConfigured,
@@ -306,6 +307,22 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
 
       if (event?.event === 'payment.authorized' || event?.event === 'payment.captured') {
         const entity = event.payload.payment.entity;
+
+        if (orderId) {
+          const { rows: orderRows } = await pool.query(
+            `SELECT id FROM public.orders WHERE id = $1 LIMIT 1`,
+            [orderId]
+          );
+          if (orderRows.length === 0) {
+            const paymentStatus = event.event === 'payment.captured' ? 'captured' : 'authorized';
+            try {
+              await createOrderFromSession(orderId, entity.id, signature, paymentStatus);
+            } catch (sessionErr) {
+              console.error('Webhook createOrderFromSession error:', sessionErr);
+            }
+          }
+        }
+
         await pool.query(
           `UPDATE public.order_payments
              SET gateway_payment_id = COALESCE($2, gateway_payment_id),

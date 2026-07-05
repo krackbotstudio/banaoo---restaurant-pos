@@ -221,7 +221,7 @@ export function AppSidebar() {
         )}
       </SidebarHeader>
 
-      <SidebarContent className="flex-1 gap-0 px-2 py-2 overflow-hidden">
+      <SidebarContent className="flex-1 gap-0 px-2 py-2 overflow-y-auto">
         {allowedSections.map((section, sectionIndex) => (
           <SidebarGroup key={section.id} className={`p-0 ${sectionIndex > 0 ? "mt-3" : ""}`}>
             {!collapsed && (
