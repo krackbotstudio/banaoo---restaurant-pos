@@ -45,6 +45,102 @@ function razorpayConnFromRow(row) {
   };
 }
 
+/** Customer completed Razorpay checkout — treat as paid for restaurant order fulfillment. */
+export function orderPaymentStatusFromGateway(gatewayStatus) {
+  const s = String(gatewayStatus || '').toLowerCase();
+  if (s === 'captured' || s === 'paid') return 'paid';
+  if (s === 'authorized') return 'paid';
+  if (s === 'failed') return 'failed';
+  return 'authorized';
+}
+
+function orderPaymentRecordStatusFromGateway(gatewayStatus) {
+  const s = String(gatewayStatus || '').toLowerCase();
+  if (s === 'captured' || s === 'paid') return 'paid';
+  if (s === 'authorized') return 'authorized';
+  if (s === 'failed') return 'failed';
+  return 'pending';
+}
+
+export async function applyOnlinePaymentToOrder({
+  orderId,
+  outletId,
+  amount,
+  gatewayOrderId,
+  gatewayPaymentId,
+  gatewaySignature,
+  gatewayStatus,
+  metadata = {},
+}) {
+  const orderStatus = orderPaymentStatusFromGateway(gatewayStatus);
+  const recordStatus = orderPaymentRecordStatusFromGateway(gatewayStatus);
+  const isPaid = orderStatus === 'paid';
+
+  await pool.query(
+    `UPDATE public.orders
+       SET payment_status = $2,
+           payment_method = 'online',
+           payment_gateway = COALESCE(payment_gateway, 'razorpay'),
+           paid_at = CASE WHEN $2 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+           updated_at = now()
+     WHERE id = $1`,
+    [orderId, orderStatus]
+  );
+
+  const { rows: existingPayments } = await pool.query(
+    `SELECT id FROM public.order_payments WHERE order_id = $1 LIMIT 1`,
+    [orderId]
+  );
+
+  if (existingPayments[0]) {
+    await pool.query(
+      `UPDATE public.order_payments
+         SET status = $2,
+             method = 'online',
+             gateway = COALESCE(gateway, 'razorpay'),
+             gateway_order_id = COALESCE(gateway_order_id, $3),
+             gateway_payment_id = COALESCE($4, gateway_payment_id),
+             gateway_signature = COALESCE($5, gateway_signature),
+             authorized_at = CASE WHEN $2 IN ('authorized', 'paid') AND authorized_at IS NULL THEN now() ELSE authorized_at END,
+             paid_at = CASE WHEN $2 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb,
+             updated_at = now()
+       WHERE id = $1`,
+      [
+        existingPayments[0].id,
+        recordStatus,
+        gatewayOrderId,
+        gatewayPaymentId,
+        gatewaySignature,
+        JSON.stringify(metadata),
+      ]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO public.order_payments (
+         order_id, outlet_id, amount, method, status, gateway, currency,
+         gateway_order_id, gateway_payment_id, gateway_signature,
+         authorized_at, paid_at, metadata
+       ) VALUES ($1,$2,$3,'online',$4,'razorpay','INR',$5,$6,$7,
+         CASE WHEN $4 IN ('authorized', 'paid') THEN now() ELSE NULL END,
+         CASE WHEN $4 = 'paid' THEN now() ELSE NULL END,
+         $8)`,
+      [
+        orderId,
+        outletId,
+        amount,
+        recordStatus,
+        gatewayOrderId,
+        gatewayPaymentId,
+        gatewaySignature,
+        JSON.stringify(metadata),
+      ]
+    );
+  }
+
+  return { payment_status: orderStatus, is_paid: isPaid };
+}
+
 export function registerCustomerOrderRoutes(app, { requireAuth }) {
   app.get('/api/public/outlets/:outletId/payment-settings', async (req, res) => {
     const { outletId } = req.params;
@@ -594,15 +690,14 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       }
 
       const payment = await fetchPaymentForMerchant(merchantAuth, razorpay_payment_id);
-      const paymentStatus = payment.status === 'captured' ? 'captured' : 'authorized';
+      const gatewayStatus = payment.status || 'authorized';
 
       if (!existingOrder) {
-        // Create the order now!
         const createdOrder = await createOrderFromSession(
           orderId,
           razorpay_payment_id,
           razorpay_signature,
-          paymentStatus
+          gatewayStatus
         );
         return res.json({
           success: true,
@@ -611,41 +706,25 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         });
       }
 
-      // If order already existed, update the payment status if it was not paid
-      if (existingOrder.payment_status !== 'paid') {
-        await pool.query(
-          `UPDATE public.order_payments
-             SET status = CASE WHEN $2 = 'captured' THEN 'paid' ELSE 'authorized' END,
-                 gateway_order_id = COALESCE(gateway_order_id, $1),
-                 gateway_payment_id = $3,
-                 gateway_signature = $4,
-                 authorized_at = CASE WHEN $2 IN ('authorized', 'captured') THEN now() ELSE authorized_at END,
-                 paid_at = CASE WHEN $2 = 'captured' THEN now() ELSE paid_at END,
-                 metadata = metadata || $5::jsonb
-           WHERE id = $6`,
-          [
-            razorpay_order_id,
-            payment.status || 'authorized',
-            razorpay_payment_id,
-            razorpay_signature,
-            JSON.stringify({ verified_payment: payment }),
-            existingOrder.payment_id,
-          ]
-        );
-
-        const status = paymentStatus === 'captured' ? 'paid' : 'authorized';
-        await pool.query(
-          `UPDATE public.orders
-             SET payment_status = $2,
-                 paid_at = CASE WHEN $2 = 'paid' THEN now() ELSE paid_at END
-           WHERE id = $1`,
-          [orderId, status]
-        );
-      }
+      const { rows: orderMeta } = await pool.query(
+        `SELECT o.outlet_id, o.total FROM public.orders o WHERE o.id = $1`,
+        [orderId]
+      );
+      const meta = orderMeta[0];
+      const applied = await applyOnlinePaymentToOrder({
+        orderId,
+        outletId: meta?.outlet_id || existingOrder.outlet_id,
+        amount: meta?.total,
+        gatewayOrderId: razorpay_order_id,
+        gatewayPaymentId: razorpay_payment_id,
+        gatewaySignature: razorpay_signature,
+        gatewayStatus,
+        metadata: { verified_payment: payment },
+      });
 
       return res.json({
         success: true,
-        payment_status: paymentStatus === 'captured' ? 'paid' : 'authorized',
+        payment_status: applied.payment_status,
         payment_method: 'online',
       });
     } catch (err) {
@@ -733,17 +812,37 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
   });
 }
 
-export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewaySignature, paymentStatus) {
-  // 1. Check if the order already exists in public.orders
+export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewaySignature, gatewayStatus) {
+  const orderPaymentStatus = orderPaymentStatusFromGateway(gatewayStatus);
+
   const { rows: existing } = await pool.query(
-    'SELECT id, order_number, total, payment_method, payment_status FROM public.orders WHERE id = $1 LIMIT 1',
+    'SELECT id, order_number, total, payment_method, payment_status, outlet_id FROM public.orders WHERE id = $1 LIMIT 1',
     [sessionId]
   );
   if (existing.length > 0) {
-    return existing[0];
+    const row = existing[0];
+    if (row.payment_status !== 'paid') {
+      const { rows: sess } = await pool.query(
+        'SELECT gateway_order_id FROM public.checkout_sessions WHERE id = $1 LIMIT 1',
+        [sessionId]
+      );
+      await applyOnlinePaymentToOrder({
+        orderId: row.id,
+        outletId: row.outlet_id,
+        amount: row.total,
+        gatewayOrderId: sess[0]?.gateway_order_id || null,
+        gatewayPaymentId,
+        gatewaySignature,
+        gatewayStatus,
+        metadata: { source: 'createOrderFromSession_existing' },
+      });
+    }
+    const { rows: refreshed } = await pool.query(
+      'SELECT id, order_number, total, payment_method, payment_status FROM public.orders WHERE id = $1',
+      [sessionId]
+    );
+    return refreshed[0] || row;
   }
-
-  // 2. Fetch the session from public.checkout_sessions
   const { rows: sessionRows } = await pool.query(
     'SELECT * FROM public.checkout_sessions WHERE id = $1 LIMIT 1',
     [sessionId]
@@ -800,7 +899,7 @@ export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewa
         body.notes?.trim() || null,
         body.customer_name.trim(),
         body.customer_phone?.trim() || null,
-        paymentStatus === 'captured' ? 'paid' : 'authorized',
+        orderPaymentStatus,
       ]
     );
     const order = orderRows[0];
@@ -822,7 +921,6 @@ export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewa
       );
     }
 
-    // Insert order payments
     await client.query(
       `INSERT INTO public.order_payments (
         order_id, outlet_id, amount, method, status, gateway, currency,
@@ -836,7 +934,7 @@ export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewa
         order.id,
         session.outlet_id,
         subtotal,
-        paymentStatus === 'captured' ? 'paid' : 'authorized',
+        orderPaymentRecordStatusFromGateway(gatewayStatus),
         session.gateway_order_id,
         gatewayPaymentId,
         gatewaySignature,
@@ -850,6 +948,10 @@ export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewa
         }),
       ]
     );
+
+    if (orderPaymentStatus === 'paid') {
+      await client.query(`UPDATE public.orders SET paid_at = now() WHERE id = $1`, [order.id]);
+    }
 
     // Delete the checkout session
     await client.query(

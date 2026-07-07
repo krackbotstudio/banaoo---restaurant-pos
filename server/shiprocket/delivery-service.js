@@ -347,6 +347,90 @@ export async function retryShipmentBooking(orderId, outletId) {
   return bookShipment(rows[0]);
 }
 
+const SHIPPED_STATUSES = [
+  'shipment_created',
+  'awaiting_rider',
+  'rider_assigned',
+  'picked_up',
+  'out_for_delivery',
+  'delivered',
+];
+
+export async function confirmAndShipOrder(orderId, outletId) {
+  const conn = await getConnection(outletId);
+  if (!conn?.is_connected) {
+    throw new Error('Connect Shiprocket in Settings → Delivery before shipping orders.');
+  }
+
+  const { rows: orderRows } = await pool.query(
+    `SELECT * FROM public.orders WHERE id = $1 AND outlet_id = $2`,
+    [orderId, outletId]
+  );
+  const order = orderRows[0];
+  if (!order) throw new Error('Order not found');
+  if (order.order_type !== 'delivery') {
+    throw new Error('Only delivery orders can be shipped with Shiprocket.');
+  }
+  if (['swiggy', 'zomato'].includes(order.source)) {
+    throw new Error('Aggregator orders use platform delivery.');
+  }
+  if (['paid', 'cancelled'].includes(order.status)) {
+    throw new Error('Cannot ship a paid or cancelled order.');
+  }
+
+  if (['pending', 'preparing'].includes(order.status)) {
+    await pool.query(`UPDATE public.orders SET status = 'ready', updated_at = now() WHERE id = $1`, [
+      orderId,
+    ]);
+    await pool.query(
+      `UPDATE public.order_items SET status = 'ready'
+       WHERE order_id = $1 AND status IN ('pending', 'preparing')`,
+      [orderId]
+    );
+  }
+
+  const { rows: existing } = await pool.query(
+    `SELECT * FROM public.shiprocket_shipments WHERE order_id = $1 LIMIT 1`,
+    [orderId]
+  );
+  let ship = existing[0];
+  if (ship && SHIPPED_STATUSES.includes(ship.status)) {
+    return { shipment: ship, order_status: 'ready', already_booked: true };
+  }
+
+  if (!ship) {
+    const { rows } = await pool.query(
+      `INSERT INTO public.shiprocket_shipments (order_id, outlet_id, status, booking_scheduled_at)
+       VALUES ($1, $2, 'booking', now())
+       ON CONFLICT (order_id) DO UPDATE SET
+         status = CASE
+           WHEN shiprocket_shipments.status IN ('delivered', 'cancelled') THEN shiprocket_shipments.status
+           ELSE 'booking'
+         END,
+         booking_scheduled_at = now(),
+         updated_at = now()
+       RETURNING *`,
+      [orderId, outletId]
+    );
+    ship = rows[0];
+  } else {
+    const { rows } = await pool.query(
+      `UPDATE public.shiprocket_shipments SET
+         status = 'booking',
+         booking_scheduled_at = now(),
+         last_error = NULL,
+         updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [ship.id]
+    );
+    ship = rows[0];
+  }
+
+  const booked = await bookShipment(ship);
+  return { shipment: booked, order_status: 'ready', already_booked: false };
+}
+
 export async function cancelShipment(orderId, outletId) {
   const { rows } = await pool.query(
     `SELECT * FROM public.shiprocket_shipments WHERE order_id = $1 AND outlet_id = $2`,

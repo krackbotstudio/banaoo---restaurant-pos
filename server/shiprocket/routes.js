@@ -8,6 +8,7 @@ import {
   cancelShipment,
   onOrderStatusChange,
   scheduleShipmentBooking,
+  confirmAndShipOrder,
 } from './delivery-service.js';
 import { handleShiprocketWebhook, getPublicDeliveryStatus } from './webhook.js';
 import { logShiprocketAction } from './audit.js';
@@ -161,6 +162,18 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
       const result = await retryShipmentBooking(req.params.orderId, access.order.outlet_id);
       res.json({ success: true, shipment: result });
     } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/orders/:orderId/shiprocket/book', requireAuth, async (req, res) => {
+    const access = await assertOrderOwner(req.params.orderId, req.user.id);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    try {
+      const result = await confirmAndShipOrder(req.params.orderId, access.order.outlet_id);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      console.error('shiprocket book:', err);
       res.status(400).json({ error: err.message });
     }
   });

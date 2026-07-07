@@ -94,6 +94,33 @@ export function OrderDeliveryPanel({ orderId }: { orderId: string }) {
     }
   };
 
+  const handleBookNow = async () => {
+    setActing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/shiprocket/book`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Booking failed");
+      toast({
+        title: json.already_booked ? "Already shipped" : "Shipment created",
+        description: json.already_booked
+          ? "Rider is already assigned or on the way."
+          : "Shiprocket Quick booking started.",
+      });
+      await fetchDetails();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Shipment failed",
+        description: err instanceof Error ? err.message : "Could not create shipment",
+      });
+    } finally {
+      setActing(false);
+    }
+  };
+
   const handleCancel = async () => {
     setActing(true);
     try {
@@ -136,14 +163,18 @@ export function OrderDeliveryPanel({ orderId }: { orderId: string }) {
             Delivery
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          No Shiprocket shipment yet. Enable auto-delivery in Settings → Delivery.
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>No Shiprocket shipment yet. Book a Quick rider when the order is ready to go out.</p>
+          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleBookNow} disabled={acting}>
+            {acting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+            Confirm &amp; ship order
+          </Button>
         </CardContent>
       </Card>
     );
   }
 
-  const canRetry = ["booking_failed", "not_booked"].includes(shipment.status);
+  const canRetry = ["booking_failed", "not_booked", "booking"].includes(shipment.status);
   const canCancel = !["delivered", "cancelled"].includes(shipment.status) && shipment.shipment_id;
 
   return (
@@ -195,6 +226,12 @@ export function OrderDeliveryPanel({ orderId }: { orderId: string }) {
         )}
 
         <div className="flex flex-wrap gap-2 pt-2">
+          {canRetry && (
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleBookNow} disabled={acting}>
+              {acting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+              Confirm &amp; ship order
+            </Button>
+          )}
           {shipment.tracking_url && (
             <Button size="sm" variant="outline" asChild>
               <a href={shipment.tracking_url} target="_blank" rel="noreferrer">

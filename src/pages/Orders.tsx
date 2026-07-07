@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FloorPlanModal } from "@/components/floor-plan/FloorPlanModal";
-import { Loader2, Plus, ShoppingCart, Clock, CheckCircle, XCircle, ChefHat, MapPin, User, Utensils, Package, Printer, ArrowLeft, PlusCircle, Minus, Trash2, Banknote, CalendarDays, ChevronLeft, ChevronRight, ArrowLeftRight, LayoutGrid, List, ArrowUpDown, Filter, X } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, Clock, CheckCircle, XCircle, ChefHat, MapPin, User, Utensils, Package, Printer, ArrowLeft, PlusCircle, Minus, Trash2, Banknote, CalendarDays, ChevronLeft, ChevronRight, ArrowLeftRight, LayoutGrid, List, ArrowUpDown, Filter, X, Truck } from "lucide-react";
 import { PlatformBadge } from "@/components/integrations";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ import {
 } from "@/components/orders";
 import type { TableActivatePayload } from "@/components/floor-plan/TableGridView";
 import { API_URL } from "@/lib/api-url";
+import { canShipDeliveryOrder } from "@/lib/ship-order";
 import { OrderDeliveryPanel } from "@/components/delivery/OrderDeliveryPanel";
 
 interface Order {
@@ -47,6 +48,8 @@ interface Order {
   source: string;
   customer_name: string | null;
   delivery_address: string | null;
+  payment_status?: string | null;
+  payment_method?: string | null;
   order_items: { id: string }[];
 }
 
@@ -142,6 +145,7 @@ export default function Orders() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [shippingOrder, setShippingOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   // Discount: value + type toggle (% or ₹). Tax: always %
@@ -241,6 +245,8 @@ export default function Orders() {
         source,
         customer_name,
         delivery_address,
+        payment_status,
+        payment_method,
         order_items (id)
       `)
       .eq("outlet_id", currentOutlet.id)
@@ -736,6 +742,35 @@ export default function Orders() {
     cancelled: "Cancelled",
   };
 
+  const PAYMENT_STATUS_LABEL: Record<string, string> = {
+    paid: "Paid online",
+    authorized: "Payment authorized",
+    awaiting_confirmation: "Awaiting confirmation",
+    failed: "Payment failed",
+    created: "Payment pending",
+    not_required: "Pay at outlet",
+  };
+
+  const getPaymentBadge = (order: Order) => {
+    if (!order.payment_method || order.payment_method === "cod" || order.payment_status === "not_required") {
+      return null;
+    }
+    const label = PAYMENT_STATUS_LABEL[order.payment_status || ""] || order.payment_status || "Payment pending";
+    const paid = order.payment_status === "paid";
+    return (
+      <Badge
+        variant="outline"
+        className={
+          paid
+            ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+            : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+        }
+      >
+        {label}
+      </Badge>
+    );
+  };
+
   const getStatusIcon = (status: Order["status"]) => {
     switch (status) {
       case "pending":   return <Clock className="h-4 w-4" />;
@@ -903,6 +938,46 @@ export default function Orders() {
     await openOrderDetail(order);
     await handleStatusUpdate("cancelled", order);
     setUpdatingStatus(false);
+  };
+
+  const handleConfirmShip = async (orderArg?: Order) => {
+    const order = orderArg ?? (spotContext?.order ? orders.find((o) => o.id === spotContext.order!.id) : null);
+    if (!order || !canShipDeliveryOrder(order)) return;
+
+    setShippingOrder(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/shiprocket/book`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not create shipment");
+
+      const nextStatus = (json.order_status as Order["status"] | undefined) ?? order.status;
+      if (nextStatus !== order.status) {
+        setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: nextStatus } : prev));
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus } : o)));
+        setSpotContext((prev) => {
+          if (!prev?.order || prev.order.id !== order.id) return prev;
+          return { ...prev, order: { ...prev.order, status: nextStatus } };
+        });
+      }
+
+      toast({
+        title: json.already_booked ? "Already shipped" : "Shipment created",
+        description: json.already_booked
+          ? "A Shiprocket rider is already assigned or on the way."
+          : "Shiprocket Quick booking is in progress. Rider will be assigned shortly.",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Shipment failed",
+        description: err instanceof Error ? err.message : "Could not create shipment",
+      });
+    } finally {
+      setShippingOrder(false);
+    }
   };
 
   const filteredOrders = useMemo(() => {
@@ -1265,6 +1340,7 @@ export default function Orders() {
                           )}
                         </div>
                         {order.source !== 'pos' && <PlatformBadge source={order.source} />}
+                        {getPaymentBadge(order)}
                       </div>
                       {/* Secondary: order number as reference */}
                       <p className="text-xs text-muted-foreground mt-0.5">#{order.order_number}</p>
@@ -1394,6 +1470,9 @@ export default function Orders() {
                       <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="font-medium">{selectedOrder.customer_name}</span>
                     </div>
+                    {getPaymentBadge(selectedOrder) && (
+                      <div className="flex items-center gap-2">{getPaymentBadge(selectedOrder)}</div>
+                    )}
                     {selectedOrder.delivery_address && (
                       <div className="flex items-start gap-2 text-xs text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -1666,6 +1745,22 @@ export default function Orders() {
                   {printingBill ? "Printing..." : "Print Bill"}
                 </Button>}
 
+                {/* Confirm & ship — delivery orders (online / customer) */}
+                {selectedOrder && canShipDeliveryOrder(selectedOrder) && (
+                  <Button
+                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl gap-2"
+                    disabled={shippingOrder || updatingStatus}
+                    onClick={() => void handleConfirmShip(selectedOrder)}
+                  >
+                    {shippingOrder ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Truck className="h-5 w-5" />
+                    )}
+                    Confirm &amp; ship order
+                  </Button>
+                )}
+
                 {/* Progress: pending→preparing→ready→completed */}
                 {nextStatus(selectedOrder.status) && (
                   <Button
@@ -1737,8 +1832,13 @@ export default function Orders() {
         onMarkPaid={handleSpotMarkPaid}
         onChangeTable={handleSpotChangeTable}
         onCancelOrder={handleSpotCancelOrder}
+        onConfirmShip={(vo) => {
+          const order = orders.find((o) => o.id === vo.id);
+          if (order) void handleConfirmShip(order);
+        }}
         printingBill={printingBill}
         updatingStatus={updatingStatus}
+        shippingOrder={shippingOrder}
       />
 
       {/* ── Change Table — reuse the full floor-plan picker ── */}

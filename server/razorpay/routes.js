@@ -10,7 +10,7 @@ import {
   saveApiKeyConnection,
 } from './auth.js';
 import { createRefundForAccount } from './client.js';
-import { createOrderFromSession } from '../customer-orders.js';
+import { createOrderFromSession, orderPaymentStatusFromGateway } from '../customer-orders.js';
 import {
   getRazorpayOAuthClientId,
   isRazorpayOAuthConfigured,
@@ -341,9 +341,14 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
         await pool.query(
           `UPDATE public.orders
              SET payment_status = $2,
-                 paid_at = CASE WHEN $2 = 'paid' THEN now() ELSE paid_at END
+                 paid_at = CASE WHEN $2 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END
            WHERE id = $1`,
-          [orderId, event.event === 'payment.captured' ? 'paid' : 'authorized']
+          [
+            orderId,
+            orderPaymentStatusFromGateway(
+              event.event === 'payment.captured' ? 'captured' : entity.status || 'authorized'
+            ),
+          ]
         );
       } else if (event?.event === 'payment.failed') {
         const entity = event.payload.payment.entity;
