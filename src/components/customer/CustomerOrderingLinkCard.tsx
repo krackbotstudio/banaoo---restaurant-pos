@@ -9,7 +9,8 @@ export interface CustomerOrderingLinkCardProps {
   outletName: string;
   brandName?: string | null;
   orderingSlug?: string | null;
-  /** When false, show GPS reminder with optional manage link */
+  /** When false, hide the multi-outlet brand ordering page (use on a single outlet detail screen). */
+  showBrandLink?: boolean;
   hasGpsLocation?: boolean;
   manageHref?: string;
   manageReturnTo?: string;
@@ -20,6 +21,7 @@ export function CustomerOrderingLinkCard({
   outletName,
   brandName,
   orderingSlug,
+  showBrandLink = false,
   hasGpsLocation = true,
   manageHref,
   manageReturnTo,
@@ -43,7 +45,7 @@ export function CustomerOrderingLinkCard({
             Share these links with customers so they can order online from their phones.
           </p>
 
-          {brandUrl && (
+          {showBrandLink && brandUrl && (
             <OrderingLinkRow
               label="Brand ordering page"
               hint="Shows all outlets with GPS distance"

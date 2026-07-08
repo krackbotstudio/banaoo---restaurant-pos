@@ -29,7 +29,9 @@ export type AddonType =
   | "zomato_integration"
   | "customer_ordering"
   | "inventory_management"
-  | "whatsapp_integration";
+  | "whatsapp_integration"
+  | "shiprocket_delivery"
+  | "razorpay_payments";
 
 export interface AddonCatalogItem {
   type: AddonType;
@@ -55,6 +57,8 @@ export interface PlanLimits {
   inventoryManagement: boolean;
   whatsappIntegration: boolean;
   aiMenuImport: boolean;
+  shiprocketDelivery: boolean;
+  razorpayPayments: boolean;
   qrMenus: number;
 }
 
@@ -105,6 +109,8 @@ export const ADDON_PRICES = {
   customerOrderingPerMonth: 299,
   inventoryPerMonth: 399,
   whatsappPerMonth: 349,
+  shiprocketPerMonth: 0,
+  razorpayPerMonth: 0,
 } as const;
 
 export const ADDON_CATALOG: AddonCatalogItem[] = [
@@ -156,6 +162,21 @@ export const ADDON_CATALOG: AddonCatalogItem[] = [
     description:
       "Send digital bills and order updates to customers on WhatsApp — no manual typing or paper bills.",
     monthlyPrice: ADDON_PRICES.whatsappPerMonth,
+    stackable: false,
+  },
+  {
+    type: "shiprocket_delivery",
+    name: "Shiprocket delivery",
+    description: "Auto-book Shiprocket riders for your outlet's delivery orders.",
+    monthlyPrice: ADDON_PRICES.shiprocketPerMonth,
+    stackable: false,
+  },
+  {
+    type: "razorpay_payments",
+    name: "Razorpay payments",
+    description:
+      "Accept online payments on your customer ordering link via your Razorpay account (OAuth — no API keys).",
+    monthlyPrice: ADDON_PRICES.razorpayPerMonth,
     stackable: false,
   },
 ];
@@ -226,6 +247,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     inventoryManagement: false,
     whatsappIntegration: false,
     aiMenuImport: false,
+    shiprocketDelivery: false,
+    razorpayPayments: true,
     qrMenus: 3,
   },
   professional: {
@@ -242,6 +265,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     inventoryManagement: false,
     whatsappIntegration: false,
     aiMenuImport: false,
+    shiprocketDelivery: false,
+    razorpayPayments: true,
     qrMenus: 3,
   },
   enterprise: {
@@ -258,6 +283,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     inventoryManagement: true,
     whatsappIntegration: true,
     aiMenuImport: true,
+    shiprocketDelivery: true,
+    razorpayPayments: true,
     qrMenus: Infinity,
   },
 };
@@ -276,6 +303,8 @@ export const DEFAULT_LIMITS: PlanLimits = {
   inventoryManagement: false,
   whatsappIntegration: false,
   aiMenuImport: false,
+  shiprocketDelivery: false,
+  razorpayPayments: false,
   qrMenus: 0,
 };
 
@@ -376,6 +405,8 @@ export const UPGRADE_MESSAGES: Record<keyof PlanLimits, string> = {
   whatsappIntegration:
     "Purchase the WhatsApp integration add-on to send digital bills and updates on WhatsApp",
   aiMenuImport: "AI Menu Import is available on the Expand plan",
+  shiprocketDelivery: "Activate the free Shiprocket delivery add-on or upgrade to Expand",
+  razorpayPayments: "Razorpay payments are available for free on all restaurant plans",
   qrMenus: "Upgrade to Expand for unlimited QR menus",
 };
 

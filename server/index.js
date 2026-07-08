@@ -28,6 +28,9 @@ import { registerBillingRoutes } from './billing.js';
 import { registerDashboardQuickActionRoutes } from './dashboard-quick-actions.js';
 import { registerStaffRoutes } from './staff-api.js';
 import { registerInventoryRoutes, warmInventorySchema } from './inventory-api.js';
+import { registerShiprocketRoutes } from './shiprocket/routes.js';
+import { startShiprocketJobs } from './shiprocket/jobs.js';
+import { registerRazorpayRoutes } from './razorpay/routes.js';
 import { clearUnmodifiedSampleMenu } from './sample-menu.js';
 import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction, getCmsAdmin } from './admin/routes.js';
 import { extractMenuItemsFromImage } from './menu-extract.js';
@@ -920,6 +923,39 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
   });
 });
 
+app.get('/api/manifest', (req, res) => {
+  const name = String(req.query?.name || 'Order Food');
+  const startUrl = String(req.query?.start_url || '/');
+  const color = String(req.query?.color || '#f97316');
+
+  const shortName = name.length > 12 ? name.slice(0, 12) : name;
+
+  const manifest = {
+    name,
+    short_name: shortName,
+    description: `Order food from ${name}`,
+    start_url: startUrl,
+    scope: startUrl,
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: color,
+    orientation: 'any',
+    icons: [
+      {
+        src: '/logo.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+    ],
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.json(manifest);
+});
+
 /** At most one outlet per owner may be is_active; fixes legacy rows with multiple enabled. */
 async function ensureSingleActiveOutlet(ownerId) {
   const { rows: activeRows } = await pool.query(
@@ -1571,6 +1607,18 @@ const BASE_PRICES = {
 
 const BILLING_PERIOD_MONTHS = [3, 6, 12];
 const ADDON_BILLING_PERIOD_MONTHS = [1, 3, 6, 12];
+const SUPPORTED_ADDON_TYPES = new Set([
+  'extra_outlet',
+  'extra_staff',
+  'swiggy_integration',
+  'zomato_integration',
+  'customer_ordering',
+  'inventory_management',
+  'whatsapp_integration',
+  'shiprocket_delivery',
+  'razorpay_payments',
+]);
+const FREE_ADDON_TYPES = new Set(['shiprocket_delivery', 'razorpay_payments']);
 
 const DISCOUNTS = {
   3: 0.05,
@@ -1706,6 +1754,11 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
   const { addon_type, quantity = 1, period_months } = req.body || {};
 
   try {
+    const addonType = typeof addon_type === 'string' ? addon_type.trim() : '';
+    if (!SUPPORTED_ADDON_TYPES.has(addonType)) {
+      return res.status(400).json({ error: `Unknown add-on: ${addon_type}` });
+    }
+
     const entitlements = await buildEntitlementsPayload(req.user.id);
     if (entitlements.access_source) {
       return res.status(400).json({
@@ -1723,8 +1776,31 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
       return res.status(500).json({ error: 'Razorpay credentials not configured' });
     }
 
-    const qty = normalizeAddonQuantity(addon_type, quantity);
-    const amountRupees = calcAddonAmount(addon_type, qty, months);
+    const qty = normalizeAddonQuantity(addonType, quantity);
+    const amountRupees = FREE_ADDON_TYPES.has(addonType)
+      ? 0
+      : calcAddonAmount(addonType, qty, months);
+
+    if (amountRupees === 0) {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + months);
+
+      await pool.query(
+        `INSERT INTO public.subscription_addons
+         (user_id, addon_type, quantity, status, period_months, expires_at)
+         VALUES ($1, $2, $3, 'active', $4, $5)`,
+        [req.user.id, addonType, qty, months, expiresAt]
+      );
+
+      const payload = await buildEntitlementsPayload(req.user.id);
+      return res.json({
+        free: true,
+        success: true,
+        expires_at: expiresAt,
+        ...payload,
+      });
+    }
+
     const amountPaise = amountRupees * 100;
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
@@ -1739,7 +1815,7 @@ app.post('/api/payments/create-addon-order', async (req, res) => {
         receipt: `addon_${req.user.id.slice(0, 8)}_${Date.now()}`,
         notes: {
           user_id: req.user.id,
-          addon_type,
+          addon_type: addonType,
           quantity: String(qty),
           period_months: String(months),
           kind: 'addon',
@@ -1847,7 +1923,7 @@ app.post('/api/payments/cancel-subscription', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
 // Upload endpoint
 app.post('/api/upload', (req, res) => {
   if (!req.isAuthenticated() && !getCmsAdmin(req)) {
@@ -2429,7 +2505,10 @@ registerDashboardBannerPublicRoutes(app, { requireAuth });
 registerDashboardQuickActionRoutes(app, { requireAuth });
 registerStaffRoutes(app, { requireAuth });
 registerInventoryRoutes(app, { requireAuth });
+registerShiprocketRoutes(app, { requireAuth });
+registerRazorpayRoutes(app, { requireAuth });
 void warmInventorySchema();
+startShiprocketJobs();
 console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');
 console.log('[api] Inventory routes: /api/outlets/:outletId/inventory, /api/inventory/:itemId');
 console.log('[api] Dashboard routes: GET /api/dashboard/banners, GET|PUT /api/dashboard/quick-actions');

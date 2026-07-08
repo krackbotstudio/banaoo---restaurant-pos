@@ -244,7 +244,7 @@ export default function Kitchen() {
       `)
       .eq("outlet_id", currentOutlet.id)
       .in("status", ["pending", "preparing"])
-      .or("payment_status.eq.not_required,payment_status.eq.paid,payment_status.is.null")
+      .or("payment_status.eq.not_required,payment_status.eq.paid,payment_status.eq.authorized,payment_status.is.null")
       .order("created_at", { ascending: true });
 
     if (!error && data) {

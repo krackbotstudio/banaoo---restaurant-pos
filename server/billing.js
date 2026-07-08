@@ -16,6 +16,8 @@ const ADDON_LABELS = {
   customer_ordering: 'Customer ordering',
   inventory_management: 'Inventory management',
   whatsapp_integration: 'WhatsApp integration',
+  shiprocket_delivery: 'Shiprocket delivery',
+  razorpay_payments: 'Razorpay payments',
 };
 
 const BASE_PRICES = { starter: 499, professional: 699 };

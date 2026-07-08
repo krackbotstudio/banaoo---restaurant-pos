@@ -39,6 +39,8 @@ import {
   Sparkles,
   Percent,
   MessageCircle,
+  Truck,
+  Wallet,
 } from "lucide-react";
 import { NativeBillingLinkButton } from "@/components/billing/NativeBillingLinkButton";
 import { AddonCardIcon } from "@/components/addons/AddonBrandLogo";
@@ -57,6 +59,8 @@ function addonOwnedLabel(type: AddonType, addons: SubscriptionAddons): string | 
   if (type === "customer_ordering" && addons.customer_ordering) return "Customer ordering active";
   if (type === "inventory_management" && addons.inventory) return "Inventory active";
   if (type === "whatsapp_integration" && addons.whatsapp) return "WhatsApp active";
+  if (type === "shiprocket_delivery" && addons.shiprocket) return "Shiprocket delivery active";
+  if (type === "razorpay_payments" && addons.razorpay) return "Razorpay payments active";
   return null;
 }
 
@@ -105,6 +109,18 @@ const ADDON_META: Record<
     gradient: "from-green-500/12 via-green-500/5 to-transparent",
     accent: "border-green-500/30",
     category: "Customer experience",
+  },
+  shiprocket_delivery: {
+    icon: Truck,
+    gradient: "from-sky-500/12 via-sky-500/5 to-transparent",
+    accent: "border-sky-500/30",
+    category: "Integrations",
+  },
+  razorpay_payments: {
+    icon: Wallet,
+    gradient: "from-indigo-500/12 via-indigo-500/5 to-transparent",
+    accent: "border-indigo-500/30",
+    category: "Integrations",
   },
 };
 
@@ -275,7 +291,11 @@ export default function Addons() {
                       ? limits.inventoryManagement
                       : item.type === "whatsapp_integration"
                         ? limits.whatsappIntegration
-                        : item.type === "swiggy_integration"
+                        : item.type === "shiprocket_delivery"
+                          ? limits.shiprocketDelivery
+                          : item.type === "razorpay_payments"
+                            ? limits.razorpayPayments
+                          : item.type === "swiggy_integration"
                           ? limits.swiggyIntegration
                           : item.type === "zomato_integration"
                             ? limits.zomatoIntegration
@@ -329,15 +349,20 @@ export default function Addons() {
                     <CardContent className="relative space-y-4">
                       <div>
                         <p className="text-2xl font-bold tracking-tight">
-                          {item.monthlyPrice != null
-                            ? `₹${total.toLocaleString("en-IN")}`
-                            : "Contact us"}
+                          {item.monthlyPrice == null
+                            ? "Contact us"
+                            : item.monthlyPrice === 0
+                              ? "Free"
+                              : `₹${total.toLocaleString("en-IN")}`}
                         </p>
-                        {item.monthlyPrice != null && (
+                        {item.monthlyPrice != null && item.monthlyPrice > 0 && (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             for {periodMonths} month{periodMonths !== 1 ? "s" : ""}
                             {item.stackable && qty > 1 ? ` · ${qty} units` : ""}
                           </p>
+                        )}
+                        {item.monthlyPrice === 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">No payment required</p>
                         )}
                       </div>
 
@@ -385,7 +410,11 @@ export default function Addons() {
                         ) : hasComplimentaryAccess ? (
                           "Included via admin access"
                         ) : isNativeAppBilling ? (
-                          `Continue in browser — ₹${total.toLocaleString("en-IN")}`
+                          item.monthlyPrice === 0
+                            ? "Activate free in browser"
+                            : `Continue in browser — ₹${total.toLocaleString("en-IN")}`
+                        ) : item.monthlyPrice === 0 ? (
+                          "Activate free"
                         ) : (
                           `Purchase — ₹${total.toLocaleString("en-IN")}`
                         )}

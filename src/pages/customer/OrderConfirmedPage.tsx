@@ -2,6 +2,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { CheckCircle2, Clock, UtensilsCrossed } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCustomer } from "@/context/customer-context";
+import { CustomerDeliveryTimeline } from "@/components/customer/CustomerDeliveryTimeline";
+import { useCart } from "@/context/cart-context";
 
 interface Outlet {
   id: string;
@@ -14,6 +17,7 @@ interface LocationState {
   total: number;
   payment_method: "cod" | "upi";
   awaiting_confirmation?: boolean;
+  order_type?: "dine_in" | "takeaway" | "delivery";
 }
 
 export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
@@ -22,6 +26,12 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
   const navigate = useNavigate();
   const state = location.state as LocationState | null;
   const [status, setStatus] = useState<string>("pending");
+  const { customer } = useCustomer();
+  const { clearCart } = useCart();
+
+  useEffect(() => {
+    clearCart();
+  }, [clearCart]);
 
   useEffect(() => {
     if (!state?.order_id) return;
@@ -103,6 +113,10 @@ export default function OrderConfirmedPage({ outlet, basePath }: { outlet: Outle
           <p className="text-xs text-gray-400 mt-1">Auto-refreshes every 10 seconds</p>
         </div>
       </div>
+
+      {state.order_type === "delivery" && state.order_id && (
+        <CustomerDeliveryTimeline orderId={state.order_id} customerPhone={customer?.phone} />
+      )}
 
       <button
         onClick={() => navigate(resolvedBase)}

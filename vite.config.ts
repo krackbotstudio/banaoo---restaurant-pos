@@ -8,11 +8,11 @@ export default defineConfig({
     host: "::",
     port: 8080,
     proxy: {
-      "/api": { target: "http://localhost:5001", changeOrigin: true },
+      "/api": { target: "http://localhost:5000", changeOrigin: true },
       // Proxy backend auth endpoints (register/login/me/google/clear-session/...),
       // but let Vite serve the SPA for the React routes /auth and /auth/callback.
       "/auth": {
-        target: "http://localhost:5001",
+        target: "http://localhost:5000",
         changeOrigin: true,
         bypass(req) {
           const url = req.url || "";

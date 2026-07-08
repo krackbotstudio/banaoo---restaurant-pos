@@ -23,6 +23,8 @@ export const PLAN_LIMITS = {
     inventoryManagement: false,
     whatsappIntegration: false,
     aiMenuImport: false,
+    shiprocketDelivery: false,
+    razorpayPayments: true,
     qrMenus: 3,
   },
   professional: {
@@ -39,6 +41,8 @@ export const PLAN_LIMITS = {
     inventoryManagement: false,
     whatsappIntegration: false,
     aiMenuImport: false,
+    shiprocketDelivery: false,
+    razorpayPayments: true,
     qrMenus: 3,
   },
   enterprise: {
@@ -55,6 +59,8 @@ export const PLAN_LIMITS = {
     inventoryManagement: true,
     whatsappIntegration: true,
     aiMenuImport: true,
+    shiprocketDelivery: true,
+    razorpayPayments: true,
     qrMenus: Infinity,
   },
 };
@@ -73,6 +79,8 @@ const DEFAULT_LIMITS = {
   inventoryManagement: false,
   whatsappIntegration: false,
   aiMenuImport: false,
+  shiprocketDelivery: false,
+  razorpayPayments: false,
   qrMenus: 0,
 };
 
@@ -84,6 +92,8 @@ export const ADDON_MONTHLY_PRICES = {
   customer_ordering: 299,
   inventory_management: 399,
   whatsapp_integration: 349,
+  shiprocket_delivery: 0,
+  razorpay_payments: 0,
 };
 
 const STACKABLE_ADDONS = new Set(['extra_outlet', 'extra_staff']);
@@ -97,6 +107,8 @@ export function aggregateAddonsFromRows(rows) {
     customer_ordering: false,
     inventory: false,
     whatsapp: false,
+    shiprocket: false,
+    razorpay: false,
   };
   for (const row of rows) {
     const qty = Number(row.quantity) || 0;
@@ -122,6 +134,12 @@ export function aggregateAddonsFromRows(rows) {
       case 'whatsapp_integration':
         out.whatsapp = out.whatsapp || qty > 0;
         break;
+      case 'shiprocket_delivery':
+        out.shiprocket = out.shiprocket || qty > 0;
+        break;
+      case 'razorpay_payments':
+        out.razorpay = out.razorpay || qty > 0;
+        break;
       default:
         break;
     }
@@ -146,6 +164,8 @@ export function computeEffectiveLimits(planType, addons, hasActiveSubscription) 
     swiggyIntegration: base.swiggyIntegration || addons.swiggy,
     zomatoIntegration: base.zomatoIntegration || addons.zomato,
     whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
+    shiprocketDelivery: base.shiprocketDelivery || addons.shiprocket,
+    razorpayPayments: base.razorpayPayments || addons.razorpay,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };
@@ -260,8 +280,10 @@ export async function buildEntitlementsPayload(userId) {
 }
 
 export function calcAddonAmount(addonType, quantity, months) {
+  if (!(addonType in ADDON_MONTHLY_PRICES)) {
+    throw new Error(`Unknown add-on: ${addonType}`);
+  }
   const monthly = ADDON_MONTHLY_PRICES[addonType];
-  if (!monthly) throw new Error(`Unknown add-on: ${addonType}`);
   const qty = STACKABLE_ADDONS.has(addonType) ? Math.max(1, Number(quantity) || 1) : 1;
   const DISCOUNTS = { 3: 0.05, 6: 0.1, 12: 0.2 };
   const discount = DISCOUNTS[months] ?? 0;

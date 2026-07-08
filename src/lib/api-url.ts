@@ -14,7 +14,7 @@ function resolveApiUrl(): string {
     const currentHost = window.location.hostname;
     // Local frontend should default to local backend to avoid CORS with production API.
     if (isLocalHost(currentHost) && /^https?:\/\/banaoo\.in$/i.test(fromEnv)) {
-      return "http://localhost:5001";
+      return "http://localhost:5000";
     }
   }
 

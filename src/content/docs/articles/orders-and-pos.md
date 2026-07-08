@@ -6,7 +6,7 @@
 |------|----------|
 | Dine-in | Table number on ticket and bill |
 | Takeaway | Packaged orders; no table |
-| Delivery / online | When integrated; appears with platform badge on kitchen |
+| Delivery / online | Customer ordering link or aggregator; Shiprocket for native delivery |
 
 ## Creating orders
 
@@ -58,7 +58,22 @@ Customers ordering via your **ordering link** can:
 
 Razorpay in Banaoo is for **subscriptions and add-ons only**, not customer food orders.
 
+## Native delivery (Shiprocket)
+
+For orders from your **customer ordering link** (not Swiggy/Zomato):
+
+1. Customer chooses **Delivery** at checkout (address, pincode, city, state required).
+2. Order appears in **Orders** with type **delivery**.
+3. Mark the order **Preparing** when the kitchen accepts it.
+4. If **Settings → Delivery → Shiprocket** is connected with **Auto-book delivery** on, Banaoo books a rider after your prep time.
+5. Open the order to see **Shiprocket Delivery** — AWB, courier, timeline, Track / Retry / Cancel.
+6. **Dashboard** shows delivery overview stats for the active outlet.
+
+Full setup: [Shiprocket delivery](/docs/shiprocket-delivery).
+
 ## Related
 
 - [Billing & receipts](/docs/billing-and-receipts)
 - [Kitchen display](/docs/kitchen)
+- [Shiprocket delivery](/docs/shiprocket-delivery)
+- [Outlets & menu](/docs/outlets-and-menu)

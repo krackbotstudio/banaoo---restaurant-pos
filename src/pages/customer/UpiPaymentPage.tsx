@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
-import { buildUpiPayUrl } from "@/lib/upi";
+import { ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { API_URL } from "@/lib/api-url";
-import { UpiPaymentQr } from "@/components/customer/UpiPaymentQr";
 import { useToast } from "@/hooks/use-toast";
 
 interface Outlet {
@@ -15,11 +13,17 @@ interface PaymentData {
   order_id: string;
   order_number: string;
   total: number;
+  currency?: string;
+  gateway?: string | null;
+  gateway_order_id?: string | null;
+  payment_method: string;
   payment_status: string;
-  upi_vpa: string | null;
-  upi_display_name: string | null;
-  upi_qr_url: string | null;
-  customer_reference?: string | null;
+}
+
+declare global {
+  interface Window {
+    Razorpay?: new (opts: unknown) => { open: () => void };
+  }
 }
 
 export default function UpiPaymentPage({
@@ -34,9 +38,21 @@ export default function UpiPaymentPage({
   const { toast } = useToast();
   const [data, setData] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [utr, setUtr] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (window.Razorpay) {
+      setSdkReady(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => setSdkReady(true);
+    script.onerror = () => setError("Could not load payment SDK. Please retry.");
+    document.body.appendChild(script);
+  }, []);
 
   useEffect(() => {
     if (!orderId) return;
@@ -52,7 +68,7 @@ export default function UpiPaymentPage({
               order_number: json.order_number,
               order_id: json.order_id,
               total: json.total,
-              payment_method: "upi",
+              payment_method: "online",
             },
             replace: true,
           });
@@ -73,52 +89,69 @@ export default function UpiPaymentPage({
     );
   }
 
-  if (!data?.upi_vpa) {
+  if (!data) {
     return (
       <div className="p-6 text-center text-sm text-gray-600">
-        {error || "UPI is not configured for this restaurant."}
+        {error || "Payment details not found."}
       </div>
     );
   }
 
-  const payUrl = buildUpiPayUrl({
-    vpa: data.upi_vpa,
-    payeeName: data.upi_display_name || outlet.name,
-    amount: data.total,
-    transactionRef: data.order_number,
-    note: `Order ${data.order_number}`,
-  });
-
-  const copyVpa = () => {
-    void navigator.clipboard.writeText(data.upi_vpa!);
-    toast({ title: "UPI ID copied" });
-  };
-
-  const handleSubmitUtr = async () => {
-    setError("");
-    if (!utr.trim()) {
-      setError("Enter your UTR / transaction reference");
+  const openCheckout = async () => {
+    if (!window.Razorpay) {
+      setError("Payment SDK is not ready yet. Please retry.");
       return;
     }
+    if (!data.gateway_order_id) {
+      setError("Payment order is not ready. Please retry in a moment.");
+      return;
+    }
+    setError("");
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/api/public/orders/${orderId}/submit-upi`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ utr: utr.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to submit");
-      navigate(`${basePath}/confirmed`, {
-        state: {
-          order_number: data.order_number,
-          order_id: data.order_id,
-          total: data.total,
-          payment_method: "upi",
-          awaiting_confirmation: true,
+      const keyRes = await fetch(`${API_URL}/api/public/orders/${orderId}/payment`);
+      const latest = await keyRes.json();
+      if (!keyRes.ok) throw new Error(latest.error || "Failed to initialize payment");
+
+      const keyId = latest?.razorpay_key_id || latest?.key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!keyId) throw new Error("Razorpay key is not configured");
+
+      const rzp = new window.Razorpay({
+        key: keyId,
+        amount: Math.round(Number(latest.total || data.total) * 100),
+        currency: latest.currency || data.currency || "INR",
+        name: outlet.name,
+        description: `Order ${latest.order_number || data.order_number}`,
+        order_id: latest.gateway_order_id || data.gateway_order_id,
+        modal: {
+          ondismiss: () => {
+            toast({ title: "Payment not completed", description: "You can retry payment from this page." });
+          },
         },
-        replace: true,
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          const verifyRes = await fetch(`${API_URL}/api/public/orders/${orderId}/verify-online-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(response),
+          });
+          const verifyJson = await verifyRes.json();
+          if (!verifyRes.ok) throw new Error(verifyJson.error || "Payment verification failed");
+          navigate(`${basePath}/confirmed`, {
+            state: {
+              order_number: latest.order_number || data.order_number,
+              order_id: latest.order_id || data.order_id,
+              total: Number(latest.total || data.total),
+              payment_method: "online",
+            },
+            replace: true,
+          });
+        },
       });
+      rzp.open();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -126,15 +159,13 @@ export default function UpiPaymentPage({
     }
   };
 
-  const alreadySubmitted = data.payment_status === "awaiting_confirmation";
-
   return (
     <div className="flex flex-col min-h-full pb-24">
       <div className="flex items-center gap-2 px-4 py-3 bg-white border-b border-gray-100">
         <button type="button" onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100">
           <ArrowLeft className="h-5 w-5 text-gray-700" />
         </button>
-        <h2 className="font-bold text-base text-gray-900">Pay with UPI</h2>
+        <h2 className="font-bold text-base text-gray-900">Complete payment</h2>
       </div>
 
       <div className="px-4 py-4 space-y-4">
@@ -144,53 +175,22 @@ export default function UpiPaymentPage({
           <p className="text-xs text-gray-500 mt-1">Order {data.order_number}</p>
         </div>
 
-        {data.upi_vpa ? (
-          <UpiPaymentQr payUrl={payUrl} uploadedQrUrl={data.upi_qr_url} />
-        ) : null}
-
-        <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
-          <p className="text-sm font-semibold text-gray-900">Or pay manually</p>
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs text-gray-500">UPI ID</p>
-              <p className="font-mono text-sm font-medium">{data.upi_vpa}</p>
-            </div>
-            <button type="button" onClick={copyVpa} className="p-2 rounded-lg bg-gray-100">
-              <Copy className="h-4 w-4" />
-            </button>
-          </div>
-          <a
-            href={payUrl}
-            className="flex items-center justify-center gap-2 w-full bg-primary text-primary-foreground font-semibold py-3 rounded-xl text-sm"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Open UPI app
-          </a>
-        </div>
-
-        {alreadySubmitted ? (
+        {data.payment_status === "paid" ? (
           <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-xl">
             <CheckCircle2 className="h-5 w-5 shrink-0" />
-            Payment submitted. Waiting for restaurant to confirm.
+            Payment completed successfully.
           </div>
         ) : (
           <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
-            <p className="text-sm font-semibold text-gray-900">After paying, enter UTR</p>
-            <input
-              type="text"
-              placeholder="12-digit UTR / Ref no."
-              value={utr}
-              onChange={(e) => setUtr(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm"
-            />
+            <p className="text-sm font-semibold text-gray-900">Pay securely with Razorpay</p>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
               type="button"
-              onClick={handleSubmitUtr}
-              disabled={submitting}
+              onClick={openCheckout}
+              disabled={submitting || !sdkReady}
               className="w-full bg-gray-900 text-white font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
             >
-              {submitting ? "Submitting…" : "I've paid — submit UTR"}
+              {submitting ? "Opening payment..." : "Pay now"}
             </button>
           </div>
         )}

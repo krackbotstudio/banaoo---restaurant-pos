@@ -47,6 +47,8 @@ import {
   ChefHat,
   Printer,
   Bluetooth,
+  Truck,
+  Wallet,
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useOutlet } from "@/lib/outlet-context";
@@ -88,7 +90,9 @@ import {
 import { isNativePrinterBridgeExpected, openNativePrinterSettings } from "@/lib/native-print-bridge";
 import { isBanaooNativeApp, openBillingSettingsInBrowser } from "@/lib/native-app-bridge";
 import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
-import { SettingsOutletOrderingLinks } from "@/components/settings/SettingsOutletOrderingLinks";
+import { ShiprocketSettingsPanel } from "@/components/settings/ShiprocketSettingsPanel";
+import { RazorpaySettingsPanel } from "@/components/settings/RazorpaySettingsPanel";
+import { BrandOrderingLinkCard } from "@/components/settings/BrandOrderingLinkCard";
 import { SubscriptionBillingHub } from "@/components/settings/SubscriptionBillingHub";
 import { UpiQrUpload } from "@/components/payments/UpiQrUpload";
 
@@ -480,13 +484,15 @@ export default function Settings() {
                 {!isNativeAppBilling && <SelectItem value="subscription">Subscription</SelectItem>}
                 <SelectItem value="notifications">Notifications</SelectItem>
                 <SelectItem value="preferences">Security</SelectItem>
+                <SelectItem value="payments">Payments</SelectItem>
+                <SelectItem value="delivery">Delivery</SelectItem>
                 <SelectItem value="printers">Printers</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <TabsList
             className={`hidden h-auto min-h-12 w-full gap-1.5 p-1.5 sm:grid ${
-              isNativeAppBilling ? "sm:grid-cols-6" : "sm:grid-cols-7"
+              isNativeAppBilling ? "sm:grid-cols-8" : "sm:grid-cols-9"
             }`}
           >
             <TabsTrigger value="profile" className="gap-1.5 px-2 py-2.5 sm:px-3">
@@ -519,6 +525,14 @@ export default function Settings() {
             <TabsTrigger value="preferences" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Security</span>
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-1.5 px-2 py-2.5 sm:px-3">
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">Payments</span>
+            </TabsTrigger>
+            <TabsTrigger value="delivery" className="gap-1.5 px-2 py-2.5 sm:px-3">
+              <Truck className="h-4 w-4" />
+              <span className="hidden sm:inline">Delivery</span>
             </TabsTrigger>
             <TabsTrigger value="printers" className="gap-1.5 px-2 py-2.5 sm:px-3">
               <Printer className="h-4 w-4" />
@@ -676,8 +690,9 @@ export default function Settings() {
                       Your Outlets
                     </CardTitle>
                     <CardDescription>
-                      Manage your restaurant locations. When you have multiple outlets, only one can be
-                      enabled at a time — orders and POS use the enabled outlet.
+                      Manage your restaurant locations. Open an outlet for its ordering link and QR code.
+                      When you have multiple outlets, only one can be enabled at a time — orders and POS
+                      use the enabled outlet.
                     </CardDescription>
                     <LimitIndicator feature="outlets" currentCount={usage.outlets} label="Outlets" />
                   </div>
@@ -800,13 +815,6 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
-
-            <SettingsOutletOrderingLinks
-              outlets={outletsList}
-              brandName={profile?.brand_name}
-              orderingSlug={profile?.ordering_slug}
-              loading={outletsLoading}
-            />
           </TabsContent>
 
           {/* Add Outlet Dialog */}
@@ -1005,6 +1013,11 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+
+            <BrandOrderingLinkCard
+              brandName={profile?.brand_name}
+              orderingSlug={profile?.ordering_slug}
+            />
 
             <Card>
               <CardHeader>
@@ -1575,6 +1588,14 @@ export default function Settings() {
           </TabsContent>
 
           {/* Printers Tab */}
+          <TabsContent value="payments" className="space-y-6">
+            <RazorpaySettingsPanel />
+          </TabsContent>
+
+          <TabsContent value="delivery" className="space-y-6">
+            <ShiprocketSettingsPanel />
+          </TabsContent>
+
           <TabsContent value="printers" className="space-y-6">
             <PrinterFleetSettings />
           </TabsContent>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCustomer } from "@/context/customer-context";
 import { Loader2, ClipboardList, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { CustomerDeliveryTimeline } from "@/components/customer/CustomerDeliveryTimeline";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
@@ -152,6 +153,7 @@ export default function CustomerOrdersPage({ outletId }: { outletId: string }) {
             <OrderCard
               key={order.id}
               order={order}
+              customerPhone={customer.phone}
               expanded={expandedId === order.id}
               onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
             />
@@ -167,6 +169,7 @@ export default function CustomerOrdersPage({ outletId }: { outletId: string }) {
             <OrderCard
               key={order.id}
               order={order}
+              customerPhone={customer.phone}
               expanded={expandedId === order.id}
               onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
             />
@@ -179,10 +182,12 @@ export default function CustomerOrdersPage({ outletId }: { outletId: string }) {
 
 function OrderCard({
   order,
+  customerPhone,
   expanded,
   onToggle,
 }: {
   order: CustomerOrder;
+  customerPhone: string;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -263,6 +268,11 @@ function OrderCard({
             <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
               Note: {order.notes}
             </p>
+          )}
+          {order.order_type === "delivery" && isActive && (
+            <div className="pt-2">
+              <CustomerDeliveryTimeline orderId={order.id} customerPhone={customerPhone} />
+            </div>
           )}
         </div>
       )}

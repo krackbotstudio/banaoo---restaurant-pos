@@ -20,8 +20,14 @@ import {
   Sparkles,
   Plus,
   Loader2,
+  Truck,
+  Package,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { API_URL } from "@/lib/api-url";
 
 interface DashboardStats {
   ordersToday: number;
@@ -35,6 +41,16 @@ interface DashboardStats {
 interface AIInsight {
   message: string;
   action?: { label: string; href: string };
+}
+
+interface DeliveryOverview {
+  pending_booking: number;
+  awaiting_pickup: number;
+  out_for_delivery: number;
+  delivered_today: number;
+  cancelled: number;
+  total_deliveries: number;
+  avg_delivery_minutes: number | null;
 }
 
 export default function Dashboard() {
@@ -67,6 +83,7 @@ export default function Dashboard() {
   });
   const [insight, setInsight] = useState<AIInsight | null>(null);
   const [loading, setLoading] = useState(true);
+  const [delivery, setDelivery] = useState<DeliveryOverview | null>(null);
 
   useEffect(() => {
     if (user && currentOutlet?.id) {
@@ -111,6 +128,20 @@ export default function Dashboard() {
 
       setStats(newStats);
       generateInsight(newStats);
+
+      try {
+        const res = await fetch(
+          `${API_URL}/api/dashboard/delivery-overview?outlet_id=${currentOutlet.id}`,
+          { credentials: "include" }
+        );
+        if (res.ok) {
+          setDelivery(await res.json());
+        } else {
+          setDelivery(null);
+        }
+      } catch {
+        setDelivery(null);
+      }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -192,6 +223,31 @@ export default function Dashboard() {
               variant="purple"
             />
           </div>
+
+          {delivery && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-muted-foreground">Delivery overview</h2>
+                <Link to="/settings?tab=delivery" className="text-xs text-primary font-medium">
+                  Shiprocket settings
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <StatCard title="Pending booking" value={delivery.pending_booking.toString()} icon={Clock} variant="accent" />
+                <StatCard title="Awaiting pickup" value={delivery.awaiting_pickup.toString()} icon={Package} variant="primary" />
+                <StatCard title="Out for delivery" value={delivery.out_for_delivery.toString()} icon={Truck} variant="purple" />
+                <StatCard title="Delivered today" value={delivery.delivered_today.toString()} icon={CheckCircle} variant="success" />
+                <StatCard title="Cancelled" value={delivery.cancelled.toString()} icon={XCircle} variant="accent" />
+                <StatCard
+                  title="Avg delivery"
+                  value={delivery.avg_delivery_minutes != null ? `${delivery.avg_delivery_minutes}m` : "—"}
+                  icon={TrendingUp}
+                  variant="primary"
+                />
+                <StatCard title="Total deliveries" value={delivery.total_deliveries.toString()} icon={ShoppingCart} variant="success" />
+              </div>
+            </div>
+          )}
 
           <Card
             className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5"

@@ -12,6 +12,7 @@ import {
   Box,
   Users,
   Clock,
+  Truck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { Loader2 } from "lucide-react";
 import { PlatformBadge } from "@/components/integrations";
 import type { VisualOrder } from "./OrdersVisualHub";
 import { cn } from "@/lib/utils";
+import { canShipDeliveryOrder } from "@/lib/ship-order";
 
 export type VisualSpotType = "table" | "takeaway" | "online";
 
@@ -65,8 +67,10 @@ interface VisualSpotActionSheetProps {
   onMarkPaid: (order: VisualOrder) => void;
   onChangeTable?: (order: VisualOrder) => void;
   onCancelOrder: (order: VisualOrder) => void;
+  onConfirmShip?: (order: VisualOrder) => void;
   printingBill?: boolean;
   updatingStatus?: boolean;
+  shippingOrder?: boolean;
 }
 
 function SpotIcon({ type }: { type: VisualSpotType }) {
@@ -97,8 +101,10 @@ export function VisualSpotActionSheet({
   onMarkPaid,
   onChangeTable,
   onCancelOrder,
+  onConfirmShip,
   printingBill,
   updatingStatus,
+  shippingOrder,
 }: VisualSpotActionSheetProps) {
   if (!context) return null;
 
@@ -107,6 +113,10 @@ export function VisualSpotActionSheet({
   const isActive =
     hasOrder && order.status !== "paid" && order.status !== "cancelled";
   const next = order ? nextStatus(order.status) : null;
+  const showShipAction =
+    hasOrder &&
+    (spotType === "online" || spotType === "takeaway") &&
+    canShipDeliveryOrder(order!);
 
   const title =
     spotType === "table" && table
@@ -246,6 +256,21 @@ export function VisualSpotActionSheet({
                     <Printer className="h-4 w-4" />
                   )}
                   Print bill
+                </Button>
+              )}
+
+              {showShipAction && onConfirmShip && (
+                <Button
+                  className="w-full h-11 justify-start gap-3 bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={shippingOrder || updatingStatus}
+                  onClick={() => onConfirmShip(order!)}
+                >
+                  {shippingOrder ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Truck className="h-4 w-4" />
+                  )}
+                  Confirm &amp; ship order
                 </Button>
               )}
 

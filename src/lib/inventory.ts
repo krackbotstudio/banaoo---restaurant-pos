@@ -47,7 +47,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     return json as T;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Request timed out. Check that the API server is running on port 5001.");
+      throw new Error("Request timed out. Check that the API server is running on port 5000.");
     }
     throw err;
   } finally {

@@ -1,11 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/cart-context";
 import { useCustomer } from "@/context/customer-context";
 import { CustomerTablePicker } from "@/components/customer/CustomerTablePicker";
+import {
+  DeliveryLocationPicker,
+  DeliveryLocationValue,
+} from "@/components/customer/DeliveryLocationPicker";
+import { reverseGeocode } from "@/lib/geocoding";
 import { supabase } from "@/integrations/supabase/client";
 import { API_URL } from "@/lib/api-url";
-import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, MapPin, Edit2, Truck, Smartphone } from "lucide-react";
+import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, Truck, Smartphone } from "lucide-react";
 
 interface Outlet {
   id: string;
@@ -14,7 +19,9 @@ interface Outlet {
 
 interface PaymentSettings {
   online_payments_enabled: boolean;
-  upi_vpa: string | null;
+  online_checkout_enabled?: boolean;
+  razorpay_connected?: boolean;
+  allow_cod?: boolean;
 }
 
 export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; basePath?: string }) {
@@ -30,27 +37,66 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("dine_in");
   const [tableId, setTableId] = useState<string | undefined>();
   const [tableNumber, setTableNumber] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState(defaultAddr?.address_text ?? "");
-  const [editingAddress, setEditingAddress] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "upi">("cod");
+  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>({
+    addressText: defaultAddr?.address_text ?? "",
+    pincode: "",
+    city: "",
+    state: "",
+    lat: defaultAddr?.lat ?? null,
+    lng: defaultAddr?.lng ?? null,
+  });
+  const [locationError, setLocationError] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const geocodedAddrId = useRef<string | null>(null);
+
+  const patchDeliveryLocation = (patch: Partial<DeliveryLocationValue>) => {
+    setDeliveryLocation((prev) => ({ ...prev, ...patch }));
+  };
 
   useEffect(() => {
     if (customer?.name && !name) setName(customer.name);
-    if (defaultAddr?.address_text && !deliveryAddress) setDeliveryAddress(defaultAddr.address_text);
-  }, [customer]);
+  }, [customer, name]);
+
+  useEffect(() => {
+    if (!defaultAddr) return;
+    const addrKey = defaultAddr.id ?? defaultAddr.address_text;
+    if (geocodedAddrId.current === addrKey) return;
+
+    setDeliveryLocation((prev) => ({
+      ...prev,
+      addressText: prev.addressText || defaultAddr.address_text || "",
+      lat: prev.lat ?? defaultAddr.lat ?? null,
+      lng: prev.lng ?? defaultAddr.lng ?? null,
+    }));
+
+    if (defaultAddr.lat != null && defaultAddr.lng != null) {
+      geocodedAddrId.current = addrKey;
+      reverseGeocode(defaultAddr.lat, defaultAddr.lng).then((result) => {
+        setDeliveryLocation((prev) => ({
+          ...prev,
+          addressText: prev.addressText || defaultAddr.address_text || result.addressText,
+          pincode: prev.pincode || result.pincode,
+          city: prev.city || result.city,
+          state: prev.state || result.state,
+          lat: prev.lat ?? defaultAddr.lat ?? null,
+          lng: prev.lng ?? defaultAddr.lng ?? null,
+        }));
+      });
+    }
+  }, [defaultAddr]);
 
   useEffect(() => {
     fetch(`${API_URL}/api/public/outlets/${outlet.id}/payment-settings`)
       .then((r) => r.json())
       .then((s: PaymentSettings) => {
         setPaymentSettings(s);
-        if (!s.upi_vpa || !s.online_payments_enabled) setPaymentMethod("cod");
+        if (!s.online_checkout_enabled) setPaymentMethod("cod");
       })
-      .catch(() => setPaymentSettings({ online_payments_enabled: false, upi_vpa: null }));
+      .catch(() => setPaymentSettings({ online_payments_enabled: false }));
   }, [outlet.id]);
 
   useEffect(() => {
@@ -85,8 +131,8 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
     return null;
   }
 
-  const upiAvailable =
-    paymentSettings?.online_payments_enabled && !!paymentSettings?.upi_vpa;
+  const onlineAvailable = Boolean(paymentSettings?.online_checkout_enabled);
+  const codAvailable = paymentSettings?.allow_cod !== false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,16 +140,48 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
     if (!name.trim()) { setError("Please enter your name"); return; }
     if (orderType === "dine_in" && !tableId) { setError("Please select your table"); return; }
-    if (orderType === "delivery" && !deliveryAddress.trim()) { setError("Please enter a delivery address"); return; }
-    if (paymentMethod === "upi" && !upiAvailable) {
-      setError("UPI payment is not available. Choose pay at counter.");
+    if (orderType === "delivery") {
+      if (!deliveryLocation.addressText.trim()) {
+        setError("Please enter a delivery address");
+        return;
+      }
+      if (
+        !deliveryLocation.pincode.trim() ||
+        !deliveryLocation.city.trim() ||
+        !deliveryLocation.state.trim()
+      ) {
+        setError("Please enter pincode, city, and state for delivery");
+        return;
+      }
+      if (deliveryLocation.lat == null || deliveryLocation.lng == null) {
+        setError("Please set your delivery location on the map");
+        return;
+      }
+    }
+    if (paymentMethod === "online" && !onlineAvailable) {
+      setError("Online payment is not available for this outlet right now.");
+      return;
+    }
+    if (paymentMethod === "cod" && !codAvailable) {
+      setError("Cash on delivery is disabled for this outlet.");
       return;
     }
 
     setLoading(true);
     try {
-      if (customer && name.trim() !== customer.name) {
-        await saveCustomer(customer.phone, name.trim());
+      if (customer) {
+        if (orderType === "delivery") {
+          await saveCustomer(customer.phone, name.trim(), {
+            id: defaultAddr?.id,
+            label: defaultAddr?.label ?? "Home",
+            address_text: deliveryLocation.addressText.trim(),
+            lat: deliveryLocation.lat,
+            lng: deliveryLocation.lng,
+            is_default: true,
+          });
+        } else if (name.trim() !== customer.name) {
+          await saveCustomer(customer.phone, name.trim());
+        }
       }
 
       const res = await fetch(`${API_URL}/api/public/customer-orders`, {
@@ -114,7 +192,12 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           order_type: orderType,
           table_id: orderType === "dine_in" ? tableId : null,
           table_number: orderType === "dine_in" ? tableNumber : null,
-          delivery_address: orderType === "delivery" ? deliveryAddress.trim() : null,
+          delivery_address: orderType === "delivery" ? deliveryLocation.addressText.trim() : null,
+          delivery_pincode: orderType === "delivery" ? deliveryLocation.pincode.trim() : null,
+          delivery_city: orderType === "delivery" ? deliveryLocation.city.trim() : null,
+          delivery_state: orderType === "delivery" ? deliveryLocation.state.trim() : null,
+          delivery_latitude: orderType === "delivery" ? deliveryLocation.lat : null,
+          delivery_longitude: orderType === "delivery" ? deliveryLocation.lng : null,
           customer_name: name.trim(),
           customer_phone: phone || null,
           notes: notes.trim() || null,
@@ -132,9 +215,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to create order");
 
-      clearCart();
-
-      if (json.requires_upi) {
+      if (json.requires_online_payment) {
         navigate(`${resolvedBase}/payment/${json.order_id}`, { replace: true });
         return;
       }
@@ -145,6 +226,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
           order_id: json.order_id,
           total: json.total,
           payment_method: "cod",
+          order_type: orderType,
         },
         replace: true,
       });
@@ -226,41 +308,13 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
           {orderType === "delivery" && (
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-gray-500">Delivery Address *</label>
-                <button
-                  type="button"
-                  onClick={() => setEditingAddress(!editingAddress)}
-                  className="flex items-center gap-1 text-xs text-primary font-medium"
-                >
-                  <Edit2 className="h-3 w-3" />
-                  {editingAddress ? "Done" : "Edit"}
-                </button>
-              </div>
-              {editingAddress ? (
-                <textarea
-                  rows={2}
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  placeholder="Enter delivery address"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                />
-              ) : (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setEditingAddress(true)}
-                  onKeyDown={(e) => e.key === "Enter" && setEditingAddress(true)}
-                  className={`flex items-start gap-2 border rounded-lg px-3 py-2.5 cursor-pointer ${
-                    deliveryAddress ? "border-gray-200 bg-gray-50" : "border-dashed border-gray-300"
-                  }`}
-                >
-                  <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                  <span className={`text-sm ${deliveryAddress ? "text-gray-700" : "text-gray-400"}`}>
-                    {deliveryAddress || "Tap to enter delivery address"}
-                  </span>
-                </div>
-              )}
+              <label className="text-xs text-gray-500 mb-2 block">Delivery Location *</label>
+              <DeliveryLocationPicker
+                value={deliveryLocation}
+                onChange={patchDeliveryLocation}
+                locationError={locationError}
+                onLocationError={setLocationError}
+              />
             </div>
           )}
         </div>
@@ -271,29 +325,30 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
             <button
               type="button"
               onClick={() => setPaymentMethod("cod")}
+              disabled={!codAvailable}
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors ${
                 paymentMethod === "cod"
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-gray-200 text-gray-600"
-              }`}
+              } ${!codAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
               <Banknote className="h-4 w-4" /> Pay at counter
             </button>
             <button
               type="button"
-              onClick={() => upiAvailable && setPaymentMethod("upi")}
-              disabled={!upiAvailable}
+              onClick={() => onlineAvailable && setPaymentMethod("online")}
+              disabled={!onlineAvailable}
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                paymentMethod === "upi"
+                paymentMethod === "online"
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-gray-200 text-gray-600"
-              } ${!upiAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
+              } ${!onlineAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
-              <Smartphone className="h-4 w-4" /> UPI now
+              <Smartphone className="h-4 w-4" /> Online payment
             </button>
           </div>
-          {!upiAvailable && (
-            <p className="text-xs text-gray-500">UPI not set up for this restaurant — pay at counter only.</p>
+          {!onlineAvailable && (
+            <p className="text-xs text-gray-500">Online payment is currently unavailable for this outlet.</p>
           )}
         </div>
 
@@ -340,7 +395,7 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
             <><Loader2 className="h-4 w-4 animate-spin" /> Placing Order...</>
           ) : (
             <>
-              {paymentMethod === "upi" ? "Continue to UPI" : "Place Order"} · ₹{total.toFixed(0)}
+              {paymentMethod === "online" ? "Continue to payment" : "Place Order"} · ₹{total.toFixed(0)}
             </>
           )}
         </button>

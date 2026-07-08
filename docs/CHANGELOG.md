@@ -2,7 +2,7 @@
 
 **Purpose:** Single living document for frontend, backend, mobile, and ops. Update this file whenever we ship or plan a change (add a dated entry under [Change log](#change-log)).
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-05-28
 
 ---
 
@@ -32,11 +32,23 @@
 | `professional` | Growth | ₹699 |
 | `enterprise` | Expand | Custom |
 
-Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo**, customer ordering **₹299/mo**, inventory **₹399/mo**, Swiggy **₹499/mo**, Zomato **₹499/mo**.
+Add-ons (Razorpay checkout): extra outlet **₹250/mo**, extra staff **₹150/mo**, customer ordering **₹299/mo**, inventory **₹399/mo**, Swiggy **₹499/mo**, Zomato **₹499/mo**, WhatsApp **₹349/mo**, Shiprocket delivery **free** (add-on).
 
 ---
 
 ## Change log
+
+### 2026-05-28 — Shiprocket delivery & outlet ordering links
+
+**Summary:** Per-outlet Shiprocket auto-booking for native delivery orders; ordering links/QR moved to outlet detail pages; public docs added.
+
+| Area | Changes |
+|------|---------|
+| **Backend** | `server/shiprocket/*` — connect, book, webhook, jobs, dashboard stats; migration `20260611000001_shiprocket_delivery.sql`. |
+| **Backend** | Free `shiprocket_delivery` add-on (`calcAddonAmount` supports ₹0). |
+| **Frontend** | Settings → Delivery → Shiprocket; order delivery panel; dashboard cards; checkout pincode/city/state; customer timeline. |
+| **Frontend** | Ordering link + QR on **Outlets → [outlet]**; brand link on **Settings → Branding**. |
+| **Docs** | `docs/shiprocket.md`, `/docs/shiprocket-delivery`, updated outlets/orders/FAQ articles. |
 
 ### 2026-05-27 — Notification reliability hardening
 

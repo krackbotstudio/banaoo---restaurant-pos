@@ -6,17 +6,33 @@ Each restaurant account can have multiple **outlets** (branches). Switch the act
 
 Per outlet you configure:
 
-- Name, address, GST number
+- Name, address, GST number, GPS pin on the map
 - **Operation mode** — affects POS layout (e.g. self-service counter)
-- **Customer ordering link** and QR code — **Settings → Outlets** or **Outlets → [outlet name]** (not under Profile)
+- **Customer ordering link** and QR code — on the **outlet detail page** (see below)
 - Printer settings (per outlet or shared via the mobile app)
-- Integrations (delivery platforms, where enabled)
+- Integrations (Swiggy/Zomato where enabled)
+- **Shiprocket delivery** — **Settings → Delivery** (one connection per outlet)
 
-Open **Outlets → [outlet name]** for full outlet settings including GPS pin on the map.
+Open **Outlets → [outlet name]** (or **Settings → Outlets** → click an outlet) for full outlet settings.
+
+## Customer ordering links & QR codes
+
+Ordering links are managed **inside each outlet**, not on a shared Settings list.
+
+| Link type | Where to find it |
+|-----------|------------------|
+| **Direct outlet link + QR** | **Outlets → [outlet name]** → **Customer Ordering Link** |
+| **Brand ordering page** (all outlets, GPS distance) | **Settings → Branding** → Brand ordering page |
+
+Each direct link looks like `https://yoursite.com/r/<outlet-id>`. Share the URL or print the QR from the outlet detail screen.
+
+**Tip:** Pin the outlet on the map (Edit → Pin on map) so customers on the brand page see distance to your branch.
 
 ## Customer ordering portal
 
 Customers who open your **direct outlet link** or brand ordering page can browse the menu, add items, and use **Place Order** on the menu screen to go straight to checkout (they can still open **Cart** from the bottom bar to review items first).
+
+For **delivery** orders, checkout requires address plus **pincode**, **city**, and **state** (needed for Shiprocket booking). See [Shiprocket delivery](/docs/shiprocket-delivery).
 
 ## Menu structure
 
@@ -43,3 +59,4 @@ Mark items **unavailable** to hide them from POS without deleting.
 
 - [Getting started](/docs/getting-started)
 - [Orders & POS](/docs/orders-and-pos)
+- [Shiprocket delivery](/docs/shiprocket-delivery)

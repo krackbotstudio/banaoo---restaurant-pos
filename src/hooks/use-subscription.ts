@@ -102,6 +102,8 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
         inventoryManagement: false,
         whatsappIntegration: false,
         aiMenuImport: false,
+        shiprocketDelivery: false,
+        razorpayPayments: false,
         qrMenus: 0,
       }),
       usage: { outlets: 0, staff: 0 },
@@ -130,6 +132,8 @@ function parseEntitlementsResponse(data: unknown): EntitlementsPayload {
         inventoryManagement: false,
         whatsappIntegration: false,
         aiMenuImport: false,
+        shiprocketDelivery: false,
+        razorpayPayments: false,
         qrMenus: 0,
         ...limitsApi,
       }),
@@ -512,6 +516,13 @@ export function useSubscription() {
         }
 
         const orderData = await res.json();
+
+        if (orderData.free) {
+          await fetchSubscription();
+          toast.success(`${item.name} activated!`);
+          return true;
+        }
+
         const qtyLabel = item.stackable && quantity > 1 ? ` ×${quantity}` : "";
 
         return openRazorpayCheckout({

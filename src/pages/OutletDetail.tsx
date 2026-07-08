@@ -68,6 +68,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
+import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -647,6 +648,14 @@ export default function OutletDetail() {
               </Card>
             )}
             </div>
+
+            <CustomerOrderingLinkCard
+              outletId={outlet.id}
+              outletName={outlet.name}
+              brandName={profile?.brand_name}
+              orderingSlug={profile?.ordering_slug}
+              hasGpsLocation={outlet.latitude != null}
+            />
 
             <OutletPaymentSettings outletId={outlet.id} outletName={outlet.name} />
 

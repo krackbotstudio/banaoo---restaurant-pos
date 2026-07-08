@@ -23,6 +23,9 @@ import { PlatformConfigModal } from "@/components/integrations/PlatformConfigMod
 import { FeatureGate } from "@/components/FeatureGate";
 import type { FeatureKey } from "@/hooks/use-feature-gating";
 import { Link } from "react-router-dom";
+import { ShiprocketLogo } from "@/components/shiprocket/ShiprocketLogo";
+import { API_URL } from "@/lib/api-url";
+import { RazorpayLogo } from "@/components/razorpay/RazorpayLogo";
 
 interface PlatformIntegration {
   id: string;
@@ -100,12 +103,33 @@ export default function Integrations() {
   const [loading, setLoading] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
+  const [razorpayConnected, setRazorpayConnected] = useState(false);
+  const [razorpayLoading, setRazorpayLoading] = useState(false);
 
   useEffect(() => {
     if (currentOutlet) {
       fetchIntegrations();
+      void fetchRazorpayStatus();
     }
   }, [currentOutlet]);
+
+  const fetchRazorpayStatus = async () => {
+    if (!currentOutlet) return;
+    setRazorpayLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/outlets/${currentOutlet.id}/razorpay`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setRazorpayConnected(Boolean(json.is_connected));
+      }
+    } catch {
+      setRazorpayConnected(false);
+    } finally {
+      setRazorpayLoading(false);
+    }
+  };
 
   const fetchIntegrations = async () => {
     if (!currentOutlet) return;
@@ -229,9 +253,9 @@ export default function Integrations() {
               <h1 className="font-display text-3xl font-bold tracking-tight">Integrations</h1>
               <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
                 Connect Swiggy, Zomato, and more so aggregator orders flow into the same kitchen
-                queue as your POS. Online ordering links for customers live in{" "}
-                <Link to="/settings?tab=outlets" className="text-primary font-medium hover:underline">
-                  Settings → Outlets
+                queue as your POS. Online ordering links for customers live on each{" "}
+                <Link to="/outlets" className="text-primary font-medium hover:underline">
+                  outlet&apos;s detail page
                 </Link>
                 .
               </p>
@@ -389,6 +413,76 @@ export default function Integrations() {
               </FeatureGate>
             );
           })}
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Payments</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Connect Razorpay once at restaurant level — all outlets share the same account for online checkout.
+            </p>
+          </div>
+
+          <FeatureGate feature="razorpayPayments" showUpgradePrompt>
+            <Card className="border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-background to-transparent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2.5">
+                  <RazorpayLogo variant="full" className="h-8" />
+                  {razorpayLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Badge variant={razorpayConnected ? "default" : "secondary"}>
+                      {razorpayConnected ? "Connected" : "Not connected"}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  OAuth-based connection — no API keys. Customers pay online on your ordering link; payments are tagged by outlet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className="gap-2">
+                  <Link to="/settings?tab=payments">
+                    <Settings2 className="h-4 w-4" />
+                    Open payment settings
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </FeatureGate>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Delivery</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Book hyperlocal food delivery riders for your outlet orders.
+            </p>
+          </div>
+
+        <FeatureGate feature="shiprocketDelivery" showUpgradePrompt>
+          <Card className="border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-background to-transparent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2.5">
+                <ShiprocketLogo variant="full" className="h-7" />
+                <span>Quick — Food Delivery</span>
+              </CardTitle>
+              <CardDescription>
+                Auto-book Shiprocket Quick 2-wheeler riders for in-city food delivery. Connect and configure in Settings → Delivery.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="gap-2">
+                <Link to="/settings?tab=delivery">
+                  <Settings2 className="h-4 w-4" />
+                  Open Delivery settings
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </FeatureGate>
         </div>
 
         {/* Help + addons CTA */}
