@@ -3,9 +3,9 @@
  */
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { CustomerProvider } from "@/context/customer-context";
 import { OutletOrderingFlow, OutletData, BrandingProps } from "./OutletOrderingFlow";
+import { API_URL } from "@/lib/api-url";
 import { Loader2, UtensilsCrossed } from "lucide-react";
 
 export default function RestaurantApp() {
@@ -18,40 +18,39 @@ export default function RestaurantApp() {
   useEffect(() => {
     if (!outletId) return;
     const load = async () => {
-      // Fetch outlet + owner branding in parallel
-      const { data: outletData, error: outletError } = await supabase
-        .from("outlets")
-        .select("id, name, address, phone, opening_time, closing_time, latitude, longitude, owner_id")
-        .eq("id", outletId)
-        .eq("is_active", true)
-        .single();
+      try {
+        const res = await fetch(`${API_URL}/api/public/outlets/${outletId}`);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(json.error || "Restaurant not found or unavailable.");
+          setLoading(false);
+          return;
+        }
 
-      if (outletError || !outletData) {
-        setError("Restaurant not found or unavailable.");
-        setLoading(false);
-        return;
-      }
-
-      setOutlet(outletData as OutletData);
-
-      // Fetch owner branding
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("logo_url, brand_color, brand_name")
-        .eq("user_id", (outletData as unknown as { owner_id: string }).owner_id)
-        .maybeSingle();
-
-      if (profileData) {
-        setBranding({
-          logo_url: profileData.logo_url,
-          brand_color: profileData.brand_color,
-          brand_name: profileData.brand_name,
+        setOutlet({
+          id: json.id,
+          name: json.name,
+          address: json.address,
+          phone: json.phone,
+          opening_time: json.opening_time,
+          closing_time: json.closing_time,
+          latitude: json.latitude,
+          longitude: json.longitude,
         });
+        if (json.branding) {
+          setBranding({
+            logo_url: json.branding.logo_url,
+            brand_color: json.branding.brand_color,
+            brand_name: json.branding.brand_name,
+          });
+        }
+      } catch {
+        setError("Unable to load restaurant. Please check your connection and try again.");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
-    load();
+    void load();
   }, [outletId]);
 
   if (loading) {

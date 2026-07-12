@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/context/cart-context";
+import { API_URL } from "@/lib/api-url";
 import {
   Plus, Minus, Leaf, Flame, Search, X,
   Mic, MicOff, Loader2, CheckCircle2, AlertCircle, Sparkles, Star,
@@ -522,23 +522,24 @@ export default function MenuPage({ outlet, basePath }: { outlet: Outlet; basePat
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: cats }, { data: menuItems }] = await Promise.all([
-        supabase
-          .from("menu_categories")
-          .select("id, name, sort_order")
-          .eq("outlet_id", outlet.id)
-          .eq("is_active", true)
-          .order("sort_order"),
-        supabase
-          .from("menu_items")
-          .select("id, name, description, base_price, image_url, is_veg, is_available, category_id, prep_time_mins, is_special, special_label, offer_label, offer_price, schedule_enabled, availability_schedule")
-          .eq("outlet_id", outlet.id),
-      ]);
-      setCategories(cats ?? []);
-      setItems(menuItems ?? []);
-      setLoading(false);
+      try {
+        const res = await fetch(`${API_URL}/api/public/outlets/${outlet.id}/menu`);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setCategories([]);
+          setItems([]);
+        } else {
+          setCategories(json.categories ?? []);
+          setItems(json.items ?? []);
+        }
+      } catch {
+        setCategories([]);
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
     };
-    load();
+    void load();
   }, [outlet.id]);
 
   const filtered = items.filter(

@@ -6,7 +6,7 @@ import {
   checkHyperlocalServiceability,
   assignAwb,
 } from './client.js';
-import { getValidToken, getConnection } from './auth.js';
+import { getConnection, withValidToken } from './auth.js';
 import { mergeSettings, mapShiprocketStatus, deliveryStatusForOrder } from './status-mapper.js';
 import { logShiprocketAction } from './audit.js';
 import {
@@ -170,21 +170,22 @@ export async function bookShipment(shipmentRow) {
 
     const conn = await getConnection(ship.outlet_id);
     const settings = mergeSettings(conn?.settings);
-    const token = await getValidToken(ship.outlet_id);
     const coords = await resolveQuickCoords(client, order, ship.outlet_id, settings);
     const payload = buildQuickHyperlocalPayload(order, items, settings, coords);
     const isCod = payload.payment_method === 'COD';
 
-    const preCheck = await checkHyperlocalServiceability(token, {
-      pickup_postcode: coords.pickupPincode,
-      delivery_postcode: coords.deliveryPincode,
-      cod: isCod,
-      weight: payload.weight,
-      lat_from: coords.pickupLat,
-      long_from: coords.pickupLng,
-      lat_to: coords.deliveryLat,
-      long_to: coords.deliveryLng,
-    });
+    const preCheck = await withValidToken(ship.outlet_id, (token) =>
+      checkHyperlocalServiceability(token, {
+        pickup_postcode: coords.pickupPincode,
+        delivery_postcode: coords.deliveryPincode,
+        cod: isCod,
+        weight: payload.weight,
+        lat_from: coords.pickupLat,
+        long_from: coords.pickupLng,
+        lat_to: coords.deliveryLat,
+        long_to: coords.deliveryLng,
+      })
+    );
     const preCouriers = extractCouriers(preCheck);
     if (!preCouriers.length) {
       throw new Error(
@@ -192,7 +193,9 @@ export async function bookShipment(shipmentRow) {
       );
     }
 
-    const response = await createAdhocOrder(token, payload);
+    const response = await withValidToken(ship.outlet_id, (token) =>
+      createAdhocOrder(token, payload)
+    );
 
     const srOrderId = response.order_id ?? response.shipment_id;
     const shipmentId = response.shipment_id ?? response.order_id;
@@ -200,17 +203,19 @@ export async function bookShipment(shipmentRow) {
       throw new Error('Shiprocket did not return order/shipment id for Quick booking');
     }
 
-    const serviceability = await checkHyperlocalServiceability(token, {
-      pickup_postcode: coords.pickupPincode,
-      delivery_postcode: coords.deliveryPincode,
-      order_id: srOrderId,
-      cod: isCod,
-      weight: payload.weight,
-      lat_from: coords.pickupLat,
-      long_from: coords.pickupLng,
-      lat_to: coords.deliveryLat,
-      long_to: coords.deliveryLng,
-    });
+    const serviceability = await withValidToken(ship.outlet_id, (token) =>
+      checkHyperlocalServiceability(token, {
+        pickup_postcode: coords.pickupPincode,
+        delivery_postcode: coords.deliveryPincode,
+        order_id: srOrderId,
+        cod: isCod,
+        weight: payload.weight,
+        lat_from: coords.pickupLat,
+        long_from: coords.pickupLng,
+        lat_to: coords.deliveryLat,
+        long_to: coords.deliveryLng,
+      })
+    );
     const couriers = extractCouriers(serviceability);
     const selectedCourier = pickQuickCourier(couriers.length ? couriers : preCouriers);
     const courierId = courierIdFrom(selectedCourier);
@@ -220,10 +225,12 @@ export async function bookShipment(shipmentRow) {
 
     let assignRes = null;
     try {
-      assignRes = await assignAwb(token, {
-        shipment_id: shipmentId,
-        courier_id: courierId,
-      });
+      assignRes = await withValidToken(ship.outlet_id, (token) =>
+        assignAwb(token, {
+          shipment_id: shipmentId,
+          courier_id: courierId,
+        })
+      );
     } catch (assignErr) {
       throw new Error(
         assignErr.message || 'Failed to assign Shiprocket Quick rider'
@@ -440,9 +447,10 @@ export async function cancelShipment(orderId, outletId) {
   if (!ship) throw new Error('Shipment not found');
 
   if (ship.shiprocket_order_id) {
-    const token = await getValidToken(outletId);
     try {
-      await cancelOrder(token, [Number(ship.shiprocket_order_id)]);
+      await withValidToken(outletId, (token) =>
+        cancelOrder(token, [Number(ship.shiprocket_order_id)])
+      );
     } catch (err) {
       console.warn('[shiprocket] cancel API:', err.message);
     }
@@ -466,8 +474,9 @@ export async function cancelShipment(orderId, outletId) {
 
 export async function syncShipmentTracking(shipmentRow) {
   if (!shipmentRow.shipment_id) return shipmentRow;
-  const token = await getValidToken(shipmentRow.outlet_id);
-  const data = await trackShipment(token, shipmentRow.shipment_id);
+  const data = await withValidToken(shipmentRow.outlet_id, (token) =>
+    trackShipment(token, shipmentRow.shipment_id)
+  );
 
   const trackData = data?.tracking_data || {};
   const activities = trackData.shipment_track_activities || data?.data || [];

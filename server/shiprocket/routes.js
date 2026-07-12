@@ -13,6 +13,7 @@ import {
 import { handleShiprocketWebhook, getPublicDeliveryStatus } from './webhook.js';
 import { logShiprocketAction } from './audit.js';
 import { buildEntitlementsPayload } from '../entitlements.js';
+import { isShiprocketAuthError } from './auth.js';
 
 async function assertOutletOwner(outletId, userId) {
   const { rows } = await pool.query(
@@ -48,9 +49,18 @@ async function hasShiprocketEntitlement(userId) {
   }
 }
 
+/** Shiprocket rejects webhook URLs containing shiprocket, kartrocket, sr, or kr. */
+export const SHIPROCKET_WEBHOOK_PATH = '/api/webhooks/delivery-tracking';
+
+function getPublicBaseUrl(req) {
+  const fromEnv = process.env.API_PUBLIC_URL?.trim().replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+  return `${req.protocol}://${req.get('host')}`;
+}
+
 function publicConnection(conn, outletId, req) {
   const settings = mergeSettings(conn?.settings);
-  const base = `${req.protocol}://${req.get('host')}`;
+  const base = getPublicBaseUrl(req);
   return {
     is_connected: !!conn?.is_connected,
     connected_at: conn?.connected_at ?? null,
@@ -68,7 +78,7 @@ function publicConnection(conn, outletId, req) {
       vehicle_mode: settings.vehicle_mode || '2_wheeler',
       webhook_secret: settings.webhook_secret || null,
     },
-    webhook_url: `${base}/api/webhooks/sr-callback?outlet_id=${outletId}`,
+    webhook_url: `${base}${SHIPROCKET_WEBHOOK_PATH}?outlet_id=${outletId}`,
   };
 }
 
@@ -174,7 +184,10 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
       res.json({ success: true, ...result });
     } catch (err) {
       console.error('shiprocket book:', err);
-      res.status(400).json({ error: err.message });
+      const msg = isShiprocketAuthError(err)
+        ? 'Shiprocket session expired and could not be refreshed. Disconnect and reconnect in Settings → Delivery with your API user credentials.'
+        : err.message;
+      res.status(400).json({ error: msg });
     }
   });
 
@@ -258,6 +271,8 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
     }
   };
 
+  app.post(SHIPROCKET_WEBHOOK_PATH, handleWebhookRoute);
+  // Legacy aliases (avoid in new Shiprocket configs — "shiprocket"/"sr" may be rejected)
   app.post('/api/webhooks/shiprocket', handleWebhookRoute);
   app.post('/api/webhooks/sr-callback', handleWebhookRoute);
 

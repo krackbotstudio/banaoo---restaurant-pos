@@ -142,26 +142,160 @@ export async function applyOnlinePaymentToOrder({
 }
 
 export function registerCustomerOrderRoutes(app, { requireAuth }) {
+  /** Public outlet card for customer ordering links (bypasses Supabase RLS). */
+  app.get('/api/public/outlets/:outletId', async (req, res) => {
+    const { outletId } = req.params;
+    try {
+      const { rows } = await pool.query(
+        `SELECT o.id, o.name, o.address, o.phone, o.opening_time, o.closing_time,
+                o.latitude, o.longitude,
+                p.logo_url, p.brand_color, p.brand_name
+         FROM public.outlets o
+         JOIN public.profiles p ON p.user_id = o.owner_id
+         WHERE o.id = $1 AND o.is_active = true`,
+        [outletId]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Outlet not found or unavailable' });
+      }
+      const o = rows[0];
+      res.json({
+        id: o.id,
+        name: o.name,
+        address: o.address,
+        phone: o.phone,
+        opening_time: o.opening_time,
+        closing_time: o.closing_time,
+        latitude: o.latitude != null ? Number(o.latitude) : null,
+        longitude: o.longitude != null ? Number(o.longitude) : null,
+        branding: {
+          logo_url: o.logo_url,
+          brand_color: o.brand_color,
+          brand_name: o.brand_name,
+        },
+      });
+    } catch (err) {
+      console.error('GET public outlet:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Public menu for customer ordering (categories + available items). */
+  app.get('/api/public/outlets/:outletId/menu', async (req, res) => {
+    const { outletId } = req.params;
+    try {
+      const { rows: outlets } = await pool.query(
+        `SELECT id FROM public.outlets WHERE id = $1 AND is_active = true`,
+        [outletId]
+      );
+      if (outlets.length === 0) {
+        return res.status(404).json({ error: 'Outlet not found or unavailable' });
+      }
+
+      const [{ rows: categories }, { rows: items }] = await Promise.all([
+        pool.query(
+          `SELECT id, name, sort_order
+           FROM public.menu_categories
+           WHERE outlet_id = $1 AND is_active = true
+           ORDER BY sort_order ASC NULLS LAST, name ASC`,
+          [outletId]
+        ),
+        pool.query(
+          `SELECT id, name, description, base_price, image_url, is_veg, is_available,
+                  category_id, prep_time_mins, is_special, special_label, offer_label, offer_price,
+                  schedule_enabled, availability_schedule
+           FROM public.menu_items
+           WHERE outlet_id = $1 AND is_available = true
+           ORDER BY name ASC`,
+          [outletId]
+        ),
+      ]);
+
+      res.json({
+        categories,
+        items: items.map((it) => ({
+          ...it,
+          base_price: Number(it.base_price),
+          offer_price: it.offer_price != null ? Number(it.offer_price) : null,
+        })),
+      });
+    } catch (err) {
+      console.error('GET public menu:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Public brand + outlets by ordering slug. */
+  app.get('/api/public/brands/:slug', async (req, res) => {
+    const slug = req.params.slug?.trim();
+    if (!slug) return res.status(400).json({ error: 'Slug required' });
+    try {
+      const { rows: profiles } = await pool.query(
+        `SELECT user_id, brand_name, full_name, ordering_slug, business_type, logo_url, brand_color
+         FROM public.profiles
+         WHERE ordering_slug = $1
+         LIMIT 1`,
+        [slug]
+      );
+      if (profiles.length === 0) {
+        return res.status(404).json({ error: 'Brand not found' });
+      }
+      const brand = profiles[0];
+      const { rows: outlets } = await pool.query(
+        `SELECT id, name, address, phone, opening_time, closing_time, latitude, longitude
+         FROM public.outlets
+         WHERE owner_id = $1 AND is_active = true
+         ORDER BY created_at ASC NULLS LAST, name ASC`,
+        [brand.user_id]
+      );
+      res.json({
+        brand,
+        outlets: outlets.map((o) => ({
+          ...o,
+          latitude: o.latitude != null ? Number(o.latitude) : null,
+          longitude: o.longitude != null ? Number(o.longitude) : null,
+        })),
+      });
+    } catch (err) {
+      console.error('GET public brand:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/public/outlets/:outletId/payment-settings', async (req, res) => {
     const { outletId } = req.params;
     try {
       const { rows: outlets } = await pool.query(
         `SELECT o.id, o.name, o.is_active, o.upi_vpa, o.upi_display_name, o.upi_qr_url, o.online_payments_enabled,
+                o.owner_id,
                 p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name,
-                rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
-                rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
-                rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
-                rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
+                p.brand_name
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
-         LEFT JOIN public.razorpay_connections rc ON rc.owner_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
         [outletId]
       );
       if (outlets.length === 0) return res.status(404).json({ error: 'Outlet not found' });
       const o = outlets[0];
+
+      let razorpayRow = null;
+      try {
+        const { rows: rz } = await pool.query(
+          `SELECT is_connected AS razorpay_connected, account_id AS razorpay_account_id,
+                  merchant_key_id AS razorpay_merchant_key_id, connection_mode AS razorpay_connection_mode,
+                  merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                  access_token_enc AS razorpay_access_token_enc, settings AS razorpay_settings
+           FROM public.razorpay_connections
+           WHERE owner_id = $1
+           LIMIT 1`,
+          [o.owner_id]
+        );
+        razorpayRow = rz[0] || null;
+      } catch (rzErr) {
+        console.warn('payment-settings razorpay lookup:', rzErr.message);
+      }
+
       const settings = resolvePaymentSettings(
         {
           upi_vpa: o.upi_vpa,
@@ -177,7 +311,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           online_payments_enabled: o.profile_online_payments_enabled,
           brand_name: o.brand_name,
         },
-        razorpayConnFromRow(o)
+        razorpayRow ? razorpayConnFromRow(razorpayRow) : null
       );
       res.json(settings);
     } catch (err) {
@@ -242,14 +376,9 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const { rows: outlets } = await client.query(
         `SELECT o.*, p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name,
-                rc.is_connected AS razorpay_connected, rc.account_id AS razorpay_account_id,
-                rc.merchant_key_id AS razorpay_merchant_key_id, rc.connection_mode AS razorpay_connection_mode,
-                rc.merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
-                rc.access_token_enc AS razorpay_access_token_enc, rc.settings AS razorpay_settings
+                p.brand_name
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
-         LEFT JOIN public.razorpay_connections rc ON rc.owner_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
         [outlet_id]
       );
@@ -258,6 +387,23 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         return res.status(404).json({ error: 'Outlet not found' });
       }
       const outlet = outlets[0];
+
+      let razorpayRow = null;
+      try {
+        const { rows: rz } = await client.query(
+          `SELECT is_connected AS razorpay_connected, account_id AS razorpay_account_id,
+                  merchant_key_id AS razorpay_merchant_key_id, connection_mode AS razorpay_connection_mode,
+                  merchant_key_secret_enc AS razorpay_merchant_key_secret_enc,
+                  access_token_enc AS razorpay_access_token_enc, settings AS razorpay_settings
+           FROM public.razorpay_connections
+           WHERE owner_id = $1
+           LIMIT 1`,
+          [outlet.owner_id]
+        );
+        razorpayRow = rz[0] || null;
+      } catch (rzErr) {
+        console.warn('customer-orders razorpay lookup:', rzErr.message);
+      }
 
       let resolvedTableNumber = table_number?.trim() || null;
       if (order_type === 'dine_in' && table_id) {
@@ -294,7 +440,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         upi_qr_url: outlet.profile_upi_qr_url,
         online_payments_enabled: outlet.profile_online_payments_enabled,
         brand_name: outlet.brand_name,
-      }, razorpayConnFromRow(outlet));
+      }, razorpayRow ? razorpayConnFromRow(razorpayRow) : null);
 
       if (payMethod === 'online') {
         if (!settings.online_checkout_enabled) {
@@ -336,7 +482,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         const checkoutKeyId =
           merchantAuth.mode === 'api_keys'
             ? merchantAuth.keyId
-            : getCheckoutKeyId(razorpayConnFromRow(outlet));
+            : getCheckoutKeyId(razorpayRow ? razorpayConnFromRow(razorpayRow) : null);
         if (!checkoutKeyId) throw new Error('Razorpay checkout key is not available for this restaurant');
 
         const sessionId = crypto.randomUUID();

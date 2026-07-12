@@ -281,8 +281,27 @@ export function ShiprocketSettingsPanel() {
 
               {state?.webhook_url && (
                 <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+                  {/localhost|127\.0\.0\.1/i.test(state.webhook_url) && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-950 dark:text-amber-100 space-y-2">
+                      <p className="font-medium">Shiprocket cannot reach localhost</p>
+                      <p className="text-[11px] opacity-90">
+                        Shiprocket&apos;s servers are on the internet — they cannot POST to{" "}
+                        <code className="text-[10px]">localhost</code>. For local dev, expose port 5000 with a
+                        tunnel, then set <code className="text-[10px]">API_PUBLIC_URL</code> in{" "}
+                        <code className="text-[10px]">.env</code> to the tunnel HTTPS URL and restart the server.
+                      </p>
+                      <p className="text-[11px] opacity-90 font-mono">
+                        ngrok http 5000 → API_PUBLIC_URL=https://xxxx.ngrok-free.app
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Webhook URL (paste in Shiprocket panel)</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Copy the full URL including the complete <code className="text-[10px]">outlet_id</code> UUID.
+                      Do not use paths containing <strong>sr</strong> or <strong>shiprocket</strong> — Shiprocket
+                      rejects those.
+                    </p>
                     <div className="flex gap-2">
                       <Input readOnly value={state.webhook_url} className="text-xs font-mono" />
                       <Button type="button" variant="outline" size="icon" onClick={copyWebhook}>
