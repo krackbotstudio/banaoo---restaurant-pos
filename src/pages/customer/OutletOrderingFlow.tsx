@@ -29,6 +29,7 @@ export interface OutletData {
   closing_time: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  owner_id?: string;
 }
 
 // ── Bottom Navigation ─────────────────────────────────────────────────────────

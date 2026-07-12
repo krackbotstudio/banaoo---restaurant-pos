@@ -2,6 +2,11 @@
 const SR_TO_BANAOO = {
   NEW: 'shipment_created',
   AWB_ASSIGNED: 'awaiting_rider',
+  'RIDER ASSIGNED': 'rider_assigned',
+  'RIDER_ASSIGNED': 'rider_assigned',
+  'RIDER ALLOCATED': 'rider_assigned',
+  'COURIER ASSIGNED': 'rider_assigned',
+  'AGENT ASSIGNED': 'rider_assigned',
   'PICKUP SCHEDULED': 'awaiting_rider',
   'PICKUP GENERATED': 'awaiting_rider',
   'PICKUP QUEUED': 'awaiting_rider',

@@ -31,6 +31,7 @@ import { registerInventoryRoutes, warmInventorySchema } from './inventory-api.js
 import { registerShiprocketRoutes } from './shiprocket/routes.js';
 import { startShiprocketJobs } from './shiprocket/jobs.js';
 import { registerRazorpayRoutes } from './razorpay/routes.js';
+import { validateRazorpayEnvironment } from './razorpay/config.js';
 import { clearUnmodifiedSampleMenu } from './sample-menu.js';
 import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction, getCmsAdmin } from './admin/routes.js';
 import { extractMenuItemsFromImage } from './menu-extract.js';
@@ -803,26 +804,31 @@ let mobileAppLeadsTableReady = false;
 
 async function ensureMobileAppLeadsTable() {
   if (mobileAppLeadsTableReady) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.mobile_app_leads (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      email TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'landing_unknown',
-      user_agent TEXT,
-      ip_address TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_created_at
-      ON public.mobile_app_leads (created_at DESC)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_email
-      ON public.mobile_app_leads (email)
-  `);
-  mobileAppLeadsTableReady = true;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.mobile_app_leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'landing_unknown',
+        user_agent TEXT,
+        ip_address TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_created_at
+        ON public.mobile_app_leads (created_at DESC)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_email
+        ON public.mobile_app_leads (email)
+    `);
+    mobileAppLeadsTableReady = true;
+  } catch (err) {
+    console.warn('Warning: Could not verify or update mobile_app_leads table (likely permission/owner restriction):', err.message);
+    mobileAppLeadsTableReady = true;
+  }
 }
 
 app.get('/api/mobile-app/apk', (req, res) => {
@@ -2585,6 +2591,13 @@ app.use((err, req, res, next) => {
   }
   res.status(status).json(body);
 });
+
+try {
+  validateRazorpayEnvironment();
+} catch (err) {
+  console.error('[razorpay] Startup validation failed:', err.message);
+  process.exit(1);
+}
 
 Promise.all([ensureMobileAppLeadsTable(), ensureNotificationsInfra()])
   .catch((err) => {

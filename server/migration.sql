@@ -74,3 +74,28 @@ CREATE TABLE IF NOT EXISTS "session" (
 ) WITH (OIDS=FALSE);
 
 CREATE INDEX IF NOT EXISTS "IX_session_expire" ON "session" ("expire");
+
+-- Add rider assignment columns to public.shiprocket_shipments table
+ALTER TABLE public.shiprocket_shipments
+  ADD COLUMN IF NOT EXISTS rider_name TEXT,
+  ADD COLUMN IF NOT EXISTS rider_phone TEXT,
+  ADD COLUMN IF NOT EXISTS rider_vehicle TEXT,
+  ADD COLUMN IF NOT EXISTS rider_id TEXT,
+  ADD COLUMN IF NOT EXISTS rider_assigned_at TIMESTAMPTZ;
+
+-- Add improvements tracking columns to order_payments
+ALTER TABLE public.order_payments
+  ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS receipt TEXT,
+  ADD COLUMN IF NOT EXISTS transaction_reference TEXT,
+  ADD COLUMN IF NOT EXISTS gateway_response JSONB,
+  ADD COLUMN IF NOT EXISTS webhook_received_at TIMESTAMPTZ;
+
+-- customer table multi-tenant isolation
+ALTER TABLE public.customers
+  ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_phone_key;
+
+ALTER TABLE public.customers ADD CONSTRAINT customers_phone_owner_id_key UNIQUE (phone, owner_id);
+

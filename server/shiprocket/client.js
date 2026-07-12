@@ -1,4 +1,4 @@
-const BASE = 'https://apiv2.shiprocket.in';
+const BASE = process.env.SHIPROCKET_API_URL || 'https://apiv2.shiprocket.in';
 
 async function srFetch(path, { method = 'GET', token, body } = {}) {
   const headers = { 'Content-Type': 'application/json' };

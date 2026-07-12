@@ -29,4 +29,8 @@ const pool = new Pool({
   ssl: getSslConfig(),
 });
 
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle pg client:', err);
+});
+
 export default pool;

@@ -3,7 +3,8 @@ import { mapShiprocketStatus, deliveryStatusForOrder, CUSTOMER_STATUS_LABELS } f
 import { mergeSettings } from './status-mapper.js';
 import { getConnection } from './auth.js';
 import { logShiprocketAction } from './audit.js';
-import { syncShipmentTracking } from './delivery-service.js';
+import { syncShipmentTracking, triggerRiderAssignedNotification } from './delivery-service.js';
+import { extractRiderDetails } from './hyperlocal.js';
 
 const ACTIVE_TRACKING_STATUSES = [
   'shipment_created',
@@ -64,14 +65,16 @@ async function maybeRefreshShipmentTracking(row) {
 
 export async function handleShiprocketWebhook(outletId, body, headers = {}) {
   const conn = await getConnection(outletId);
-  if (!conn) return { ok: false, error: 'Unknown outlet' };
+  if (!conn) return { ok: false, error: 'Unknown outlet', status: 404 };
 
   const settings = mergeSettings(conn.settings);
-  if (settings.webhook_secret) {
-    const key = headers['x-api-key'] || headers['x-api_key'];
-    if (key !== settings.webhook_secret) {
-      return { ok: false, error: 'Invalid webhook secret' };
-    }
+  const secret = settings.webhook_secret;
+  if (!secret) {
+    return { ok: false, error: 'Webhook secret is not configured for this outlet', status: 401 };
+  }
+  const key = headers['x-api-key'] || headers['x-api_key'] || headers['authorization'];
+  if (!key || key !== secret) {
+    return { ok: false, error: 'Invalid or missing webhook secret', status: 401 };
   }
 
   const awb = body?.awb || body?.awb_code;
@@ -115,21 +118,64 @@ export async function handleShiprocketWebhook(outletId, body, headers = {}) {
   }
 
   const mapped = mapShiprocketStatus(rawStatus) || shipRow.status;
+
+  // Extract rider details from webhook body
+  const rider = extractRiderDetails(body);
+
+  // Check if anything has changed (Avoid unnecessary database writes)
+  const isStatusChanged = mapped !== shipRow.status;
+  const isRiderChanged =
+    rider.rider_name !== shipRow.rider_name ||
+    rider.rider_phone !== shipRow.rider_phone ||
+    rider.rider_vehicle !== shipRow.rider_vehicle ||
+    rider.rider_id !== shipRow.rider_id;
+
+  if (!isStatusChanged && !isRiderChanged) {
+    return { ok: true, duplicate: true, status: mapped };
+  }
+
+  // Handle first-time rider assignment
+  let riderAssignedAt = shipRow.rider_assigned_at;
+  let triggerNotification = false;
+  if (mapped === 'rider_assigned' && shipRow.status !== 'rider_assigned') {
+    if (!riderAssignedAt) {
+      riderAssignedAt = new Date().toISOString();
+      triggerNotification = true;
+    }
+  }
+
   await pool.query(
     `UPDATE public.shiprocket_shipments SET
        status = $2,
        awb_code = COALESCE($3, awb_code),
        courier_name = COALESCE($4, courier_name),
+       rider_name = $5,
+       rider_phone = $6,
+       rider_vehicle = $7,
+       rider_id = $8,
+       rider_assigned_at = $9,
        delivered_at = CASE WHEN $2 = 'delivered' THEN now() ELSE delivered_at END,
        updated_at = now()
      WHERE id = $1`,
-    [shipRow.id, mapped, awb || null, body?.courier_name || null]
+    [
+      shipRow.id,
+      mapped,
+      awb || null,
+      body?.courier_name || null,
+      rider.rider_name,
+      rider.rider_phone,
+      rider.rider_vehicle,
+      rider.rider_id,
+      riderAssignedAt,
+    ]
   );
 
-  await pool.query(
-    `UPDATE public.orders SET delivery_status = $2 WHERE id = $1`,
-    [shipRow.order_id, deliveryStatusForOrder(mapped)]
-  );
+  if (isStatusChanged) {
+    await pool.query(
+      `UPDATE public.orders SET delivery_status = $2 WHERE id = $1`,
+      [shipRow.order_id, deliveryStatusForOrder(mapped)]
+    );
+  }
 
   await pool.query(
     `INSERT INTO public.shiprocket_tracking_events (shipment_id, event_code, event_message, raw)
@@ -143,6 +189,29 @@ export async function handleShiprocketWebhook(outletId, body, headers = {}) {
     action: 'webhook.received',
     metadata: { status: mapped, raw: rawStatus },
   });
+
+  if (triggerNotification) {
+    // Fetch order details for notifications
+    const { rows: orderRows } = await pool.query(
+      `SELECT order_number, customer_phone FROM public.orders WHERE id = $1`,
+      [shipRow.order_id]
+    );
+    const order = orderRows[0];
+    if (order) {
+      const trackUrl =
+        shipRow.tracking_url ||
+        (awb ? `https://shiprocket.co/tracking/${awb}` : null);
+
+      await triggerRiderAssignedNotification(
+        outletId,
+        shipRow.order_id,
+        order.order_number,
+        order.customer_phone,
+        rider,
+        trackUrl
+      );
+    }
+  }
 
   return { ok: true, status: mapped };
 }

@@ -238,7 +238,21 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
     const refundAmount = amount > 0 ? amount : Number(row.total || 0);
     if (!(refundAmount > 0)) return res.status(400).json({ error: 'Invalid refund amount' });
 
+    if (row.payment_status === 'refunded') {
+      return res.status(400).json({ error: 'Order is already fully refunded' });
+    }
+    const { rows: refundSums } = await pool.query(
+      `SELECT SUM(amount) AS total_refunded FROM public.order_refunds WHERE order_id = $1 AND status IN ('pending', 'processed')`,
+      [orderId]
+    );
+    const alreadyRefunded = Number(refundSums[0]?.total_refunded || 0);
+    const remaining = Number(row.total) - alreadyRefunded;
+    if (refundAmount > remaining) {
+      return res.status(400).json({ error: `Cannot refund more than remaining balance of ₹${remaining}` });
+    }
+
     try {
+      console.log(`[razorpay] Initiating refund for orderId=${orderId}, paymentId=${row.gateway_payment_id}, amount=${refundAmount}`);
       const accountId = await getConnectedAccount(req.user.id);
       const refund = await createRefundForAccount(accountId, row.gateway_payment_id, {
         amount: Math.round(refundAmount * 100),
@@ -266,7 +280,7 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
 
       res.json({ success: true, refund });
     } catch (err) {
-      console.error('razorpay refund:', err);
+      console.error('[razorpay] Refund failed:', err);
       res.status(400).json({ error: err.message || 'Refund failed' });
     }
   });
@@ -286,7 +300,14 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
 
       const conn = ownerId ? await getConnectionByOwner(ownerId) : null;
       const webhookSecret = parseSettings(conn?.settings).webhook_secret;
-      if (webhookSecret && !verifyRazorpaySignature(payloadStr, signature, webhookSecret)) {
+
+      if (!webhookSecret) {
+        console.error(`[razorpay] Webhook secret not configured in settings for ownerId ${ownerId}`);
+        return res.status(401).json({ error: 'Webhook secret is not configured' });
+      }
+
+      if (!verifyRazorpaySignature(payloadStr, signature, webhookSecret)) {
+        console.error('[razorpay] Webhook verification signature mismatch');
         return res.status(400).json({ error: 'Invalid webhook signature' });
       }
 
@@ -296,7 +317,10 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
           `SELECT id FROM public.razorpay_events WHERE event_id = $1 LIMIT 1`,
           [eventId]
         );
-        if (existing[0]) return res.json({ ok: true, duplicate: true });
+        if (existing[0]) {
+          console.log(`[razorpay] Webhook duplicate event ignored: ${eventId}`);
+          return res.json({ ok: true, duplicate: true });
+        }
       }
 
       await pool.query(
@@ -305,20 +329,33 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
         [ownerId, outletId, orderId, eventId, event?.event || 'unknown', event]
       );
 
-      if (event?.event === 'payment.authorized' || event?.event === 'payment.captured') {
+      console.log(`[razorpay] Webhook received: event_id=${eventId}, type=${event?.event}`);
+
+      const eventType = event?.event;
+
+      if (eventType === 'payment.authorized' || eventType === 'payment.captured') {
         const entity = event.payload.payment.entity;
 
         if (orderId) {
           const { rows: orderRows } = await pool.query(
-            `SELECT id FROM public.orders WHERE id = $1 LIMIT 1`,
+            `SELECT id, payment_status FROM public.orders WHERE id = $1 LIMIT 1`,
             [orderId]
           );
           if (orderRows.length === 0) {
-            const paymentStatus = event.event === 'payment.captured' ? 'captured' : 'authorized';
+            const paymentStatus = eventType === 'payment.captured' ? 'captured' : 'authorized';
             try {
               await createOrderFromSession(orderId, entity.id, signature, paymentStatus);
             } catch (sessionErr) {
               console.error('Webhook createOrderFromSession error:', sessionErr);
+            }
+          } else {
+            const currentStatus = orderRows[0]?.payment_status;
+            const incomingStatus = eventType === 'payment.captured' ? 'paid' : 'authorized';
+            if (['paid', 'refunded', 'partially_refunded', 'cancelled'].includes(currentStatus)) {
+              if (['pending', 'created', 'authorized', 'failed'].includes(incomingStatus)) {
+                console.log(`[razorpay] Skipping state regression: current is ${currentStatus}, incoming is ${incomingStatus}`);
+                return res.json({ ok: true });
+              }
             }
           }
         }
@@ -327,17 +364,24 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
           `UPDATE public.order_payments
              SET gateway_payment_id = COALESCE($2, gateway_payment_id),
                  status = $3,
-                 paid_at = CASE WHEN $3 = 'paid' THEN now() ELSE paid_at END,
-                 authorized_at = CASE WHEN $3 = 'authorized' THEN now() ELSE authorized_at END,
-                 metadata = metadata || $4::jsonb
+                 paid_at = CASE WHEN $3 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+                 authorized_at = CASE WHEN $3 = 'authorized' AND authorized_at IS NULL THEN now() ELSE authorized_at END,
+                 captured_at = CASE WHEN $3 = 'paid' AND captured_at IS NULL THEN now() ELSE captured_at END,
+                 webhook_received_at = now(),
+                 gateway_response = COALESCE(gateway_response, $4::jsonb),
+                 transaction_reference = COALESCE(transaction_reference, $5),
+                 metadata = metadata || $6::jsonb
            WHERE gateway_order_id = $1`,
           [
             entity.order_id,
             entity.id,
-            event.event === 'payment.captured' ? 'paid' : 'authorized',
+            eventType === 'payment.captured' ? 'paid' : 'authorized',
+            JSON.stringify(event),
+            entity.acquirer_data?.rrn || entity.acquirer_data?.transaction_id || null,
             JSON.stringify({ webhook_payment: entity }),
           ]
         );
+
         await pool.query(
           `UPDATE public.orders
              SET payment_status = $2,
@@ -346,23 +390,73 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
           [
             orderId,
             orderPaymentStatusFromGateway(
-              event.event === 'payment.captured' ? 'captured' : entity.status || 'authorized'
+              eventType === 'payment.captured' ? 'captured' : entity.status || 'authorized'
             ),
           ]
         );
-      } else if (event?.event === 'payment.failed') {
+      } else if (eventType === 'payment.created') {
+        if (orderId) {
+          const entity = event.payload.payment.entity;
+          await pool.query(
+            `UPDATE public.order_payments
+                SET status = 'created',
+                    webhook_received_at = now(),
+                    gateway_response = COALESCE(gateway_response, $2::jsonb)
+              WHERE gateway_order_id = $1`,
+            [entity.order_id, JSON.stringify(event)]
+          );
+        }
+      } else if (eventType === 'payment.failed') {
         const entity = event.payload.payment.entity;
+        if (orderId) {
+          const { rows: orderRows } = await pool.query(
+            `SELECT payment_status FROM public.orders WHERE id = $1 LIMIT 1`,
+            [orderId]
+          );
+          if (orderRows[0] && ['paid', 'refunded', 'partially_refunded', 'cancelled'].includes(orderRows[0].payment_status)) {
+            console.log(`[razorpay] Skipping failed transition since current status is ${orderRows[0].payment_status}`);
+            return res.json({ ok: true });
+          }
+        }
         await pool.query(
           `UPDATE public.order_payments
              SET status = 'failed',
                  failed_at = now(),
+                 webhook_received_at = now(),
                  gateway_payment_id = COALESCE($2, gateway_payment_id),
-                 metadata = metadata || $3::jsonb
+                 gateway_response = COALESCE(gateway_response, $3::jsonb),
+                 metadata = metadata || $4::jsonb
            WHERE gateway_order_id = $1`,
-          [entity.order_id, entity.id, JSON.stringify({ webhook_payment: entity })]
+          [entity.order_id, entity.id, JSON.stringify(event), JSON.stringify({ webhook_payment: entity })]
         );
-        await pool.query(`UPDATE public.orders SET payment_status = 'failed' WHERE id = $1`, [orderId]);
-      } else if (event?.event === 'refund.processed' || event?.event === 'refund.created') {
+        if (orderId) {
+          await pool.query(`UPDATE public.orders SET payment_status = 'failed' WHERE id = $1`, [orderId]);
+        }
+      } else if (eventType === 'order.paid') {
+        const entity = event.payload.order.entity;
+        if (orderId) {
+          const { rows: orderRows } = await pool.query(
+            `SELECT payment_status FROM public.orders WHERE id = $1 LIMIT 1`,
+            [orderId]
+          );
+          if (orderRows[0] && ['paid', 'refunded', 'partially_refunded', 'cancelled'].includes(orderRows[0].payment_status)) {
+            return res.json({ ok: true });
+          }
+        }
+        await pool.query(
+          `UPDATE public.order_payments
+             SET status = 'paid',
+                 paid_at = COALESCE(paid_at, now()),
+                 captured_at = COALESCE(captured_at, now()),
+                 webhook_received_at = now(),
+                 gateway_response = COALESCE(gateway_response, $2::jsonb)
+           WHERE gateway_order_id = $1`,
+          [entity.id, JSON.stringify(event)]
+        );
+        if (orderId) {
+          await pool.query(`UPDATE public.orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()) WHERE id = $1`, [orderId]);
+        }
+      } else if (eventType === 'refund.processed' || eventType === 'refund.created') {
         const refund = event.payload.refund.entity;
         await pool.query(
           `UPDATE public.order_refunds
@@ -372,11 +466,56 @@ export function registerRazorpayRoutes(app, { requireAuth }) {
            WHERE gateway_refund_id = $1`,
           [refund.id, refund.status || 'processed', JSON.stringify({ webhook_refund: refund })]
         );
+
+        if (orderId) {
+          const { rows: refundSums } = await pool.query(
+            `SELECT SUM(amount) AS total_refunded FROM public.order_refunds WHERE order_id = $1 AND status = 'processed'`,
+            [orderId]
+          );
+          const totalRefunded = Number(refundSums[0]?.total_refunded || 0);
+
+          const { rows: orderRows } = await pool.query(
+            `SELECT total FROM public.orders WHERE id = $1 LIMIT 1`,
+            [orderId]
+          );
+          const totalAmount = Number(orderRows[0]?.total || 0);
+
+          let nextPaymentStatus = 'paid';
+          if (totalRefunded >= totalAmount) {
+            nextPaymentStatus = 'refunded';
+          } else if (totalRefunded > 0) {
+            nextPaymentStatus = 'partially_refunded';
+          }
+
+          await pool.query(
+            `UPDATE public.orders SET payment_status = $2 WHERE id = $1`,
+            [orderId, nextPaymentStatus]
+          );
+          await pool.query(
+            `UPDATE public.order_payments SET status = $2, refunded_amount = $3 WHERE order_id = $1`,
+            [orderId, nextPaymentStatus, totalRefunded]
+          );
+        }
+      } else if (['payment.dispute.created', 'payment.dispute.won', 'payment.dispute.lost'].includes(eventType)) {
+        const dispute = event.payload.dispute.entity;
+        console.warn(`[razorpay] Dispute event: ${eventType}, disputeId=${dispute.id}, paymentId=${dispute.payment_id}`);
+        await pool.query(
+          `UPDATE public.order_payments
+              SET metadata = metadata || $2::jsonb,
+                  updated_at = now()
+            WHERE gateway_payment_id = $1`,
+          [
+            dispute.payment_id,
+            JSON.stringify({ dispute_info: { event: eventType, id: dispute.id, status: dispute.status, amount: dispute.amount } })
+          ]
+        );
+      } else {
+        console.log(`[razorpay] Webhook received unhandled event type: ${eventType}`);
       }
 
       res.json({ ok: true });
     } catch (err) {
-      console.error('razorpay webhook:', err);
+      console.error('[razorpay] Webhook error:', err);
       res.status(500).json({ error: err.message || 'Webhook error' });
     }
   });

@@ -294,7 +294,10 @@ export default function BrandApp() {
         }
 
         setBrand(json.brand as BrandProfile);
-        const outletList = (json.outlets ?? []) as OutletWithDistance[];
+        const outletList = (json.outlets ?? []).map((o: any) => ({
+          ...o,
+          owner_id: json.brand.user_id,
+        })) as OutletWithDistance[];
         setOutlets(outletList);
         if (outletList.length === 1) setSelectedOutlet(outletList[0]);
       } catch {
@@ -335,7 +338,7 @@ export default function BrandApp() {
   }
 
   return (
-    <CustomerProvider>
+    <CustomerProvider ownerId={brand?.user_id}>
       {selectedOutlet ? (
         <OutletOrderingFlow
           outlet={selectedOutlet}
