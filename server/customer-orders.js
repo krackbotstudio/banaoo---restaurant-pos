@@ -76,6 +76,19 @@ export async function applyOnlinePaymentToOrder({
   const recordStatus = orderPaymentRecordStatusFromGateway(gatewayStatus);
   const isPaid = orderStatus === 'paid';
 
+  // Read current status to prevent regression
+  const { rows: currentOrder } = await pool.query(
+    `SELECT payment_status FROM public.orders WHERE id = $1`,
+    [orderId]
+  );
+  const currentStatus = currentOrder[0]?.payment_status;
+  if (['paid', 'refunded', 'partially_refunded', 'cancelled'].includes(currentStatus)) {
+    if (['pending', 'created', 'authorized', 'failed'].includes(orderStatus)) {
+      console.log(`[razorpay] applyOnlinePaymentToOrder skipping state regression: current is ${currentStatus}, incoming is ${orderStatus}`);
+      return { payment_status: currentStatus, is_paid: currentStatus === 'paid' };
+    }
+  }
+
   await pool.query(
     `UPDATE public.orders
        SET payment_status = $2,
@@ -92,6 +105,16 @@ export async function applyOnlinePaymentToOrder({
     [orderId]
   );
 
+  const { rows: orderRows } = await pool.query(
+    'SELECT order_number FROM public.orders WHERE id = $1 LIMIT 1',
+    [orderId]
+  );
+  const receiptVal = orderRows[0]?.order_number || null;
+  const transactionRef =
+    metadata.verified_payment?.acquirer_data?.rrn ||
+    metadata.verified_payment?.acquirer_data?.transaction_id ||
+    null;
+
   if (existingPayments[0]) {
     await pool.query(
       `UPDATE public.order_payments
@@ -103,6 +126,10 @@ export async function applyOnlinePaymentToOrder({
              gateway_signature = COALESCE($5, gateway_signature),
              authorized_at = CASE WHEN $2 IN ('authorized', 'paid') AND authorized_at IS NULL THEN now() ELSE authorized_at END,
              paid_at = CASE WHEN $2 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+             captured_at = CASE WHEN $2 = 'paid' AND captured_at IS NULL THEN now() ELSE captured_at END,
+             receipt = COALESCE(receipt, $7),
+             transaction_reference = COALESCE(transaction_reference, $8),
+             gateway_response = COALESCE(gateway_response, $9::jsonb),
              metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb,
              updated_at = now()
        WHERE id = $1`,
@@ -113,6 +140,9 @@ export async function applyOnlinePaymentToOrder({
         gatewayPaymentId,
         gatewaySignature,
         JSON.stringify(metadata),
+        receiptVal,
+        transactionRef,
+        JSON.stringify(metadata.verified_payment || {}),
       ]
     );
   } else {
@@ -120,11 +150,13 @@ export async function applyOnlinePaymentToOrder({
       `INSERT INTO public.order_payments (
          order_id, outlet_id, amount, method, status, gateway, currency,
          gateway_order_id, gateway_payment_id, gateway_signature,
-         authorized_at, paid_at, metadata
+         authorized_at, paid_at, captured_at, receipt, transaction_reference,
+         gateway_response, metadata
        ) VALUES ($1,$2,$3,'online',$4,'razorpay','INR',$5,$6,$7,
          CASE WHEN $4 IN ('authorized', 'paid') THEN now() ELSE NULL END,
          CASE WHEN $4 = 'paid' THEN now() ELSE NULL END,
-         $8)`,
+         CASE WHEN $4 = 'paid' THEN now() ELSE NULL END,
+         $8, $9, $10::jsonb, $11)`,
       [
         orderId,
         outletId,
@@ -133,6 +165,9 @@ export async function applyOnlinePaymentToOrder({
         gatewayOrderId,
         gatewayPaymentId,
         gatewaySignature,
+        receiptVal,
+        transactionRef,
+        JSON.stringify(metadata.verified_payment || {}),
         JSON.stringify(metadata),
       ]
     );
@@ -148,7 +183,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
     try {
       const { rows } = await pool.query(
         `SELECT o.id, o.name, o.address, o.phone, o.opening_time, o.closing_time,
-                o.latitude, o.longitude,
+                o.latitude, o.longitude, o.owner_id,
                 p.logo_url, p.brand_color, p.brand_name
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id

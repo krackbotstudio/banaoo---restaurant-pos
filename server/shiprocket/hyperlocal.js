@@ -32,3 +32,37 @@ export function courierIdFrom(courier) {
 
 export const QUICK_SHIPPING_METHOD = 'SR_QUICK';
 export const FOOD_ORDER_TYPE = 'ESSENTIALS';
+
+export function extractRiderDetails(data) {
+  if (!data) return { rider_name: null, rider_phone: null, rider_vehicle: null, rider_id: null };
+  const trackData = data?.tracking_data || {};
+  const agent =
+    data?.courier_agent_details ||
+    trackData?.courier_agent_details ||
+    data?.courier_agent ||
+    trackData?.courier_agent ||
+    data?.delivery_boy ||
+    trackData?.delivery_boy ||
+    data?.agent ||
+    trackData?.agent ||
+    data?.rider ||
+    trackData?.rider ||
+    null;
+
+  if (!agent || typeof agent !== 'object') {
+    return {
+      rider_name: null,
+      rider_phone: null,
+      rider_vehicle: null,
+      rider_id: null,
+    };
+  }
+
+  return {
+    rider_name: agent.name || agent.courier_name || agent.rider_name || null,
+    rider_phone: agent.phone || agent.courier_phone || agent.rider_phone || null,
+    rider_vehicle: agent.vehicle_number || agent.vehicle_details || agent.vehicle || agent.vehicle_no || null,
+    rider_id: agent.id != null ? String(agent.id) : (agent.rider_id != null ? String(agent.rider_id) : (agent.courier_agent_id != null ? String(agent.courier_agent_id) : null)),
+  };
+}
+

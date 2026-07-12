@@ -15,6 +15,7 @@ import {
   courierIdFrom,
   QUICK_SHIPPING_METHOD,
   FOOD_ORDER_TYPE,
+  extractRiderDetails,
 } from './hyperlocal.js';
 
 async function resolveQuickCoords(client, order, outletId, settings) {
@@ -65,8 +66,12 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
   const pincode = order.delivery_pincode?.trim();
   const city = order.delivery_city?.trim();
   const state = order.delivery_state?.trim();
+  const address = order.delivery_address?.trim();
   if (!pincode || !city || !state) {
     throw new Error('Delivery order missing pincode, city, or state');
+  }
+  if (!address) {
+    throw new Error('Delivery order missing shipping address details.');
   }
 
   const dims = settings.dimensions || {};
@@ -174,6 +179,17 @@ export async function bookShipment(shipmentRow) {
     const payload = buildQuickHyperlocalPayload(order, items, settings, coords);
     const isCod = payload.payment_method === 'COD';
 
+    console.log('[shiprocket] preCheck coordinates & params:', {
+      pickup_postcode: coords.pickupPincode,
+      delivery_postcode: coords.deliveryPincode,
+      cod: isCod,
+      weight: payload.weight,
+      lat_from: coords.pickupLat,
+      long_from: coords.pickupLng,
+      lat_to: coords.deliveryLat,
+      long_to: coords.deliveryLng,
+    });
+
     const preCheck = await withValidToken(ship.outlet_id, (token) =>
       checkHyperlocalServiceability(token, {
         pickup_postcode: coords.pickupPincode,
@@ -186,6 +202,9 @@ export async function bookShipment(shipmentRow) {
         long_to: coords.deliveryLng,
       })
     );
+
+    console.log('[shiprocket] preCheck serviceability response:', JSON.stringify(preCheck, null, 2));
+
     const preCouriers = extractCouriers(preCheck);
     if (!preCouriers.length) {
       throw new Error(
@@ -197,10 +216,13 @@ export async function bookShipment(shipmentRow) {
       createAdhocOrder(token, payload)
     );
 
-    const srOrderId = response.order_id ?? response.shipment_id;
-    const shipmentId = response.shipment_id ?? response.order_id;
+    console.log('[shiprocket] createAdhocOrder raw response:', JSON.stringify(response, null, 2));
+
+    const srOrderId = response.order_id ?? response.shipment_id ?? response.data?.order_id ?? response.data?.shipment_id;
+    const shipmentId = response.shipment_id ?? response.order_id ?? response.data?.shipment_id ?? response.data?.order_id;
     if (!srOrderId || !shipmentId) {
-      throw new Error('Shiprocket did not return order/shipment id for Quick booking');
+      const errMsg = response.message || response.error || (typeof response.errors === 'string' ? response.errors : null);
+      throw new Error(errMsg || 'Shiprocket did not return order/shipment id for Quick booking');
     }
 
     const serviceability = await withValidToken(ship.outlet_id, (token) =>
@@ -217,10 +239,20 @@ export async function bookShipment(shipmentRow) {
       })
     );
     const couriers = extractCouriers(serviceability);
+    console.log('[shiprocket] preCouriers list:', preCouriers);
+    console.log('[shiprocket] serviceability couriers list:', couriers);
     const selectedCourier = pickQuickCourier(couriers.length ? couriers : preCouriers);
+    console.log('[shiprocket] selectedCourier:', selectedCourier);
     const courierId = courierIdFrom(selectedCourier);
+    console.log('[shiprocket] courierId resolved:', courierId);
     if (!courierId) {
-      throw new Error('No Shiprocket Quick 2-wheeler courier available for this order');
+      const debugInfo = {
+        has_couriers: couriers.length,
+        has_preCouriers: preCouriers.length,
+        selected_courier_keys: selectedCourier ? Object.keys(selectedCourier) : null,
+        selected_courier_val: selectedCourier ? selectedCourier : null,
+      };
+      throw new Error(`No Shiprocket Quick 2-wheeler courier available for this order. Debug info: ${JSON.stringify(debugInfo)}`);
     }
 
     let assignRes = null;
@@ -240,8 +272,11 @@ export async function bookShipment(shipmentRow) {
     const awb =
       assignRes?.awb_code ||
       assignRes?.response?.data?.awb_code ||
+      assignRes?.data?.awb_code ||
       response.awb_code ||
       response.awb ||
+      response.data?.awb_code ||
+      response.data?.awb ||
       null;
     const courierName =
       assignRes?.courier_name ||
@@ -472,6 +507,42 @@ export async function cancelShipment(orderId, outletId) {
   return { success: true };
 }
 
+export async function triggerRiderAssignedNotification(
+  outletId,
+  orderId,
+  orderNumber,
+  customerPhone,
+  rider,
+  trackingUrl
+) {
+  try {
+    const { rows: outletRows } = await pool.query(
+      `SELECT owner_id FROM public.outlets WHERE id = $1`,
+      [outletId]
+    );
+    const ownerId = outletRows[0]?.owner_id;
+    if (ownerId) {
+      const title = `Rider Assigned - Order #${orderNumber}`;
+      const message = `Rider ${rider.rider_name || 'assigned'} (${rider.rider_phone || 'no phone'}) is heading to the outlet. Vehicle: ${rider.rider_vehicle || 'N/A'}`;
+      await pool.query(
+        `INSERT INTO public.notifications (user_id, type, title, message, action_url)
+         VALUES ($1, 'delivery', $2, $3, '/orders')`,
+        [ownerId, title, message]
+      );
+    }
+
+    if (customerPhone) {
+      console.log(
+        `[SMS Notification] To: ${customerPhone} | Message: Rider ${
+          rider.rider_name || ''
+        } (${rider.rider_phone || ''}) is assigned to your order #${orderNumber}. Track live: ${trackingUrl}`
+      );
+    }
+  } catch (err) {
+    console.error('[shiprocket] notification trigger failed:', err.message);
+  }
+}
+
 export async function syncShipmentTracking(shipmentRow) {
   if (!shipmentRow.shipment_id) return shipmentRow;
   const data = await withValidToken(shipmentRow.outlet_id, (token) =>
@@ -488,10 +559,7 @@ export async function syncShipmentTracking(shipmentRow) {
     data?.current_status;
   const mapped = mapShiprocketStatus(rawStatus) || shipmentRow.status;
 
-  const courierAgent =
-    data?.courier_agent_details ||
-    trackData?.courier_agent_details ||
-    null;
+  const rider = extractRiderDetails(data);
 
   const snapshot = {
     activities: (Array.isArray(activities) ? activities : []).map((a) => ({
@@ -500,7 +568,7 @@ export async function syncShipmentTracking(shipmentRow) {
       date: a.date || '',
     })),
     current_status: rawStatus || null,
-    courier_agent: courierAgent,
+    courier_agent: data?.courier_agent_details || trackData?.courier_agent_details || null,
     fetched_at: new Date().toISOString(),
   };
 
@@ -508,18 +576,58 @@ export async function syncShipmentTracking(shipmentRow) {
     shipmentRow.tracking_url ||
     (shipmentRow.awb_code ? `https://shiprocket.co/tracking/${shipmentRow.awb_code}` : null);
 
+  // Check if anything has changed (Avoid unnecessary database writes)
+  const isStatusChanged = mapped !== shipmentRow.status;
+  const isRiderChanged =
+    rider.rider_name !== shipmentRow.rider_name ||
+    rider.rider_phone !== shipmentRow.rider_phone ||
+    rider.rider_vehicle !== shipmentRow.rider_vehicle ||
+    rider.rider_id !== shipmentRow.rider_id;
+  const isSnapshotChanged =
+    JSON.stringify(snapshot.activities) !==
+    JSON.stringify(shipmentRow.last_track_snapshot?.activities || []);
+
+  if (!isStatusChanged && !isRiderChanged && !isSnapshotChanged) {
+    return shipmentRow;
+  }
+
+  // Handle first-time rider assignment
+  let riderAssignedAt = shipmentRow.rider_assigned_at;
+  let triggerNotification = false;
+  if (mapped === 'rider_assigned' && shipmentRow.status !== 'rider_assigned') {
+    if (!riderAssignedAt) {
+      riderAssignedAt = new Date().toISOString();
+      triggerNotification = true;
+    }
+  }
+
   await pool.query(
     `UPDATE public.shiprocket_shipments SET
        last_track_snapshot = $2,
        tracking_url = COALESCE(tracking_url, $3),
        status = $4,
+       rider_name = $5,
+       rider_phone = $6,
+       rider_vehicle = $7,
+       rider_id = $8,
+       rider_assigned_at = $9,
        updated_at = now(),
        delivered_at = CASE WHEN $4 = 'delivered' THEN now() ELSE delivered_at END
      WHERE id = $1`,
-    [shipmentRow.id, JSON.stringify(snapshot), trackUrl, mapped]
+    [
+      shipmentRow.id,
+      JSON.stringify(snapshot),
+      trackUrl,
+      mapped,
+      rider.rider_name,
+      rider.rider_phone,
+      rider.rider_vehicle,
+      rider.rider_id,
+      riderAssignedAt,
+    ]
   );
 
-  if (mapped !== shipmentRow.status) {
+  if (isStatusChanged) {
     await pool.query(
       `UPDATE public.orders SET delivery_status = $2 WHERE id = $1`,
       [shipmentRow.order_id, deliveryStatusForOrder(mapped)]
@@ -536,7 +644,36 @@ export async function syncShipmentTracking(shipmentRow) {
     );
   }
 
-  return { ...shipmentRow, status: mapped, last_track_snapshot: snapshot, tracking_url: trackUrl };
+  if (triggerNotification) {
+    // Fetch order details for notifications
+    const { rows: orderRows } = await pool.query(
+      `SELECT order_number, customer_phone FROM public.orders WHERE id = $1`,
+      [shipmentRow.order_id]
+    );
+    const order = orderRows[0];
+    if (order) {
+      await triggerRiderAssignedNotification(
+        shipmentRow.outlet_id,
+        shipmentRow.order_id,
+        order.order_number,
+        order.customer_phone,
+        rider,
+        trackUrl
+      );
+    }
+  }
+
+  return {
+    ...shipmentRow,
+    status: mapped,
+    last_track_snapshot: snapshot,
+    tracking_url: trackUrl,
+    rider_name: rider.rider_name,
+    rider_phone: rider.rider_phone,
+    rider_vehicle: rider.rider_vehicle,
+    rider_id: rider.rider_id,
+    rider_assigned_at: riderAssignedAt,
+  };
 }
 
 export async function getShipmentDetails(orderId) {

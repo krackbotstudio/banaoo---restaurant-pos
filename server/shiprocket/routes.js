@@ -263,7 +263,7 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
     if (!outletId) return res.status(400).json({ error: 'outlet_id required' });
     try {
       const result = await handleShiprocketWebhook(outletId, req.body || {}, req.headers);
-      if (!result.ok) return res.status(result.error === 'Invalid webhook secret' ? 401 : 404).json(result);
+      if (!result.ok) return res.status(result.status || 400).json(result);
       res.json({ success: true });
     } catch (err) {
       console.error('shiprocket webhook:', err);
