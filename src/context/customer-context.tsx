@@ -33,32 +33,41 @@ interface CustomerContextValue {
 
 const CustomerContext = createContext<CustomerContextValue | null>(null);
 
-const STORAGE_KEY = "banaoo_customer";
-
-function loadFromStorage(): CustomerProfile | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveToStorage(customer: CustomerProfile | null) {
-  if (customer) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(customer));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-}
+import { useEffect } from "react";
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-\(\)]/g, "");
 }
 
-export function CustomerProvider({ children }: { children: ReactNode }) {
-  const [customer, setCustomer] = useState<CustomerProfile | null>(loadFromStorage);
+export function CustomerProvider({ children, ownerId }: { children: ReactNode; ownerId?: string }) {
+  const storageKey = ownerId ? `banaoo_customer_${ownerId}` : "banaoo_customer";
+
+  const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      setCustomer(raw ? JSON.parse(raw) : null);
+    } catch {
+      setCustomer(null);
+    }
+  }, [storageKey]);
+
+  const saveToStorage = useCallback((profile: CustomerProfile | null) => {
+    if (profile) {
+      localStorage.setItem(storageKey, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  }, [storageKey]);
 
   const fetchFullProfile = useCallback(async (id: string): Promise<CustomerProfile | null> => {
     const { data, error } = await db
@@ -71,6 +80,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const lookupByPhone = useCallback(async (phone: string): Promise<CustomerProfile | null> => {
+    if (!ownerId) return null;
     setLoading(true);
     try {
       const normalized = normalizePhone(phone);
@@ -78,6 +88,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
         .from("customers")
         .select("id, phone, name, customer_addresses(id, label, address_text, lat, lng, is_default)")
         .eq("phone", normalized)
+        .eq("owner_id", ownerId)
         .maybeSingle();
 
       if (error) {
@@ -96,13 +107,14 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ownerId, saveToStorage]);
 
   const saveCustomer = useCallback(async (
     phone: string,
     name: string,
     address?: CustomerAddress
   ): Promise<CustomerProfile | null> => {
+    if (!ownerId) return null;
     setLoading(true);
     try {
       const normalized = normalizePhone(phone);
@@ -111,8 +123,8 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
       const { data: upserted, error: upsertError } = await db
         .from("customers")
         .upsert(
-          { phone: normalized, name, updated_at: new Date().toISOString() },
-          { onConflict: "phone", ignoreDuplicates: false }
+          { phone: normalized, name, owner_id: ownerId, updated_at: new Date().toISOString() },
+          { onConflict: "phone,owner_id", ignoreDuplicates: false }
         )
         .select("id, phone, name")
         .single();
@@ -170,7 +182,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchFullProfile]);
+  }, [ownerId, fetchFullProfile, saveToStorage]);
 
   const updateAddress = useCallback(async (addressId: string, address: CustomerAddress) => {
     if (!customer) return;
@@ -189,7 +201,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
           lat: address.lat ?? null,
           lng: address.lng ?? null,
           is_default: address.is_default,
-        })
+         })
         .eq("id", addressId)
         .eq("customer_id", customer.id);
 
@@ -201,12 +213,12 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("updateAddress exception:", err);
     }
-  }, [customer, fetchFullProfile]);
+  }, [customer, fetchFullProfile, saveToStorage]);
 
   const clearCustomer = useCallback(() => {
     setCustomer(null);
     saveToStorage(null);
-  }, []);
+  }, [saveToStorage]);
 
   return (
     <CustomerContext.Provider value={{ customer, loading, lookupByPhone, saveCustomer, updateAddress, clearCustomer }}>

@@ -36,6 +36,7 @@ export default function RestaurantApp() {
           closing_time: json.closing_time,
           latitude: json.latitude,
           longitude: json.longitude,
+          owner_id: json.owner_id,
         });
         if (json.branding) {
           setBranding({
@@ -72,7 +73,7 @@ export default function RestaurantApp() {
   }
 
   return (
-    <CustomerProvider>
+    <CustomerProvider ownerId={outlet.owner_id}>
       <OutletOrderingFlow outlet={outlet} basePath={`/r/${outletId}`} branding={branding} />
     </CustomerProvider>
   );

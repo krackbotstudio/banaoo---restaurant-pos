@@ -137,17 +137,20 @@ Registered in `server/index.js` via `registerShiprocketRoutes()` and `startShipr
 | Variable | Purpose |
 |----------|---------|
 | `SHIPROCKET_ENCRYPTION_KEY` | Credential encryption (falls back to `SESSION_SECRET`) |
+| `SHIPROCKET_API_URL` | Base API URL for Shiprocket. Defaults to `https://apiv2.shiprocket.in`. Useful for sandbox/staging mocks. |
 
 ---
 
 ## Database
 
-Migration: `supabase/migrations/20260611000001_shiprocket_delivery.sql`
+Migrations: 
+* `supabase/migrations/20260611000001_shiprocket_delivery.sql`
+* `supabase/migrations/20260712000100_shiprocket_rider_columns.sql`
 
 | Table | Purpose |
 |-------|---------|
 | `shiprocket_connections` | Per-outlet encrypted credentials + settings JSONB |
-| `shiprocket_shipments` | One row per delivery order |
+| `shiprocket_shipments` | One row per delivery order. Contains columns: `rider_name`, `rider_phone`, `rider_vehicle`, `rider_id`, `rider_assigned_at`. |
 | `shiprocket_tracking_events` | Timeline events |
 | `shiprocket_audit_log` | connect / book / webhook / fail |
 
@@ -160,7 +163,7 @@ RLS enabled, **no client policies** (server pool only).
 ## Tests
 
 ```bash
-node --test server/shiprocket/status-mapper.test.js
+node --test server/shiprocket/*.test.js
 ```
 
 ---

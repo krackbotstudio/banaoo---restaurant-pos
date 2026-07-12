@@ -24,17 +24,23 @@ interface DeliveryStatus {
 }
 
 const STEPS = [
-  { key: "accepted", label: "Accepted" },
+  { key: "accepted", label: "Order Accepted" },
   { key: "preparing", label: "Preparing" },
-  { key: "rider", label: "Rider assigned" },
-  { key: "picked_up", label: "Picked up" },
+  { key: "booked", label: "Shipment Booked" },
+  { key: "awaiting_rider", label: "Awaiting Rider" },
+  { key: "rider_assigned", label: "Rider Assigned" },
+  { key: "picked_up", label: "Picked Up" },
+  { key: "out_for_delivery", label: "Out For Delivery" },
   { key: "delivered", label: "Delivered" },
 ];
 
 function stepIndex(status: string, orderStatus: string): number {
-  if (status === "delivered") return 4;
-  if (status === "out_for_delivery" || status === "picked_up") return 3;
-  if (["rider_assigned", "awaiting_rider", "shipment_created"].includes(status)) return 2;
+  if (status === "delivered") return 7;
+  if (status === "out_for_delivery") return 6;
+  if (status === "picked_up") return 5;
+  if (status === "rider_assigned") return 4;
+  if (status === "awaiting_rider") return 3;
+  if (status === "shipment_created") return 2;
   if (status === "booking" || orderStatus === "preparing") return 1;
   return 0;
 }
