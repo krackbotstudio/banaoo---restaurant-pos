@@ -13,6 +13,7 @@ import {
 import { handleShiprocketWebhook, getPublicDeliveryStatus } from './webhook.js';
 import { logShiprocketAction } from './audit.js';
 import { buildEntitlementsPayload } from '../entitlements.js';
+import { isShiprocketAuthError } from './auth.js';
 
 async function assertOutletOwner(outletId, userId) {
   const { rows } = await pool.query(
@@ -183,7 +184,10 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
       res.json({ success: true, ...result });
     } catch (err) {
       console.error('shiprocket book:', err);
-      res.status(400).json({ error: err.message });
+      const msg = isShiprocketAuthError(err)
+        ? 'Shiprocket session expired and could not be refreshed. Disconnect and reconnect in Settings → Delivery with your API user credentials.'
+        : err.message;
+      res.status(400).json({ error: msg });
     }
   });
 

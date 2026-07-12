@@ -51,12 +51,25 @@ export async function disconnectConnection(outletId) {
   );
 }
 
-export async function getValidToken(outletId) {
+export function isShiprocketAuthError(err) {
+  const msg = String(err?.message || err?.data?.message || err?.data?.error || '').toLowerCase();
+  return (
+    err?.status === 401 ||
+    /token[_\s-]?expired|unauthorized|unauthenticated|invalid.?token|jwt.?expired/i.test(msg)
+  );
+}
+
+/** Get a Shiprocket bearer token, refreshing when near expiry or when `force` is set. */
+export async function getValidToken(outletId, { force = false } = {}) {
   const conn = await getConnection(outletId);
   if (!conn?.is_connected) throw new Error('Shiprocket not connected');
 
   const expires = conn.token_expires_at ? new Date(conn.token_expires_at) : null;
-  const needsRefresh = !conn.access_token_enc || !expires || expires < new Date(Date.now() + 60 * 60 * 1000);
+  const needsRefresh =
+    force ||
+    !conn.access_token_enc ||
+    !expires ||
+    expires < new Date(Date.now() + 60 * 60 * 1000);
 
   if (!needsRefresh) {
     return decryptSecret(conn.access_token_enc);
@@ -64,7 +77,11 @@ export async function getValidToken(outletId) {
 
   const email = decryptSecret(conn.api_email_enc);
   const password = decryptSecret(conn.api_password_enc);
-  if (!email || !password) throw new Error('Shiprocket credentials missing');
+  if (!email || !password) {
+    throw new Error(
+      'Shiprocket credentials missing. Disconnect and reconnect in Settings → Delivery.'
+    );
+  }
 
   const { token, expiresAt } = await loginShiprocket(email, password);
   await pool.query(
@@ -74,4 +91,18 @@ export async function getValidToken(outletId) {
     [outletId, encryptSecret(token), expiresAt.toISOString()]
   );
   return token;
+}
+
+/**
+ * Run an API call with a valid token; on token_expired / 401, force-refresh once and retry.
+ */
+export async function withValidToken(outletId, fn) {
+  let token = await getValidToken(outletId);
+  try {
+    return await fn(token);
+  } catch (err) {
+    if (!isShiprocketAuthError(err)) throw err;
+    token = await getValidToken(outletId, { force: true });
+    return await fn(token);
+  }
 }

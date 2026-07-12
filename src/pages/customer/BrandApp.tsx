@@ -5,9 +5,9 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { CustomerProvider } from "@/context/customer-context";
 import { OutletOrderingFlow, OutletData } from "./OutletOrderingFlow";
+import { API_URL } from "@/lib/api-url";
 import {
   Loader2, UtensilsCrossed, MapPin, Navigation, ChevronRight, Clock,
 } from "lucide-react";
@@ -284,38 +284,26 @@ export default function BrandApp() {
   useEffect(() => {
     if (!slug) return;
     const load = async () => {
-      // 1. Find brand profile by slug
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("user_id, brand_name, full_name, ordering_slug, business_type, logo_url, brand_color")
-        .eq("ordering_slug", slug)
-        .maybeSingle();
+      try {
+        const res = await fetch(`${API_URL}/api/public/brands/${encodeURIComponent(slug)}`);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(json.error || "Brand not found. Check your link and try again.");
+          setLoading(false);
+          return;
+        }
 
-      if (profileError || !profileData) {
-        setError("Brand not found. Check your link and try again.");
+        setBrand(json.brand as BrandProfile);
+        const outletList = (json.outlets ?? []) as OutletWithDistance[];
+        setOutlets(outletList);
+        if (outletList.length === 1) setSelectedOutlet(outletList[0]);
+      } catch {
+        setError("Unable to load restaurant. Please check your connection and try again.");
+      } finally {
         setLoading(false);
-        return;
       }
-
-      setBrand(profileData as BrandProfile);
-
-      // 2. Fetch all active outlets for this brand owner
-      const { data: outletData } = await supabase
-        .from("outlets")
-        .select("id, name, address, phone, opening_time, closing_time, latitude, longitude")
-        .eq("owner_id", profileData.user_id)
-        .eq("is_active", true)
-        .order("created_at");
-
-      const outletList = (outletData ?? []) as OutletWithDistance[];
-      setOutlets(outletList);
-
-      // If only one outlet, auto-select it
-      if (outletList.length === 1) setSelectedOutlet(outletList[0]);
-
-      setLoading(false);
     };
-    load();
+    void load();
   }, [slug]);
 
   if (loading) {
