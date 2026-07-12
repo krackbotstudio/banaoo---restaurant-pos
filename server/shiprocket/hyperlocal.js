@@ -5,6 +5,7 @@ const QUICK_COURIER_RE =
 
 export function extractCouriers(serviceabilityResponse) {
   const data = serviceabilityResponse?.data ?? serviceabilityResponse;
+  if (Array.isArray(data)) return data;
   const list =
     data?.available_courier_companies ??
     data?.available_courier_company_ids ??

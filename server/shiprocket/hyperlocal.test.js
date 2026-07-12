@@ -12,6 +12,14 @@ test('extractCouriers reads available_courier_companies', () => {
   assert.equal(list[0].courier_company_id, 10);
 });
 
+test('extractCouriers handles data array directly', () => {
+  const list = extractCouriers({
+    data: [{ courier_name: 'Shiprocket Quick', distance: 4.13 }],
+  });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].courier_name, 'Shiprocket Quick');
+});
+
 test('pickQuickCourier prefers quick/hyperlocal names', () => {
   const picked = pickQuickCourier([
     { courier_company_id: 1, courier_name: 'Delhivery Surface' },
