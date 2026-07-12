@@ -803,26 +803,31 @@ let mobileAppLeadsTableReady = false;
 
 async function ensureMobileAppLeadsTable() {
   if (mobileAppLeadsTableReady) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.mobile_app_leads (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      email TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'landing_unknown',
-      user_agent TEXT,
-      ip_address TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_created_at
-      ON public.mobile_app_leads (created_at DESC)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_email
-      ON public.mobile_app_leads (email)
-  `);
-  mobileAppLeadsTableReady = true;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.mobile_app_leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'landing_unknown',
+        user_agent TEXT,
+        ip_address TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_created_at
+        ON public.mobile_app_leads (created_at DESC)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mobile_app_leads_email
+        ON public.mobile_app_leads (email)
+    `);
+    mobileAppLeadsTableReady = true;
+  } catch (err) {
+    console.warn('Warning: Could not verify or update mobile_app_leads table (likely permission/owner restriction):', err.message);
+    mobileAppLeadsTableReady = true;
+  }
 }
 
 app.get('/api/mobile-app/apk', (req, res) => {
