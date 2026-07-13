@@ -196,6 +196,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const o = rows[0];
       res.json({
         id: o.id,
+        owner_id: o.owner_id,
         name: o.name,
         address: o.address,
         phone: o.phone,

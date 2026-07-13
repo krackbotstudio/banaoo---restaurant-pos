@@ -31,7 +31,7 @@ export function courierIdFrom(courier) {
 }
 
 export const QUICK_SHIPPING_METHOD = 'SR_QUICK';
-export const FOOD_ORDER_TYPE = 'ESSENTIALS';
+export const FOOD_ORDER_TYPE = 'Food';
 
 export function extractRiderDetails(data) {
   if (!data) return { rider_name: null, rider_phone: null, rider_vehicle: null, rider_id: null };
