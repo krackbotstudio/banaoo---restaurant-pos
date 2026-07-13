@@ -80,17 +80,19 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
     .replace(/\D/g, '')
     .slice(-10);
 
+  const categoryName = (() => {
+    let cat = settings.order_type_category || FOOD_ORDER_TYPE;
+    if (cat === 'ESSENTIALS' || cat === 'NON ESSENTIALS') return 'Food';
+    const valid = ['Electronics', 'Clothes', 'Medicines', 'Food', 'Documents', 'Groceries', 'Loose Goods', 'Others'];
+    const found = valid.find(v => v.toLowerCase() === String(cat).toLowerCase());
+    return found || 'Food';
+  })();
+
   return {
     order_id: order.order_number,
     order_date: new Date(order.created_at).toISOString().slice(0, 19).replace('T', ' '),
     pickup_location: settings.pickup_location_name || 'Primary',
-    order_type: (() => {
-      let cat = settings.order_type_category || FOOD_ORDER_TYPE;
-      if (cat === 'ESSENTIALS' || cat === 'NON ESSENTIALS') return 'Food';
-      const valid = ['Electronics', 'Clothes', 'Medicines', 'Food', 'Documents', 'Groceries', 'Loose Goods', 'Others'];
-      const found = valid.find(v => v.toLowerCase() === String(cat).toLowerCase());
-      return found || 'Food';
-    })(),
+    order_type: categoryName,
     checkout_shipping_method: settings.checkout_shipping_method || QUICK_SHIPPING_METHOD,
     comment: 'Restaurant food delivery — Shiprocket Quick 2-wheeler',
     billing_customer_name: order.customer_name || 'Customer',
@@ -113,6 +115,7 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
       discount: 0,
       tax: 0,
       hsn: '',
+      category_name: categoryName,
     })),
     payment_method: isCod ? 'COD' : 'Prepaid',
     sub_total: Number(order.subtotal ?? order.total) || 0,
