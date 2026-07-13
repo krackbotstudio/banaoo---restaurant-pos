@@ -88,11 +88,17 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
     return found || 'Food';
   })();
 
+  const orderType = (() => {
+    const cat = String(settings.order_type_category || '').toUpperCase();
+    if (cat === 'ESSENTIALS' || cat === 'NON ESSENTIALS') return cat;
+    return 'ESSENTIALS';
+  })();
+
   return {
     order_id: order.order_number,
     order_date: new Date(order.created_at).toISOString().slice(0, 19).replace('T', ' '),
     pickup_location: settings.pickup_location_name || 'Primary',
-    order_type: categoryName,
+    order_type: orderType,
     checkout_shipping_method: settings.checkout_shipping_method || QUICK_SHIPPING_METHOD,
     comment: 'Restaurant food delivery — Shiprocket Quick 2-wheeler',
     billing_customer_name: order.customer_name || 'Customer',
