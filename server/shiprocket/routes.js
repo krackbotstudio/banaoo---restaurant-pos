@@ -1,7 +1,7 @@
 import pool from '../db.js';
 import { mergeSettings, DEFAULT_SETTINGS } from './status-mapper.js';
-import { saveConnectionCredentials, disconnectConnection, getConnection } from './auth.js';
-import { formatShiprocketConnectError } from './client.js';
+import { saveConnectionCredentials, disconnectConnection, getConnection, getValidToken } from './auth.js';
+import { formatShiprocketConnectError, createAdhocOrder } from './client.js';
 import {
   getShipmentDetails,
   retryShipmentBooking,
@@ -296,6 +296,73 @@ export function registerShiprocketRoutes(app, { requireAuth }) {
       const data = await getPublicDeliveryStatus(req.params.orderId, phone || null);
       if (!data) return res.status(404).json({ error: 'Not found' });
       res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/public/shiprocket-test-categories', async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM public.shiprocket_connections WHERE is_connected = true LIMIT 1`
+      );
+      if (rows.length === 0) return res.json({ error: 'No connected outlet' });
+      const conn = rows[0];
+      const token = await getValidToken(conn.outlet_id);
+      
+      const mockOrderNumber = 'TEST-' + Date.now();
+      const basePayload = {
+        order_id: mockOrderNumber,
+        order_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        pickup_location: 'Primary',
+        shipping_method: 'HL',
+        billing_customer_name: 'Test Customer',
+        billing_last_name: 'Test',
+        billing_address: 'Plot number 800 Road No 36 Jubilee Hills',
+        billing_city: 'Hyderabad',
+        billing_pincode: 500038,
+        billing_state: 'Telangana',
+        billing_country: 'India',
+        billing_email: 'test@banaoo.in',
+        billing_phone: '9999999999',
+        shipping_is_billing: true,
+        latitude: 17.4412334,
+        longitude: 78.4459465,
+        order_items: [
+          {
+            name: 'Burger',
+            sku: 'B1',
+            units: 1,
+            selling_price: 100,
+          }
+        ],
+        payment_method: 'Prepaid',
+        sub_total: 100,
+        length: 10,
+        breadth: 10,
+        height: 10,
+        weight: 0.5,
+      };
+
+      const variations = [
+        { name: "Var M: item category_name = 'Food'", payload: { ...basePayload, order_items: [{ ...basePayload.order_items[0], category_name: 'Food' }] } },
+        { name: "Var N: item category_code = 'Food'", payload: { ...basePayload, order_items: [{ ...basePayload.order_items[0], category_code: 'Food' }] } },
+        { name: "Var O: item product_category = 'Food'", payload: { ...basePayload, order_items: [{ ...basePayload.order_items[0], product_category: 'Food' }] } },
+        { name: "Var P: item product_type = 'Food'", payload: { ...basePayload, order_items: [{ ...basePayload.order_items[0], product_type: 'Food' }] } },
+      ];
+
+      const results = [];
+      for (let i = 0; i < variations.length; i++) {
+        const testVar = variations[i];
+        testVar.payload.order_id = mockOrderNumber + '-' + i;
+        try {
+          const apiRes = await createAdhocOrder(token, testVar.payload);
+          results.push({ name: testVar.name, success: true, response: apiRes });
+        } catch (err) {
+          results.push({ name: testVar.name, success: false, error: err.message, data: err.data });
+        }
+      }
+      res.json(results);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

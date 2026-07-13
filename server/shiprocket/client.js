@@ -4,6 +4,7 @@ async function srFetch(path, { method = 'GET', token, body } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  console.log(`[shiprocket API Request] ${method} ${path}`, body ? JSON.stringify(body, null, 2) : '');
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,

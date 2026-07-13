@@ -74,7 +74,7 @@ export const DEFAULT_SETTINGS = {
   delivery_mode: 'quick_hyperlocal',
   checkout_shipping_method: 'SR_QUICK',
   vehicle_mode: '2_wheeler',
-  order_type_category: 'ESSENTIALS',
+  order_type_category: 'Food',
 };
 
 export function mergeSettings(raw) {

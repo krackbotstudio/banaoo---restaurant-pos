@@ -84,7 +84,13 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
     order_id: order.order_number,
     order_date: new Date(order.created_at).toISOString().slice(0, 19).replace('T', ' '),
     pickup_location: settings.pickup_location_name || 'Primary',
-    order_type: settings.order_type_category || FOOD_ORDER_TYPE,
+    order_type: (() => {
+      let cat = settings.order_type_category || FOOD_ORDER_TYPE;
+      if (cat === 'ESSENTIALS' || cat === 'NON ESSENTIALS') return 'Food';
+      const valid = ['Electronics', 'Clothes', 'Medicines', 'Food', 'Documents', 'Groceries', 'Loose Goods', 'Others'];
+      const found = valid.find(v => v.toLowerCase() === String(cat).toLowerCase());
+      return found || 'Food';
+    })(),
     checkout_shipping_method: settings.checkout_shipping_method || QUICK_SHIPPING_METHOD,
     comment: 'Restaurant food delivery — Shiprocket Quick 2-wheeler',
     billing_customer_name: order.customer_name || 'Customer',
@@ -114,6 +120,7 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
     breadth: Number(dims.width) || 20,
     height: Number(dims.height) || 10,
     weight,
+    shipping_method: 'HL',
   };
 }
 
