@@ -87,10 +87,15 @@ export async function assignAwb(token, { shipment_id, courier_id }) {
   const ids = (Array.isArray(shipment_id) ? shipment_id : [shipment_id])
     .map((id) => Number(id))
     .filter((id) => Number.isFinite(id));
+  const body = { shipment_id: ids };
+  const cId = Number(courier_id);
+  if (courier_id !== null && courier_id !== undefined && Number.isFinite(cId)) {
+    body.courier_id = cId;
+  }
   return srFetch('/v1/external/courier/assign/awb', {
     method: 'POST',
     token,
-    body: { shipment_id: ids, courier_id: Number(courier_id) },
+    body,
   });
 }
 

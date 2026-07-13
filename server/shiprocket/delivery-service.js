@@ -243,17 +243,15 @@ export async function bookShipment(shipmentRow) {
     console.log('[shiprocket] serviceability couriers list:', couriers);
     const selectedCourier = pickQuickCourier(couriers.length ? couriers : preCouriers);
     console.log('[shiprocket] selectedCourier:', selectedCourier);
-    const courierId = courierIdFrom(selectedCourier);
-    console.log('[shiprocket] courierId resolved:', courierId);
-    if (!courierId) {
+    if (!selectedCourier) {
       const debugInfo = {
         has_couriers: couriers.length,
         has_preCouriers: preCouriers.length,
-        selected_courier_keys: selectedCourier ? Object.keys(selectedCourier) : null,
-        selected_courier_val: selectedCourier ? selectedCourier : null,
       };
       throw new Error(`No Shiprocket Quick 2-wheeler courier available for this order. Debug info: ${JSON.stringify(debugInfo)}`);
     }
+    const courierId = courierIdFrom(selectedCourier);
+    console.log('[shiprocket] courierId resolved:', courierId);
 
     let assignRes = null;
     try {
