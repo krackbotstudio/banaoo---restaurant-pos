@@ -103,6 +103,24 @@ app.use(express.json({ limit: '10mb' }));  // Increased for base64 image uploads
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+// Secure cookies require HTTPS. Local HTTP + NODE_ENV=production would otherwise
+// set Secure cookies that browsers silently drop — Google OAuth then bounces to /auth.
+function useSecureSessionCookies() {
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  if (process.env.NODE_ENV !== 'production') return false;
+  const frontend = String(process.env.FRONTEND_URL || '');
+  if (frontend.split(',').some((origin) => origin.trim().startsWith('http://'))) {
+    console.warn(
+      '[auth] NODE_ENV=production but FRONTEND_URL is HTTP — using non-Secure session cookies. Set COOKIE_SECURE=true behind HTTPS.'
+    );
+    return false;
+  }
+  return true;
+}
+
+const secureSessionCookies = useSecureSessionCookies();
+
 app.use(session({
   store: new pgStore({ pool: pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env',
@@ -110,7 +128,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureSessionCookies,
     // 'lax' works for same-site requests (nginx proxies /auth to backend on same domain).
     // 'none' is only needed for cross-site (different domains) and breaks same-site cookies.
     sameSite: 'lax'
