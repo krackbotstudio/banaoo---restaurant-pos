@@ -19,6 +19,9 @@ import {
 } from "@/components/cms/CmsCustomerAccessPanel";
 import { CmsCustomerMenuPanel } from "@/components/cms/CmsCustomerMenuPanel";
 import { CmsCustomerOutletsPanel } from "@/components/cms/CmsCustomerOutletsPanel";
+import { CmsCustomerBrandingPanel } from "@/components/cms/CmsCustomerBrandingPanel";
+import { CmsCustomerDeliveryPanel } from "@/components/cms/CmsCustomerDeliveryPanel";
+import { CmsCustomerPaymentsPanel } from "@/components/cms/CmsCustomerPaymentsPanel";
 
 type AccountStatus = "pending" | "approved" | "rejected";
 type PlanType = "starter" | "professional" | "enterprise";
@@ -33,6 +36,15 @@ interface Profile {
   account_status: AccountStatus;
   onboarding_completed: boolean;
   created_at: string;
+  brand_name?: string | null;
+  brand_color?: string | null;
+  logo_url?: string | null;
+  ordering_slug?: string | null;
+  app_theme?: string | null;
+  upi_vpa?: string | null;
+  upi_display_name?: string | null;
+  upi_qr_url?: string | null;
+  online_payments_enabled?: boolean | null;
 }
 
 interface OverviewResponse {
@@ -482,6 +494,8 @@ export default function CmsCustomerDetail() {
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="outlets">Outlets</TabsTrigger>
               <TabsTrigger value="branding">Branding</TabsTrigger>
+              <TabsTrigger value="delivery">Delivery</TabsTrigger>
+              <TabsTrigger value="payments">Payments</TabsTrigger>
               <TabsTrigger value="subscription">Subscription</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
@@ -537,18 +551,34 @@ export default function CmsCustomerDetail() {
             </TabsContent>
 
             <TabsContent value="branding">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Branding</CardTitle>
-                  <CardDescription>Brand-level metadata visible from customer profile</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <p><strong>Brand name:</strong> {(overview.profile as unknown as { brand_name?: string }).brand_name || "-"}</p>
-                  <p className="text-muted-foreground">
-                    Full media/logo and color controls can be added to CMS in the next iteration.
-                  </p>
-                </CardContent>
-              </Card>
+              <CmsCustomerBrandingPanel
+                userId={userId}
+                branding={{
+                  brand_name: overview.profile.brand_name,
+                  brand_color: overview.profile.brand_color,
+                  logo_url: overview.profile.logo_url,
+                  ordering_slug: overview.profile.ordering_slug,
+                  app_theme: overview.profile.app_theme,
+                }}
+                onSaved={() => void loadAll()}
+              />
+            </TabsContent>
+
+            <TabsContent value="delivery">
+              <CmsCustomerDeliveryPanel userId={userId} />
+            </TabsContent>
+
+            <TabsContent value="payments">
+              <CmsCustomerPaymentsPanel
+                userId={userId}
+                payments={{
+                  upi_vpa: overview.profile.upi_vpa,
+                  upi_display_name: overview.profile.upi_display_name,
+                  upi_qr_url: overview.profile.upi_qr_url,
+                  online_payments_enabled: overview.profile.online_payments_enabled,
+                }}
+                onSaved={() => void loadAll()}
+              />
             </TabsContent>
 
             <TabsContent value="subscription">
