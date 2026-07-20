@@ -18,6 +18,7 @@ import {
   type CustomerAccessState,
 } from "@/components/cms/CmsCustomerAccessPanel";
 import { CmsCustomerMenuPanel } from "@/components/cms/CmsCustomerMenuPanel";
+import { CmsCustomerOutletsPanel } from "@/components/cms/CmsCustomerOutletsPanel";
 
 type AccountStatus = "pending" | "approved" | "rejected";
 type PlanType = "starter" | "professional" | "enterprise";
@@ -37,7 +38,14 @@ interface Profile {
 interface OverviewResponse {
   profile: Profile;
   usage: { outlets: number; staff: number };
-  outlets?: Array<{ id: string; name: string; address: string | null; is_active: boolean }>;
+  outlets?: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+    is_active: boolean;
+    operation_mode?: "standard" | "self_service" | null;
+  }>;
   access?: CustomerAccessState;
   latest_subscription: null | {
     id: string;
@@ -514,26 +522,18 @@ export default function CmsCustomerDetail() {
             </TabsContent>
 
             <TabsContent value="outlets">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Outlets</CardTitle>
-                  <CardDescription>Outlet-level footprint for this customer</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Total outlets: <strong className="text-foreground">{overview.usage.outlets}</strong>
-                  </p>
-                  {orders.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {[...new Set(orders.map((o) => o.outlet_name))].map((name) => (
-                        <Badge key={name} variant="outline">{name}</Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No outlet order activity found yet.</p>
-                  )}
-                </CardContent>
-              </Card>
+              <CmsCustomerOutletsPanel
+                userId={userId}
+                initialOutlets={overview.outlets?.map((o) => ({
+                  id: o.id,
+                  name: o.name,
+                  address: o.address,
+                  phone: o.phone ?? null,
+                  is_active: o.is_active,
+                  operation_mode: o.operation_mode ?? null,
+                }))}
+                onChanged={() => void loadAll()}
+              />
             </TabsContent>
 
             <TabsContent value="branding">

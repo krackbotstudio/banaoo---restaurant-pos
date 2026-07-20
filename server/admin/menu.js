@@ -101,10 +101,10 @@ export function registerCmsMenuRoutes(app) {
     const { userId } = req.params;
     try {
       const { rows } = await pool.query(
-        `SELECT id, name, address, phone, is_active, created_at
+        `SELECT id, name, address, phone, is_active, operation_mode, created_at, updated_at
          FROM public.outlets
          WHERE owner_id = $1
-         ORDER BY name ASC`,
+         ORDER BY is_active DESC, name ASC`,
         [userId]
       );
       res.json({ outlets: rows });

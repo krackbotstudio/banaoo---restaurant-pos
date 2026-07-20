@@ -2,6 +2,7 @@ import pool from '../db.js';
 import { requireCmsAuth } from './middleware.js';
 import { logAdminAction } from './audit.js';
 import { buildEntitlementsPayload } from '../entitlements.js';
+import { getDefaultOperationMode } from '../business-types.js';
 import {
   applyProfileAccessUpdate,
   fetchProfileAccess,
@@ -14,6 +15,9 @@ import {
 const EDIT_ROLES = new Set(['super_admin', 'support', 'billing']);
 const BILLING_ROLES = new Set(['super_admin', 'billing']);
 const ACCOUNT_STATUS = new Set(['pending', 'approved', 'rejected']);
+const OPERATION_MODES = new Set(['standard', 'self_service']);
+
+const OUTLET_SELECT = `id, name, address, phone, is_active, operation_mode, created_at, updated_at`;
 
 function canEdit(admin) {
   return admin && EDIT_ROLES.has(admin.role);
@@ -41,10 +45,10 @@ export function registerCmsCustomerRoutes(app) {
           pool.query('SELECT COUNT(*)::int AS count FROM public.staff_members WHERE owner_id = $1', [userId]),
         ]),
         pool.query(
-          `SELECT id, name, address, phone, is_active, created_at
+          `SELECT ${OUTLET_SELECT}
            FROM public.outlets
            WHERE owner_id = $1
-           ORDER BY name ASC`,
+           ORDER BY is_active DESC, name ASC`,
           [userId]
         ),
         pool.query(
@@ -105,16 +109,238 @@ export function registerCmsCustomerRoutes(app) {
     const { userId } = req.params;
     try {
       const { rows } = await pool.query(
-        `SELECT id, name, address, phone, is_active, created_at
+        `SELECT ${OUTLET_SELECT}
          FROM public.outlets
          WHERE owner_id = $1
-         ORDER BY name ASC`,
+         ORDER BY is_active DESC, name ASC`,
         [userId]
       );
       res.json({ outlets: rows });
     } catch (err) {
       console.error('GET /api/cms/customers/:userId/outlets:', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/cms/customers/:userId/outlets', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId } = req.params;
+    const { name, address, phone, operation_mode: requestedMode, activate } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Outlet name is required' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const { rows: owners } = await client.query(
+        `SELECT p.user_id, p.business_type
+         FROM public.profiles p
+         WHERE p.user_id = $1
+         LIMIT 1`,
+        [userId]
+      );
+      if (!owners[0]) return res.status(404).json({ error: 'Customer not found' });
+
+      let operationMode = requestedMode;
+      if (!OPERATION_MODES.has(operationMode)) {
+        operationMode = getDefaultOperationMode(owners[0].business_type);
+      }
+
+      const { rows: countRows } = await client.query(
+        `SELECT COUNT(*)::int AS total FROM public.outlets WHERE owner_id = $1`,
+        [userId]
+      );
+      const isFirstOutlet = (countRows[0]?.total ?? 0) === 0;
+      const makeActive = activate === true || isFirstOutlet;
+
+      await client.query('BEGIN');
+      if (makeActive) {
+        await client.query(
+          `UPDATE public.outlets SET is_active = false, updated_at = NOW() WHERE owner_id = $1`,
+          [userId]
+        );
+      }
+
+      const { rows } = await client.query(
+        `INSERT INTO public.outlets (owner_id, name, address, phone, operation_mode, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING ${OUTLET_SELECT}`,
+        [
+          userId,
+          String(name).trim(),
+          address ? String(address).trim() || null : null,
+          phone ? String(phone).trim() || null : null,
+          operationMode,
+          makeActive,
+        ]
+      );
+      await client.query('COMMIT');
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.outlet.create',
+        targetType: 'outlet',
+        targetId: rows[0].id,
+        metadata: { user_id: userId, name: rows[0].name, is_active: rows[0].is_active },
+        req,
+      });
+
+      res.status(201).json({ outlet: rows[0] });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('POST /api/cms/customers/:userId/outlets:', err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.patch('/api/cms/customers/:userId/outlets/:outletId', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId, outletId } = req.params;
+    const { name, address, phone, operation_mode: requestedMode } = req.body || {};
+
+    if (name !== undefined && !String(name).trim()) {
+      return res.status(400).json({ error: 'Outlet name cannot be empty' });
+    }
+    if (requestedMode !== undefined && !OPERATION_MODES.has(requestedMode)) {
+      return res.status(400).json({ error: 'Invalid operation_mode' });
+    }
+
+    try {
+      const { rows } = await pool.query(
+        `UPDATE public.outlets
+         SET name = COALESCE($3, name),
+             address = CASE WHEN $4::boolean THEN $5 ELSE address END,
+             phone = CASE WHEN $6::boolean THEN $7 ELSE phone END,
+             operation_mode = COALESCE($8, operation_mode),
+             updated_at = NOW()
+         WHERE id = $1 AND owner_id = $2
+         RETURNING ${OUTLET_SELECT}`,
+        [
+          outletId,
+          userId,
+          name !== undefined ? String(name).trim() : null,
+          address !== undefined,
+          address !== undefined ? (address ? String(address).trim() || null : null) : null,
+          phone !== undefined,
+          phone !== undefined ? (phone ? String(phone).trim() || null : null) : null,
+          requestedMode ?? null,
+        ]
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Outlet not found' });
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.outlet.update',
+        targetType: 'outlet',
+        targetId: outletId,
+        metadata: { user_id: userId, name, address, phone, operation_mode: requestedMode ?? null },
+        req,
+      });
+
+      res.json({ outlet: rows[0] });
+    } catch (err) {
+      console.error('PATCH /api/cms/customers/:userId/outlets/:outletId:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/cms/customers/:userId/outlets/:outletId/activate', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId, outletId } = req.params;
+    const client = await pool.connect();
+    try {
+      const { rows: owned } = await client.query(
+        `SELECT id FROM public.outlets WHERE id = $1 AND owner_id = $2`,
+        [outletId, userId]
+      );
+      if (!owned[0]) return res.status(404).json({ error: 'Outlet not found' });
+
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE public.outlets SET is_active = false, updated_at = NOW() WHERE owner_id = $1`,
+        [userId]
+      );
+      const { rows } = await client.query(
+        `UPDATE public.outlets
+         SET is_active = true, updated_at = NOW()
+         WHERE id = $1 AND owner_id = $2
+         RETURNING ${OUTLET_SELECT}`,
+        [outletId, userId]
+      );
+      await client.query('COMMIT');
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.outlet.activate',
+        targetType: 'outlet',
+        targetId: outletId,
+        metadata: { user_id: userId },
+        req,
+      });
+
+      res.json({ outlet: rows[0] });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('POST /api/cms/customers/:userId/outlets/:outletId/activate:', err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete('/api/cms/customers/:userId/outlets/:outletId', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId, outletId } = req.params;
+    const client = await pool.connect();
+    try {
+      const { rows: target } = await client.query(
+        `SELECT id, name, is_active FROM public.outlets WHERE id = $1 AND owner_id = $2`,
+        [outletId, userId]
+      );
+      if (!target[0]) return res.status(404).json({ error: 'Outlet not found' });
+
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM public.outlets WHERE id = $1 AND owner_id = $2`, [outletId, userId]);
+
+      if (target[0].is_active) {
+        const { rows: next } = await client.query(
+          `SELECT id FROM public.outlets
+           WHERE owner_id = $1
+           ORDER BY created_at ASC
+           LIMIT 1`,
+          [userId]
+        );
+        if (next[0]) {
+          await client.query(
+            `UPDATE public.outlets SET is_active = true, updated_at = NOW() WHERE id = $1`,
+            [next[0].id]
+          );
+        }
+      }
+      await client.query('COMMIT');
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.outlet.delete',
+        targetType: 'outlet',
+        targetId: outletId,
+        metadata: { user_id: userId, name: target[0].name },
+        req,
+      });
+
+      res.json({ success: true });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('DELETE /api/cms/customers/:userId/outlets/:outletId:', err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
     }
   });
 
