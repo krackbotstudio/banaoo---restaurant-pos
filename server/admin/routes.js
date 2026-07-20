@@ -6,6 +6,7 @@ import { registerCmsPaymentsRoutes } from './payments.js';
 import { registerCmsMarketingRoutes } from './marketing.js';
 import { registerCmsBannerRoutes, registerDashboardBannerPublicRoutes } from './banners.js';
 import { registerCmsCustomerRoutes } from './customers.js';
+import { registerCmsCustomerSettingsRoutes } from './customer-settings.js';
 import { registerCmsMenuRoutes } from './menu.js';
 
 /**
@@ -21,6 +22,7 @@ export function registerCmsRoutes(app) {
   registerCmsMarketingRoutes(app);
   registerCmsBannerRoutes(app);
   registerCmsCustomerRoutes(app);
+  registerCmsCustomerSettingsRoutes(app);
   registerCmsMenuRoutes(app);
 }
 
