@@ -31,7 +31,8 @@ export type AddonType =
   | "inventory_management"
   | "whatsapp_integration"
   | "shiprocket_delivery"
-  | "razorpay_payments";
+  | "razorpay_payments"
+  | "google_pay_india";
 
 export interface AddonCatalogItem {
   type: AddonType;
@@ -59,6 +60,7 @@ export interface PlanLimits {
   aiMenuImport: boolean;
   shiprocketDelivery: boolean;
   razorpayPayments: boolean;
+  googlePayIndia: boolean;
   qrMenus: number;
 }
 
@@ -111,6 +113,7 @@ export const ADDON_PRICES = {
   whatsappPerMonth: 349,
   shiprocketPerMonth: 0,
   razorpayPerMonth: 0,
+  googlePayPerMonth: 0,
 } as const;
 
 export const ADDON_CATALOG: AddonCatalogItem[] = [
@@ -177,6 +180,14 @@ export const ADDON_CATALOG: AddonCatalogItem[] = [
     description:
       "Accept online payments on your customer ordering link via your Razorpay account (OAuth — no API keys).",
     monthlyPrice: ADDON_PRICES.razorpayPerMonth,
+    stackable: false,
+  },
+  {
+    type: "google_pay_india",
+    name: "Google Pay India",
+    description:
+      "Accept UPI payments via Google Pay on your ordering link. Customers pay to your merchant VPA; you confirm with UTR.",
+    monthlyPrice: ADDON_PRICES.googlePayPerMonth,
     stackable: false,
   },
 ];
@@ -249,6 +260,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     aiMenuImport: false,
     shiprocketDelivery: false,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: 3,
   },
   professional: {
@@ -267,6 +279,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     aiMenuImport: false,
     shiprocketDelivery: false,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: 3,
   },
   enterprise: {
@@ -285,6 +298,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     aiMenuImport: true,
     shiprocketDelivery: true,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: Infinity,
   },
 };
@@ -305,6 +319,7 @@ export const DEFAULT_LIMITS: PlanLimits = {
   aiMenuImport: false,
   shiprocketDelivery: false,
   razorpayPayments: false,
+  googlePayIndia: false,
   qrMenus: 0,
 };
 
@@ -407,6 +422,7 @@ export const UPGRADE_MESSAGES: Record<keyof PlanLimits, string> = {
   aiMenuImport: "AI Menu Import is available on the Expand plan",
   shiprocketDelivery: "Activate the free Shiprocket delivery add-on or upgrade to Expand",
   razorpayPayments: "Razorpay payments are available for free on all restaurant plans",
+  googlePayIndia: "Activate the free Google Pay India add-on to accept UPI via Google Pay",
   qrMenus: "Upgrade to Expand for unlimited QR menus",
 };
 

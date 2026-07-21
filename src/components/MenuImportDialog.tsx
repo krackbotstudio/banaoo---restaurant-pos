@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, Camera, FileImage, Sparkles, Check } from "lucide-react";
+import { Loader2, Upload, Camera, FileImage, FileText, Sparkles, Check } from "lucide-react";
 
 interface ExtractedItem {
   name: string;
@@ -21,6 +21,11 @@ interface ExtractedItem {
   price: number;
   is_veg?: boolean | null;
   category?: string;
+  variants?: {
+    name: string;
+    price: number;
+    is_default?: boolean;
+  }[];
   selected?: boolean;
 }
 
@@ -46,25 +51,40 @@ export function MenuImportDialog({
   const [isImporting, setIsImporting] = useState(false);
   const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFileType, setSelectedFileType] = useState<"image" | "pdf" | null>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({ variant: "destructive", title: "Invalid file", description: "Please upload an image file" });
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!file.type.startsWith("image/") && !isPdf) {
+      toast({
+        variant: "destructive",
+        title: "Invalid file",
+        description: "Please upload a menu image or PDF",
+      });
+      return;
+    }
+    if (isPdf && file.size > 7 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "PDF is too large",
+        description: "PDF menu cards must be 7 MB or smaller",
+      });
       return;
     }
 
     // Show preview
     setPreviewUrl(URL.createObjectURL(file));
+    setSelectedFileType(isPdf ? "pdf" : "image");
     setExtractedItems([]);
     setIsProcessing(true);
 
     try {
-      // Compress & convert to base64 (max 1024px, 80% JPEG — keeps payload under 1 MB)
-      const { base64, mimeType: compressedMime } = await compressAndEncode(file);
+      const { base64, mimeType: compressedMime } = isPdf
+        ? await encodeFile(file)
+        : await compressAndEncode(file);
 
       const API_URL = import.meta.env.VITE_API_URL ?? "";
       const extractUrl = cmsMode
@@ -95,11 +115,26 @@ export function MenuImportDialog({
       console.error('Extraction failed:', error);
       // Reset preview so the upload UI shows again (not a blank dialog)
       setPreviewUrl(null);
+      setSelectedFileType(null);
       toast({ variant: "destructive", title: "Extraction failed", description: error.message });
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const encodeFile = (file: File): Promise<{ base64: string; mimeType: string }> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        resolve({
+          base64: result.slice(result.indexOf(",") + 1),
+          mimeType: "application/pdf",
+        });
+      };
+      reader.onerror = () => reject(reader.error || new Error("Could not read PDF"));
+      reader.readAsDataURL(file);
+    });
 
   // Resize to max 1024 px on longest side and re-encode as JPEG at 80%
   // This keeps the payload well under 1 MB regardless of camera resolution
@@ -161,6 +196,7 @@ export function MenuImportDialog({
               price: item.price,
               is_veg: item.is_veg,
               category: item.category,
+              variants: item.variants || [],
             })),
           }),
         });
@@ -174,6 +210,7 @@ export function MenuImportDialog({
         setIsOpen(false);
         setExtractedItems([]);
         setPreviewUrl(null);
+        setSelectedFileType(null);
         onImportComplete();
 
         const assignImages = async () => {
@@ -247,14 +284,57 @@ export function MenuImportDialog({
         outlet_id: outletId,
       }));
 
-      const { error } = await supabase.from('menu_items').insert(itemsToInsert);
+      const { data: insertedItems, error } = await supabase
+        .from('menu_items')
+        .insert(itemsToInsert)
+        .select('id, name');
 
       if (error) throw error;
+
+      const insertedIdsByName = new Map<string, string[]>();
+      for (const inserted of insertedItems || []) {
+        const ids = insertedIdsByName.get(inserted.name) || [];
+        ids.push(inserted.id);
+        insertedIdsByName.set(inserted.name, ids);
+      }
+
+      const variantsToInsert: {
+        menu_item_id: string;
+        name: string;
+        price_adjustment: number;
+        is_default: boolean;
+      }[] = [];
+      for (const item of selectedItems) {
+        const itemId = insertedIdsByName.get(item.name)?.shift();
+        if (!itemId || !item.variants?.length) continue;
+        const defaultIndex = Math.max(
+          0,
+          item.variants.findIndex((variant) => variant.is_default)
+        );
+        item.variants.forEach((variant, index) => {
+          const absolutePrice = Number(variant.price);
+          if (!variant.name.trim() || !Number.isFinite(absolutePrice)) return;
+          variantsToInsert.push({
+            menu_item_id: itemId,
+            name: variant.name.trim(),
+            price_adjustment: Number((absolutePrice - Number(item.price)).toFixed(2)),
+            is_default: index === defaultIndex,
+          });
+        });
+      }
+
+      if (variantsToInsert.length > 0) {
+        const { error: variantError } = await supabase
+          .from('menu_variants')
+          .insert(variantsToInsert);
+        if (variantError) throw variantError;
+      }
 
       toast({ title: "Import successful!", description: `Added ${selectedItems.length} items to your menu. Photos loading…` });
       setIsOpen(false);
       setExtractedItems([]);
       setPreviewUrl(null);
+      setSelectedFileType(null);
       onImportComplete();
 
       const assignImages = async () => {
@@ -296,6 +376,7 @@ export function MenuImportDialog({
     if (!open) {
       setExtractedItems([]);
       setPreviewUrl(null);
+      setSelectedFileType(null);
     }
     setIsOpen(open);
   };
@@ -338,7 +419,7 @@ export function MenuImportDialog({
               <input
                 ref={galleryInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.pdf"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -349,7 +430,7 @@ export function MenuImportDialog({
                 <div>
                   <p className="font-medium">Take a photo or upload menu image</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Supports JPG, PNG, HEIC
+                    Supports JPG, PNG, HEIC, PDF (up to 7 MB)
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -382,12 +463,17 @@ export function MenuImportDialog({
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {previewUrl && (
+                  {previewUrl && selectedFileType === "image" && (
                     <img 
                       src={previewUrl} 
                       alt="Menu preview" 
                       className="h-12 w-12 rounded-lg object-cover"
                     />
+                  )}
+                  {selectedFileType === "pdf" && (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                      <FileText className="h-6 w-6 text-primary" />
+                    </div>
                   )}
                   <div>
                     <p className="font-medium">{extractedItems.length} items found</p>
@@ -441,6 +527,18 @@ export function MenuImportDialog({
                             <p className="text-sm text-muted-foreground truncate mt-0.5">
                               {item.description}
                             </p>
+                          )}
+                          {!!item.variants?.length && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {item.variants.map((variant) => (
+                                <span
+                                  key={`${variant.name}-${variant.price}`}
+                                  className="rounded bg-background px-1.5 py-0.5 text-xs text-muted-foreground"
+                                >
+                                  {variant.name} ₹{variant.price}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
                         <span className="font-bold text-primary whitespace-nowrap">₹{item.price}</span>

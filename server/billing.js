@@ -18,6 +18,7 @@ const ADDON_LABELS = {
   whatsapp_integration: 'WhatsApp integration',
   shiprocket_delivery: 'Shiprocket delivery',
   razorpay_payments: 'Razorpay payments',
+  google_pay_india: 'Google Pay India',
 };
 
 const BASE_PRICES = { starter: 499, professional: 699 };

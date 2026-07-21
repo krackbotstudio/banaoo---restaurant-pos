@@ -65,6 +65,12 @@ Open the order → **Retry booking**. Check customer pincode/city/state and your
 **Shiprocket add-on activate fails.**  
 Restart the API server after updates. The add-on is free — no Razorpay checkout. See [Shiprocket delivery](/docs/shiprocket-delivery).
 
+**Google Pay not showing at checkout.**  
+Activate the **Google Pay India** add-on, enter a valid merchant VPA / payee name / MCC, enable it, and set **Online payment provider** to Google Pay in **Settings → Payments**. Only one provider is shown at a time.
+
+**Customer paid in Google Pay but order is pending.**  
+They must submit the UTR on the payment page. Confirm the payment under **Payments** (awaiting confirmation). Google Pay India settles to your VPA — Banaoo does not auto-capture funds.
+
 ## Still stuck?
 
 - Email **connect@banaoo.in**

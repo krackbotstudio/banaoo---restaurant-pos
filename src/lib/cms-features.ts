@@ -15,6 +15,9 @@ export const CMS_BOOLEAN_FEATURES: { key: FeatureOverrideKey; label: string }[] 
   { key: "inventoryManagement", label: "Inventory" },
   { key: "whatsappIntegration", label: "WhatsApp bills & messaging" },
   { key: "aiMenuImport", label: "AI menu import" },
+  { key: "shiprocketDelivery", label: "Shiprocket delivery" },
+  { key: "razorpayPayments", label: "Razorpay payments" },
+  { key: "googlePayIndia", label: "Google Pay India" },
 ];
 
 export const CMS_NUMERIC_FEATURES: { key: FeatureOverrideKey; label: string }[] = [

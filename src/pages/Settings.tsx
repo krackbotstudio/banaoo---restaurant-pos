@@ -92,6 +92,7 @@ import { isBanaooNativeApp, openBillingSettingsInBrowser } from "@/lib/native-ap
 import { PrinterFleetSettings } from "@/components/printers/PrinterFleetSettings";
 import { ShiprocketSettingsPanel } from "@/components/settings/ShiprocketSettingsPanel";
 import { RazorpaySettingsPanel } from "@/components/settings/RazorpaySettingsPanel";
+import { GooglePaySettingsPanel } from "@/components/settings/GooglePaySettingsPanel";
 import { BrandOrderingLinkCard } from "@/components/settings/BrandOrderingLinkCard";
 import { SubscriptionBillingHub } from "@/components/settings/SubscriptionBillingHub";
 import { UpiQrUpload } from "@/components/payments/UpiQrUpload";
@@ -1590,6 +1591,7 @@ export default function Settings() {
           {/* Printers Tab */}
           <TabsContent value="payments" className="space-y-6">
             <RazorpaySettingsPanel />
+            <GooglePaySettingsPanel />
           </TabsContent>
 
           <TabsContent value="delivery" className="space-y-6">

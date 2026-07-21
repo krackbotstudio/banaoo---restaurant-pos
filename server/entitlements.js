@@ -25,6 +25,7 @@ export const PLAN_LIMITS = {
     aiMenuImport: false,
     shiprocketDelivery: false,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: 3,
   },
   professional: {
@@ -43,6 +44,7 @@ export const PLAN_LIMITS = {
     aiMenuImport: false,
     shiprocketDelivery: false,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: 3,
   },
   enterprise: {
@@ -61,6 +63,7 @@ export const PLAN_LIMITS = {
     aiMenuImport: true,
     shiprocketDelivery: true,
     razorpayPayments: true,
+    googlePayIndia: false,
     qrMenus: Infinity,
   },
 };
@@ -81,6 +84,7 @@ const DEFAULT_LIMITS = {
   aiMenuImport: false,
   shiprocketDelivery: false,
   razorpayPayments: false,
+  googlePayIndia: false,
   qrMenus: 0,
 };
 
@@ -94,6 +98,7 @@ export const ADDON_MONTHLY_PRICES = {
   whatsapp_integration: 349,
   shiprocket_delivery: 0,
   razorpay_payments: 0,
+  google_pay_india: 0,
 };
 
 const STACKABLE_ADDONS = new Set(['extra_outlet', 'extra_staff']);
@@ -109,6 +114,7 @@ export function aggregateAddonsFromRows(rows) {
     whatsapp: false,
     shiprocket: false,
     razorpay: false,
+    google_pay_india: false,
   };
   for (const row of rows) {
     const qty = Number(row.quantity) || 0;
@@ -140,6 +146,9 @@ export function aggregateAddonsFromRows(rows) {
       case 'razorpay_payments':
         out.razorpay = out.razorpay || qty > 0;
         break;
+      case 'google_pay_india':
+        out.google_pay_india = out.google_pay_india || qty > 0;
+        break;
       default:
         break;
     }
@@ -166,6 +175,7 @@ export function computeEffectiveLimits(planType, addons, hasActiveSubscription) 
     whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
     shiprocketDelivery: base.shiprocketDelivery || addons.shiprocket,
     razorpayPayments: base.razorpayPayments || addons.razorpay,
+    googlePayIndia: base.googlePayIndia || addons.google_pay_india,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };

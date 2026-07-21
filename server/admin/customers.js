@@ -17,7 +17,19 @@ const BILLING_ROLES = new Set(['super_admin', 'billing']);
 const ACCOUNT_STATUS = new Set(['pending', 'approved', 'rejected']);
 const OPERATION_MODES = new Set(['standard', 'self_service']);
 
-const OUTLET_SELECT = `id, name, address, phone, is_active, operation_mode, created_at, updated_at`;
+const OUTLET_SELECT = `id, name, address, phone, latitude, longitude, is_active, operation_mode, created_at, updated_at`;
+
+function parseCoordinate(value, min, max, field) {
+  if (value === undefined) return { supplied: false, value: null };
+  if (value === null || value === '') return { supplied: true, value: null };
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    const err = new Error(`Invalid ${field}`);
+    err.status = 400;
+    throw err;
+  }
+  return { supplied: true, value: parsed };
+}
 
 function canEdit(admin) {
   return admin && EDIT_ROLES.has(admin.role);
@@ -125,13 +137,26 @@ export function registerCmsCustomerRoutes(app) {
   app.post('/api/cms/customers/:userId/outlets', requireCmsAuth, async (req, res) => {
     if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
     const { userId } = req.params;
-    const { name, address, phone, operation_mode: requestedMode, activate } = req.body || {};
+    const {
+      name,
+      address,
+      phone,
+      latitude,
+      longitude,
+      operation_mode: requestedMode,
+      activate,
+    } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: 'Outlet name is required' });
     }
 
     const client = await pool.connect();
     try {
+      const lat = parseCoordinate(latitude, -90, 90, 'latitude');
+      const lng = parseCoordinate(longitude, -180, 180, 'longitude');
+      if (lat.value === null !== (lng.value === null)) {
+        return res.status(400).json({ error: 'Both latitude and longitude are required' });
+      }
       const { rows: owners } = await client.query(
         `SELECT p.user_id, p.business_type
          FROM public.profiles p
@@ -162,14 +187,18 @@ export function registerCmsCustomerRoutes(app) {
       }
 
       const { rows } = await client.query(
-        `INSERT INTO public.outlets (owner_id, name, address, phone, operation_mode, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO public.outlets (
+           owner_id, name, address, phone, latitude, longitude, operation_mode, is_active
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING ${OUTLET_SELECT}`,
         [
           userId,
           String(name).trim(),
           address ? String(address).trim() || null : null,
           phone ? String(phone).trim() || null : null,
+          lat.value,
+          lng.value,
           operationMode,
           makeActive,
         ]
@@ -190,7 +219,7 @@ export function registerCmsCustomerRoutes(app) {
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       console.error('POST /api/cms/customers/:userId/outlets:', err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     } finally {
       client.release();
     }
@@ -199,7 +228,14 @@ export function registerCmsCustomerRoutes(app) {
   app.patch('/api/cms/customers/:userId/outlets/:outletId', requireCmsAuth, async (req, res) => {
     if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
     const { userId, outletId } = req.params;
-    const { name, address, phone, operation_mode: requestedMode } = req.body || {};
+    const {
+      name,
+      address,
+      phone,
+      latitude,
+      longitude,
+      operation_mode: requestedMode,
+    } = req.body || {};
 
     if (name !== undefined && !String(name).trim()) {
       return res.status(400).json({ error: 'Outlet name cannot be empty' });
@@ -209,12 +245,21 @@ export function registerCmsCustomerRoutes(app) {
     }
 
     try {
+      const lat = parseCoordinate(latitude, -90, 90, 'latitude');
+      const lng = parseCoordinate(longitude, -180, 180, 'longitude');
+      if (lat.supplied !== lng.supplied || (lat.value === null) !== (lng.value === null)) {
+        return res.status(400).json({
+          error: 'Latitude and longitude must be provided together',
+        });
+      }
       const { rows } = await pool.query(
         `UPDATE public.outlets
          SET name = COALESCE($3, name),
              address = CASE WHEN $4::boolean THEN $5 ELSE address END,
              phone = CASE WHEN $6::boolean THEN $7 ELSE phone END,
              operation_mode = COALESCE($8, operation_mode),
+             latitude = CASE WHEN $9::boolean THEN $10 ELSE latitude END,
+             longitude = CASE WHEN $9::boolean THEN $11 ELSE longitude END,
              updated_at = NOW()
          WHERE id = $1 AND owner_id = $2
          RETURNING ${OUTLET_SELECT}`,
@@ -227,9 +272,28 @@ export function registerCmsCustomerRoutes(app) {
           phone !== undefined,
           phone !== undefined ? (phone ? String(phone).trim() || null : null) : null,
           requestedMode ?? null,
+          lat.supplied,
+          lat.value,
+          lng.value,
         ]
       );
       if (!rows[0]) return res.status(404).json({ error: 'Outlet not found' });
+
+      if (lat.supplied) {
+        await pool.query(
+          `UPDATE public.shiprocket_connections
+           SET settings =
+             COALESCE(settings, '{}'::jsonb) ||
+             jsonb_build_object(
+               'pickup_address',
+               COALESCE(settings->'pickup_address', '{}'::jsonb) ||
+               jsonb_build_object('latitude', $2::numeric, 'longitude', $3::numeric)
+             ),
+             updated_at = NOW()
+           WHERE outlet_id = $1`,
+          [outletId, lat.value, lng.value]
+        );
+      }
 
       await logAdminAction({
         adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
@@ -237,14 +301,22 @@ export function registerCmsCustomerRoutes(app) {
         action: 'cms.customers.outlet.update',
         targetType: 'outlet',
         targetId: outletId,
-        metadata: { user_id: userId, name, address, phone, operation_mode: requestedMode ?? null },
+        metadata: {
+          user_id: userId,
+          name,
+          address,
+          phone,
+          latitude: lat.supplied ? lat.value : undefined,
+          longitude: lng.supplied ? lng.value : undefined,
+          operation_mode: requestedMode ?? null,
+        },
         req,
       });
 
       res.json({ outlet: rows[0] });
     } catch (err) {
       console.error('PATCH /api/cms/customers/:userId/outlets/:outletId:', err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 

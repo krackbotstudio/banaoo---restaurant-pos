@@ -31,6 +31,7 @@ import { registerInventoryRoutes, warmInventorySchema } from './inventory-api.js
 import { registerShiprocketRoutes } from './shiprocket/routes.js';
 import { startShiprocketJobs } from './shiprocket/jobs.js';
 import { registerRazorpayRoutes } from './razorpay/routes.js';
+import { registerGooglePayRoutes } from './google-pay/routes.js';
 import { validateRazorpayEnvironment } from './razorpay/config.js';
 import { clearUnmodifiedSampleMenu } from './sample-menu.js';
 import { registerCmsRoutes, registerDashboardBannerPublicRoutes, requireAdminAccess, logAdminAction, getCmsAdmin } from './admin/routes.js';
@@ -1641,8 +1642,13 @@ const SUPPORTED_ADDON_TYPES = new Set([
   'whatsapp_integration',
   'shiprocket_delivery',
   'razorpay_payments',
+  'google_pay_india',
 ]);
-const FREE_ADDON_TYPES = new Set(['shiprocket_delivery', 'razorpay_payments']);
+const FREE_ADDON_TYPES = new Set([
+  'shiprocket_delivery',
+  'razorpay_payments',
+  'google_pay_india',
+]);
 
 const DISCOUNTS = {
   3: 0.05,
@@ -2531,6 +2537,7 @@ registerStaffRoutes(app, { requireAuth });
 registerInventoryRoutes(app, { requireAuth });
 registerShiprocketRoutes(app, { requireAuth });
 registerRazorpayRoutes(app, { requireAuth });
+registerGooglePayRoutes(app, { requireAuth });
 void warmInventorySchema();
 startShiprocketJobs();
 console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');

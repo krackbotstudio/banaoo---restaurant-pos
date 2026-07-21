@@ -2,8 +2,14 @@ import pool from './db.js';
 import crypto from 'crypto';
 import { getMerchantAuth, isRazorpayConnectionActive, getCheckoutKeyId } from './razorpay/auth.js';
 import { createOrderForMerchant, fetchPaymentForMerchant } from './razorpay/client.js';
+import {
+  buildGooglePayPaymentRequest,
+  getGooglePayConnection,
+  isGooglePayReady,
+  normalizeGooglePayConnection,
+} from './google-pay/routes.js';
 
-function resolvePaymentSettings(outlet, profile, razorpayConn) {
+export function resolvePaymentSettings(outlet, profile, razorpayConn, googlePayConn, provider) {
   const online =
     outlet.online_payments_enabled ??
     profile?.online_payments_enabled ??
@@ -13,12 +19,38 @@ function resolvePaymentSettings(outlet, profile, razorpayConn) {
       ? razorpayConn.settings
       : {};
   const rzOnlineEnabled = rzSettings.online_payments_enabled !== false;
-  const allowCod = rzSettings.allow_cod !== false;
   const razorpayConnected = isRazorpayConnectionActive(razorpayConn);
+  const gpay = normalizeGooglePayConnection(googlePayConn);
+  const gpayReady = isGooglePayReady(googlePayConn);
+  const gpayAllowCod = gpay.settings.allow_cod !== false;
+
+  let activeProvider = provider;
+  if (activeProvider !== 'razorpay' && activeProvider !== 'google_pay') {
+    // Legacy fallback: prefer Razorpay when connected
+    activeProvider = razorpayConnected ? 'razorpay' : gpayReady ? 'google_pay' : null;
+  }
+
+  const razorpayCheckout = online !== false && rzOnlineEnabled && razorpayConnected;
+  const googlePayCheckout = online !== false && gpayReady;
+  const onlineCheckoutEnabled =
+    activeProvider === 'google_pay'
+      ? googlePayCheckout
+      : activeProvider === 'razorpay'
+        ? razorpayCheckout
+        : false;
+
+  const allowCod =
+    activeProvider === 'google_pay'
+      ? gpayAllowCod
+      : rzSettings.allow_cod !== false;
 
   return {
-    upi_vpa: (outlet.upi_vpa?.trim() || profile?.upi_vpa?.trim() || null) ?? null,
+    upi_vpa:
+      (activeProvider === 'google_pay' ? gpay.merchant_vpa : null) ||
+      (outlet.upi_vpa?.trim() || profile?.upi_vpa?.trim() || null) ||
+      null,
     upi_display_name:
+      (activeProvider === 'google_pay' ? gpay.payee_name : null) ||
       outlet.upi_display_name?.trim() ||
       profile?.upi_display_name?.trim() ||
       profile?.brand_name?.trim() ||
@@ -26,10 +58,13 @@ function resolvePaymentSettings(outlet, profile, razorpayConn) {
       null,
     upi_qr_url: outlet.upi_qr_url?.trim() || profile?.upi_qr_url?.trim() || null,
     online_payments_enabled: online !== false,
+    online_payment_provider: activeProvider,
     razorpay_connected: razorpayConnected,
     razorpay_account_id: razorpayConn?.account_id || razorpayConn?.merchant_key_id || null,
+    google_pay_ready: gpayReady,
+    google_pay_mcc: gpay.mcc,
     allow_cod: allowCod,
-    online_checkout_enabled: online !== false && rzOnlineEnabled && razorpayConnected,
+    online_checkout_enabled: onlineCheckoutEnabled,
   };
 }
 
@@ -306,7 +341,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
                 o.owner_id,
                 p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name
+                p.brand_name, p.online_payment_provider
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
@@ -332,6 +367,13 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         console.warn('payment-settings razorpay lookup:', rzErr.message);
       }
 
+      let googlePayConn = null;
+      try {
+        googlePayConn = await getGooglePayConnection(o.owner_id);
+      } catch (gpErr) {
+        console.warn('payment-settings google pay lookup:', gpErr.message);
+      }
+
       const settings = resolvePaymentSettings(
         {
           upi_vpa: o.upi_vpa,
@@ -347,7 +389,9 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           online_payments_enabled: o.profile_online_payments_enabled,
           brand_name: o.brand_name,
         },
-        razorpayRow ? razorpayConnFromRow(razorpayRow) : null
+        razorpayRow ? razorpayConnFromRow(razorpayRow) : null,
+        googlePayConn,
+        o.online_payment_provider
       );
       res.json(settings);
     } catch (err) {
@@ -412,7 +456,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       const { rows: outlets } = await client.query(
         `SELECT o.*, p.upi_vpa AS profile_upi_vpa, p.upi_display_name AS profile_upi_display_name,
                 p.upi_qr_url AS profile_upi_qr_url, p.online_payments_enabled AS profile_online_payments_enabled,
-                p.brand_name
+                p.brand_name, p.online_payment_provider
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
@@ -439,6 +483,13 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         razorpayRow = rz[0] || null;
       } catch (rzErr) {
         console.warn('customer-orders razorpay lookup:', rzErr.message);
+      }
+
+      let googlePayConn = null;
+      try {
+        googlePayConn = await getGooglePayConnection(outlet.owner_id);
+      } catch (gpErr) {
+        console.warn('customer-orders google pay lookup:', gpErr.message);
       }
 
       let resolvedTableNumber = table_number?.trim() || null;
@@ -470,13 +521,19 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         resolvedTableNumber = tbl[0].table_number;
       }
 
-      const settings = resolvePaymentSettings(outlet, {
-        upi_vpa: outlet.profile_upi_vpa,
-        upi_display_name: outlet.profile_upi_display_name,
-        upi_qr_url: outlet.profile_upi_qr_url,
-        online_payments_enabled: outlet.profile_online_payments_enabled,
-        brand_name: outlet.brand_name,
-      }, razorpayRow ? razorpayConnFromRow(razorpayRow) : null);
+      const settings = resolvePaymentSettings(
+        outlet,
+        {
+          upi_vpa: outlet.profile_upi_vpa,
+          upi_display_name: outlet.profile_upi_display_name,
+          upi_qr_url: outlet.profile_upi_qr_url,
+          online_payments_enabled: outlet.profile_online_payments_enabled,
+          brand_name: outlet.brand_name,
+        },
+        razorpayRow ? razorpayConnFromRow(razorpayRow) : null,
+        googlePayConn,
+        outlet.online_payment_provider
+      );
 
       if (payMethod === 'online') {
         if (!settings.online_checkout_enabled) {
@@ -511,6 +568,66 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         0
       );
       const orderNumber = `ONL-${Date.now().toString(36).toUpperCase()}`;
+
+      if (payMethod === 'online' && settings.online_payment_provider === 'google_pay') {
+        const gpay = normalizeGooglePayConnection(googlePayConn);
+        const sessionId = crypto.randomUUID();
+        const transactionRef = `GP${Date.now().toString(36).toUpperCase()}${crypto
+          .randomBytes(2)
+          .toString('hex')
+          .toUpperCase()}`.slice(0, 35);
+        const paymentRequest = buildGooglePayPaymentRequest({
+          merchantVpa: gpay.merchant_vpa,
+          payeeName: gpay.payee_name,
+          mcc: gpay.mcc,
+          transactionRef,
+          amount: subtotal,
+          referenceUrl: `${req.protocol}://${req.get('host')}/r/${outlet_id}`,
+        });
+        const upiIntent = `upi://pay?pa=${encodeURIComponent(gpay.merchant_vpa)}&pn=${encodeURIComponent(
+          gpay.payee_name.slice(0, 80)
+        )}&am=${Number(subtotal).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Banaoo order')}&tr=${encodeURIComponent(
+          transactionRef
+        )}`;
+
+        await client.query(
+          `INSERT INTO public.checkout_sessions (id, outlet_id, gateway_order_id, payload)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            sessionId,
+            outlet_id,
+            transactionRef,
+            JSON.stringify({
+              body: req.body,
+              order_number: orderNumber,
+              subtotal,
+              total: subtotal,
+              resolved_table_number: resolvedTableNumber,
+              gateway: 'google_pay',
+              transaction_ref: transactionRef,
+            }),
+          ]
+        );
+
+        await client.query('COMMIT');
+        return res.json({
+          order_id: sessionId,
+          order_number: orderNumber,
+          total: Number(subtotal),
+          payment_method: 'online',
+          payment_status: 'created',
+          payment_id: null,
+          requires_online_payment: true,
+          payment_provider: 'google_pay',
+          google_pay: {
+            transaction_ref: transactionRef,
+            payment_request: paymentRequest,
+            upi_intent_url: upiIntent,
+            merchant_vpa: gpay.merchant_vpa,
+            payee_name: gpay.payee_name,
+          },
+        });
+      }
 
       if (payMethod === 'online') {
         const merchantAuth = await getMerchantAuth(outlet.owner_id);
@@ -551,6 +668,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
               subtotal,
               total: subtotal,
               resolved_table_number: resolvedTableNumber,
+              gateway: 'razorpay',
             }),
           ]
         );
@@ -565,6 +683,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           payment_status: 'created',
           payment_id: null,
           requires_online_payment: true,
+          payment_provider: 'razorpay',
           razorpay: {
             order_id: rpOrder.id,
             amount: rpOrder.amount,
@@ -696,7 +815,23 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           return res.status(404).json({ error: 'Order not found' });
         }
         const sRow = sessionRows[0];
-        const sPayload = sRow.payload;
+        const sPayload = typeof sRow.payload === 'string' ? JSON.parse(sRow.payload) : sRow.payload;
+        let googlePayConn = null;
+        try {
+          const { rows: outOwner } = await pool.query(
+            'SELECT owner_id FROM public.outlets WHERE id = $1',
+            [sRow.outlet_id]
+          );
+          if (outOwner[0]) googlePayConn = await getGooglePayConnection(outOwner[0].owner_id);
+        } catch {
+          /* ignore */
+        }
+        const provider =
+          sPayload?.gateway === 'google_pay'
+            ? 'google_pay'
+            : sPayload?.gateway === 'razorpay'
+              ? 'razorpay'
+              : null;
         const settings = resolvePaymentSettings(
           {
             upi_vpa: sRow.outlet_upi_vpa,
@@ -712,9 +847,34 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
             online_payments_enabled: sRow.profile_online_payments_enabled,
             brand_name: sRow.brand_name,
           },
-          razorpayConnFromRow(sRow)
+          razorpayConnFromRow(sRow),
+          googlePayConn,
+          provider
         );
         const checkoutKeyId = getCheckoutKeyId(razorpayConnFromRow(sRow));
+        const gpay = normalizeGooglePayConnection(googlePayConn);
+        const transactionRef = sPayload?.transaction_ref || sRow.gateway_order_id;
+        const googlePayPayload =
+          provider === 'google_pay' && gpay.merchant_vpa
+            ? {
+                transaction_ref: transactionRef,
+                payment_request: buildGooglePayPaymentRequest({
+                  merchantVpa: gpay.merchant_vpa,
+                  payeeName: gpay.payee_name || sRow.outlet_name,
+                  mcc: gpay.mcc || '5812',
+                  transactionRef,
+                  amount: sPayload.total,
+                }),
+                upi_intent_url: `upi://pay?pa=${encodeURIComponent(gpay.merchant_vpa)}&pn=${encodeURIComponent(
+                  (gpay.payee_name || sRow.outlet_name || '').slice(0, 80)
+                )}&am=${Number(sPayload.total).toFixed(2)}&cu=INR&tn=${encodeURIComponent(
+                  'Banaoo order'
+                )}&tr=${encodeURIComponent(transactionRef)}`,
+                merchant_vpa: gpay.merchant_vpa,
+                payee_name: gpay.payee_name,
+              }
+            : null;
+
         return res.json({
           order_id: sRow.id,
           order_number: sPayload.order_number,
@@ -723,13 +883,15 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           payment_status: 'created',
           payment_id: null,
           payment_record_status: 'created',
-          gateway: 'razorpay',
+          gateway: provider || 'razorpay',
+          payment_provider: provider || 'razorpay',
           gateway_order_id: sRow.gateway_order_id,
           gateway_payment_id: null,
           currency: 'INR',
-          razorpay_key_id: checkoutKeyId,
+          razorpay_key_id: provider === 'google_pay' ? null : checkoutKeyId,
           customer_reference: null,
           upi_vpa: settings.upi_vpa,
+          google_pay: googlePayPayload,
           ...settings,
         });
       }
@@ -783,11 +945,42 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       return res.status(400).json({ error: 'Enter a valid UTR / transaction reference (min 6 characters)' });
     }
     try {
+      // Google Pay checkout session → create order awaiting confirmation
+      const { rows: sessionRows } = await pool.query(
+        `SELECT * FROM public.checkout_sessions WHERE id = $1 LIMIT 1`,
+        [orderId]
+      );
+      if (sessionRows[0]) {
+        const session = sessionRows[0];
+        const payload =
+          typeof session.payload === 'string' ? JSON.parse(session.payload) : session.payload;
+        if (payload?.gateway === 'google_pay') {
+          const { rows: dup } = await pool.query(
+            `SELECT id FROM public.order_payments
+             WHERE customer_reference = $1 AND gateway = 'google_pay'
+             LIMIT 1`,
+            [ref]
+          );
+          if (dup[0]) {
+            return res.status(409).json({ error: 'This UTR has already been submitted' });
+          }
+
+          const order = await createGooglePayOrderFromSession(orderId, ref);
+          return res.json({
+            success: true,
+            payment_status: order.payment_status,
+            order_id: order.id,
+            order_number: order.order_number,
+          });
+        }
+      }
+
       const { rows } = await pool.query(
         `SELECT o.id, o.payment_status, op.id AS payment_id
          FROM public.orders o
          LEFT JOIN public.order_payments op ON op.order_id = o.id
-         WHERE o.id = $1 AND o.source = 'online' AND o.payment_method = 'upi'`,
+         WHERE o.id = $1 AND o.source = 'online'
+           AND (o.payment_method = 'upi' OR o.payment_gateway = 'google_pay')`,
         [orderId]
       );
       if (rows.length === 0) return res.status(404).json({ error: 'Order not found' });
@@ -796,6 +989,16 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         return res.json({ success: true, payment_status: 'paid' });
       }
       if (!row.payment_id) return res.status(400).json({ error: 'No payment record' });
+
+      const { rows: dup } = await pool.query(
+        `SELECT id FROM public.order_payments
+         WHERE customer_reference = $1 AND id <> $2
+         LIMIT 1`,
+        [ref, row.payment_id]
+      );
+      if (dup[0]) {
+        return res.status(409).json({ error: 'This UTR has already been submitted' });
+      }
 
       await pool.query(
         `UPDATE public.order_payments
@@ -1141,6 +1344,124 @@ export async function createOrderFromSession(sessionId, gatewayPaymentId, gatewa
       [sessionId]
     );
 
+    await client.query('COMMIT');
+    return order;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function createGooglePayOrderFromSession(sessionId, utr) {
+  const { rows: existing } = await pool.query(
+    'SELECT id, order_number, total, payment_method, payment_status FROM public.orders WHERE id = $1 LIMIT 1',
+    [sessionId]
+  );
+  if (existing[0]) {
+    return existing[0];
+  }
+
+  const { rows: sessionRows } = await pool.query(
+    'SELECT * FROM public.checkout_sessions WHERE id = $1 LIMIT 1',
+    [sessionId]
+  );
+  const session = sessionRows[0];
+  if (!session) throw new Error('Checkout session not found or expired');
+
+  const payload =
+    typeof session.payload === 'string' ? JSON.parse(session.payload) : session.payload;
+  if (payload?.gateway !== 'google_pay') {
+    throw new Error('Not a Google Pay checkout session');
+  }
+
+  const { body, order_number, subtotal, total, resolved_table_number, transaction_ref } = payload;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: outletRows } = await client.query(
+      'SELECT owner_id, name FROM public.outlets WHERE id = $1 LIMIT 1',
+      [session.outlet_id]
+    );
+    const outlet = outletRows[0];
+    if (!outlet) throw new Error('Outlet not found');
+
+    const deliveryLat = body.order_type === 'delivery' ? Number(body.delivery_latitude) : null;
+    const deliveryLng = body.order_type === 'delivery' ? Number(body.delivery_longitude) : null;
+
+    const { rows: orderRows } = await client.query(
+      `INSERT INTO public.orders (
+        id, outlet_id, order_number, order_type, table_number, table_id, delivery_address,
+        delivery_pincode, delivery_city, delivery_state,
+        delivery_latitude, delivery_longitude,
+        subtotal, total, notes, status, source, customer_name, customer_phone,
+        payment_method, payment_status, payment_gateway
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending','online',$16,$17,'online','awaiting_confirmation','google_pay')
+      RETURNING id, order_number, total, payment_method, payment_status`,
+      [
+        sessionId,
+        session.outlet_id,
+        order_number,
+        body.order_type,
+        resolved_table_number,
+        body.order_type === 'dine_in' ? body.table_id || null : null,
+        body.order_type === 'delivery' ? body.delivery_address.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_pincode.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_city.trim() : null,
+        body.order_type === 'delivery' ? body.delivery_state.trim() : null,
+        deliveryLat,
+        deliveryLng,
+        subtotal,
+        total,
+        body.notes?.trim() || null,
+        body.customer_name.trim(),
+        body.customer_phone?.trim() || null,
+      ]
+    );
+    const order = orderRows[0];
+
+    for (const it of body.items) {
+      await client.query(
+        `INSERT INTO public.order_items (order_id, menu_item_id, item_name, quantity, unit_price, total_price, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          order.id,
+          it.menu_item_id,
+          it.item_name,
+          it.quantity,
+          it.unit_price,
+          it.unit_price * it.quantity,
+          it.notes || null,
+        ]
+      );
+    }
+
+    await client.query(
+      `INSERT INTO public.order_payments (
+        order_id, outlet_id, amount, method, status, gateway, currency,
+        gateway_order_id, customer_reference, submitted_at, metadata
+      ) VALUES ($1,$2,$3,'online','awaiting_confirmation','google_pay','INR',$4,$5,now(),$6)`,
+      [
+        order.id,
+        session.outlet_id,
+        subtotal,
+        transaction_ref || session.gateway_order_id,
+        utr,
+        JSON.stringify({
+          owner_id: outlet.owner_id,
+          outlet_id: session.outlet_id,
+          outlet_name: outlet.name,
+          order_id: order.id,
+          order_number: order.order_number,
+          customer_name: body.customer_name.trim(),
+          source: 'google_pay_utr',
+        }),
+      ]
+    );
+
+    await client.query('DELETE FROM public.checkout_sessions WHERE id = $1', [sessionId]);
     await client.query('COMMIT');
     return order;
   } catch (err) {

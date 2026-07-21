@@ -61,6 +61,7 @@ function addonOwnedLabel(type: AddonType, addons: SubscriptionAddons): string | 
   if (type === "whatsapp_integration" && addons.whatsapp) return "WhatsApp active";
   if (type === "shiprocket_delivery" && addons.shiprocket) return "Shiprocket delivery active";
   if (type === "razorpay_payments" && addons.razorpay) return "Razorpay payments active";
+  if (type === "google_pay_india" && addons.google_pay_india) return "Google Pay India active";
   return null;
 }
 
@@ -120,6 +121,12 @@ const ADDON_META: Record<
     icon: Wallet,
     gradient: "from-indigo-500/12 via-indigo-500/5 to-transparent",
     accent: "border-indigo-500/30",
+    category: "Integrations",
+  },
+  google_pay_india: {
+    icon: Wallet,
+    gradient: "from-emerald-500/12 via-emerald-500/5 to-transparent",
+    accent: "border-emerald-500/30",
     category: "Integrations",
   },
 };
@@ -295,6 +302,8 @@ export default function Addons() {
                           ? limits.shiprocketDelivery
                           : item.type === "razorpay_payments"
                             ? limits.razorpayPayments
+                          : item.type === "google_pay_india"
+                            ? limits.googlePayIndia
                           : item.type === "swiggy_integration"
                           ? limits.swiggyIntegration
                           : item.type === "zomato_integration"

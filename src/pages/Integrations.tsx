@@ -451,6 +451,29 @@ export default function Integrations() {
               </CardContent>
             </Card>
           </FeatureGate>
+
+          <FeatureGate feature="googlePayIndia" showUpgradePrompt>
+            <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-background to-transparent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2.5">
+                  <span className="font-semibold">Google Pay India</span>
+                  <Badge variant="secondary">UPI</Badge>
+                </CardTitle>
+                <CardDescription>
+                  Accept UPI via Google Pay to your merchant VPA. Choose Google Pay as your active online provider in Settings → Payments.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className="gap-2" variant="outline">
+                  <Link to="/settings?tab=payments">
+                    <Settings2 className="h-4 w-4" />
+                    Configure Google Pay
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </FeatureGate>
         </div>
 
         <div className="space-y-4">

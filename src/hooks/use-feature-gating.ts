@@ -15,6 +15,7 @@ const ADDON_FEATURES: FeatureKey[] = [
   "zomatoIntegration",
   "shiprocketDelivery",
   "razorpayPayments",
+  "googlePayIndia",
 ];
 
 export function useFeatureGating() {

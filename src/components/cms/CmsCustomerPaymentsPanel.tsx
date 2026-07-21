@@ -17,6 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface ProfilePaymentState {
   upi_vpa?: string | null;
@@ -36,6 +43,19 @@ interface RazorpayState {
     online_payments_enabled: boolean;
     allow_cod: boolean;
     allow_partial_refunds: boolean;
+  };
+}
+
+interface GooglePayState {
+  online_payment_provider: "razorpay" | "google_pay" | null;
+  ready: boolean;
+  google_pay: {
+    is_configured: boolean;
+    is_enabled: boolean;
+    merchant_vpa: string | null;
+    payee_name: string | null;
+    mcc: string | null;
+    settings: { allow_cod: boolean };
   };
 }
 
@@ -61,6 +81,17 @@ export function CmsCustomerPaymentsPanel({ userId, payments, onSaved }: Props) {
   const [keyId, setKeyId] = useState("");
   const [keySecret, setKeySecret] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [gpay, setGpay] = useState<GooglePayState | null>(null);
+  const [loadingGpay, setLoadingGpay] = useState(true);
+  const [savingGpay, setSavingGpay] = useState(false);
+  const [gpayForm, setGpayForm] = useState({
+    merchant_vpa: "",
+    payee_name: "",
+    mcc: "5812",
+    is_enabled: false,
+    allow_cod: true,
+  });
+  const [provider, setProvider] = useState<"razorpay" | "google_pay" | "none">("none");
 
   useEffect(() => {
     setUpiForm({
@@ -88,9 +119,35 @@ export function CmsCustomerPaymentsPanel({ userId, payments, onSaved }: Props) {
     }
   }, [userId]);
 
+  const loadGooglePay = useCallback(async () => {
+    setLoadingGpay(true);
+    try {
+      const res = await fetch(`${API_URL}/api/cms/customers/${userId}/google-pay`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load Google Pay");
+      setGpay(data);
+      setProvider(data.online_payment_provider || "none");
+      setGpayForm({
+        merchant_vpa: data.google_pay?.merchant_vpa || "",
+        payee_name: data.google_pay?.payee_name || "",
+        mcc: data.google_pay?.mcc || "5812",
+        is_enabled: !!data.google_pay?.is_enabled,
+        allow_cod: data.google_pay?.settings?.allow_cod !== false,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load Google Pay");
+      setGpay(null);
+    } finally {
+      setLoadingGpay(false);
+    }
+  }, [userId]);
+
   useEffect(() => {
     void loadRazorpay();
-  }, [loadRazorpay]);
+    void loadGooglePay();
+  }, [loadRazorpay, loadGooglePay]);
 
   const saveUpi = async () => {
     setSavingUpi(true);
@@ -365,6 +422,151 @@ export function CmsCustomerPaymentsPanel({ userId, payments, onSaved }: Props) {
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Could not load Razorpay status.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Google Pay India</CardTitle>
+          <CardDescription>
+            Direct UPI merchant VPA configuration and active online provider selection
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingGpay ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={gpay?.ready ? "default" : "secondary"}>
+                  {gpay?.ready ? "Ready" : "Not ready"}
+                </Badge>
+                <div className="space-y-1 min-w-[200px]">
+                  <Label className="text-xs">Active provider</Label>
+                  <Select
+                    value={provider}
+                    disabled={savingGpay}
+                    onValueChange={(v) => {
+                      const next = v as "razorpay" | "google_pay" | "none";
+                      setProvider(next);
+                      void (async () => {
+                        setSavingGpay(true);
+                        try {
+                          const res = await fetch(
+                            `${API_URL}/api/cms/customers/${userId}/online-payment-provider`,
+                            {
+                              method: "PATCH",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                provider: next === "none" ? null : next,
+                              }),
+                            }
+                          );
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || "Failed to update provider");
+                          toast.success("Provider updated");
+                          await loadGooglePay();
+                          onSaved();
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Failed");
+                          await loadGooglePay();
+                        } finally {
+                          setSavingGpay(false);
+                        }
+                      })();
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="razorpay">Razorpay</SelectItem>
+                      <SelectItem value="google_pay">Google Pay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Merchant VPA</Label>
+                  <Input
+                    className="font-mono"
+                    value={gpayForm.merchant_vpa}
+                    onChange={(e) => setGpayForm((s) => ({ ...s, merchant_vpa: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payee name</Label>
+                  <Input
+                    value={gpayForm.payee_name}
+                    onChange={(e) => setGpayForm((s) => ({ ...s, payee_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>MCC</Label>
+                  <Input
+                    className="font-mono"
+                    value={gpayForm.mcc}
+                    onChange={(e) => setGpayForm((s) => ({ ...s, mcc: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={gpayForm.is_enabled}
+                    onCheckedChange={(v) => setGpayForm((s) => ({ ...s, is_enabled: v }))}
+                  />
+                  <span className="text-sm">Enabled</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={gpayForm.allow_cod}
+                    onCheckedChange={(v) => setGpayForm((s) => ({ ...s, allow_cod: v }))}
+                  />
+                  <span className="text-sm">Allow COD</span>
+                </div>
+              </div>
+              <Button
+                disabled={savingGpay}
+                onClick={() => {
+                  void (async () => {
+                    setSavingGpay(true);
+                    try {
+                      const res = await fetch(`${API_URL}/api/cms/customers/${userId}/google-pay`, {
+                        method: "PUT",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(gpayForm),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || "Failed to save");
+                      setGpay(data);
+                      setProvider(data.online_payment_provider || "none");
+                      toast.success("Google Pay settings saved");
+                      onSaved();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to save");
+                    } finally {
+                      setSavingGpay(false);
+                    }
+                  })();
+                }}
+              >
+                {savingGpay ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1" />
+                )}
+                Save Google Pay
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
