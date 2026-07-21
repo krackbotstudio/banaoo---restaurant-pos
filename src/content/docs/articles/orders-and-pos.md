@@ -43,20 +43,29 @@ Printing depends on printer settings:
 
 If nothing prints, see [Printers](/docs/printers) and [FAQ](/docs/faq-troubleshooting).
 
-## Customer online orders (UPI)
+## Customer online orders (payments)
 
 Customers ordering via your **ordering link** can:
 
 - Pick an **available table** from your floor plan (dine-in).
-- Pay **at counter** (cash) or **UPI now** (if configured).
+- Pay **at counter** (cash / COD) or **online** if you have configured a payment provider.
 
-**Owner setup**
+**Choose one online provider**
 
-1. **Settings → Branding** — default UPI ID, display name, optional QR image URL.
-2. **Outlets → [outlet]** — optional per-outlet override under **Customer UPI payments**.
-3. **Payments** in the sidebar — confirm UTR submissions; kitchen sees the order only after you confirm UPI.
+Activate the free add-on you want under **Add-ons**, then open **Settings → Payments** and set **Online payment provider** to either:
 
-Razorpay in Banaoo is for **subscriptions and add-ons only**, not customer food orders.
+1. **Razorpay** — customers pay through Razorpay Checkout (instant confirmation).
+2. **Google Pay India** — customers pay UPI to your merchant VPA via Google Pay (or UPI intent). They submit a UTR; you confirm it under **Payments** before the kitchen treats it as paid.
+
+**Google Pay India setup**
+
+1. Activate the free **Google Pay India** add-on.
+2. **Settings → Payments → Google Pay India** — enter merchant VPA, payee name, and 4-digit MCC (restaurants often use `5812`).
+3. Enable Google Pay and select it as the active online provider.
+4. Prefer Android Chrome for the Google Pay Payment Request experience; other devices fall back to a UPI deep link.
+5. Confirm pending UTR payments in **Payments**.
+
+You can keep both add-ons active, but only the **selected provider** is shown at customer checkout.
 
 ## Native delivery (Shiprocket)
 

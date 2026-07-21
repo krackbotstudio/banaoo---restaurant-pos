@@ -14,6 +14,15 @@ import {
   isRazorpayConnectionActive,
   saveApiKeyConnection,
 } from '../razorpay/auth.js';
+import {
+  getGooglePayConnection,
+  getOnlinePaymentProvider,
+  isGooglePayReady,
+  isValidGooglePayVpa,
+  isValidMcc,
+  normalizeGooglePayConnection,
+  setOnlinePaymentProvider,
+} from '../google-pay/routes.js';
 
 const EDIT_ROLES = new Set(['super_admin', 'support', 'billing']);
 
@@ -62,11 +71,14 @@ function publicRazorpay(conn) {
   };
 }
 
-function publicShiprocket(conn) {
+function publicShiprocket(conn, outletId, req) {
   const settings = mergeSettings(conn?.settings);
+  const configuredBaseUrl = process.env.API_PUBLIC_URL?.trim().replace(/\/+$/, '');
+  const baseUrl = configuredBaseUrl || `${req.protocol}://${req.get('host')}`;
   return {
     is_connected: !!conn?.is_connected,
     connected_at: conn?.connected_at ?? null,
+    webhook_url: `${baseUrl}/api/webhooks/delivery-tracking?outlet_id=${outletId}`,
     settings: {
       auto_delivery_enabled: !!settings.auto_delivery_enabled,
       prep_time_minutes: settings.prep_time_minutes ?? DEFAULT_SETTINGS.prep_time_minutes,
@@ -78,6 +90,7 @@ function publicShiprocket(conn) {
       retry_max_attempts: settings.retry_max_attempts ?? DEFAULT_SETTINGS.retry_max_attempts,
       retry_interval_seconds:
         settings.retry_interval_seconds ?? DEFAULT_SETTINGS.retry_interval_seconds,
+      webhook_secret: settings.webhook_secret || null,
     },
   };
 }
@@ -243,7 +256,7 @@ export function registerCmsCustomerSettingsRoutes(app) {
         const conn = await getShiprocketConnection(outlet.id);
         deliveries.push({
           outlet,
-          shiprocket: publicShiprocket(conn),
+          shiprocket: publicShiprocket(conn, outlet.id, req),
         });
       }
       res.json({ deliveries });
@@ -277,7 +290,7 @@ export function registerCmsCustomerSettingsRoutes(app) {
         req,
       });
 
-      res.json({ outlet, shiprocket: publicShiprocket(conn) });
+      res.json({ outlet, shiprocket: publicShiprocket(conn, outletId, req) });
     } catch (err) {
       console.error('POST cms shiprocket connect:', err);
       res.status(400).json({ error: formatShiprocketConnectError(err) || err.message });
@@ -302,7 +315,7 @@ export function registerCmsCustomerSettingsRoutes(app) {
         req,
       });
 
-      res.json({ success: true, outlet, shiprocket: publicShiprocket(null) });
+      res.json({ success: true, outlet, shiprocket: publicShiprocket(null, outletId, req) });
     } catch (err) {
       console.error('POST cms shiprocket disconnect:', err);
       res.status(500).json({ error: err.message });
@@ -344,6 +357,9 @@ export function registerCmsCustomerSettingsRoutes(app) {
         ...(body.retry_interval_seconds !== undefined
           ? { retry_interval_seconds: Math.max(30, Number(body.retry_interval_seconds) || 120) }
           : {}),
+        ...(body.webhook_secret !== undefined
+          ? { webhook_secret: String(body.webhook_secret || '').trim() || null }
+          : {}),
       };
 
       const { rows } = await pool.query(
@@ -368,7 +384,7 @@ export function registerCmsCustomerSettingsRoutes(app) {
         req,
       });
 
-      res.json({ outlet, shiprocket: publicShiprocket(rows[0]) });
+      res.json({ outlet, shiprocket: publicShiprocket(rows[0], outletId, req) });
     } catch (err) {
       console.error('PATCH cms shiprocket settings:', err);
       res.status(500).json({ error: err.message });
@@ -494,6 +510,149 @@ export function registerCmsCustomerSettingsRoutes(app) {
     } catch (err) {
       console.error('PATCH cms razorpay settings:', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/cms/customers/:userId/google-pay', requireCmsAuth, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      if (!(await assertCustomerExists(userId))) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      const conn = await getGooglePayConnection(userId);
+      const provider = await getOnlinePaymentProvider(userId);
+      res.json({
+        online_payment_provider: provider,
+        google_pay: normalizeGooglePayConnection(conn),
+        ready: isGooglePayReady(conn),
+      });
+    } catch (err) {
+      console.error('GET cms google-pay:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/cms/customers/:userId/google-pay', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId } = req.params;
+    const body = req.body || {};
+    const merchantVpa =
+      body.merchant_vpa !== undefined ? String(body.merchant_vpa || '').trim() : undefined;
+    const payeeName =
+      body.payee_name !== undefined ? String(body.payee_name || '').trim() : undefined;
+    const mcc = body.mcc !== undefined ? String(body.mcc || '').trim() : undefined;
+    const isEnabled = body.is_enabled !== undefined ? !!body.is_enabled : undefined;
+    const allowCod = body.allow_cod !== undefined ? !!body.allow_cod : undefined;
+
+    if (merchantVpa !== undefined && merchantVpa && !isValidGooglePayVpa(merchantVpa)) {
+      return res.status(400).json({ error: 'Invalid merchant VPA' });
+    }
+    if (mcc !== undefined && mcc && !isValidMcc(mcc)) {
+      return res.status(400).json({ error: 'MCC must be a 4-digit code' });
+    }
+
+    try {
+      if (!(await assertCustomerExists(userId))) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      const existing = await getGooglePayConnection(userId);
+      const nextVpa =
+        merchantVpa !== undefined ? merchantVpa || null : existing?.merchant_vpa || null;
+      const nextName =
+        payeeName !== undefined ? payeeName || null : existing?.payee_name || null;
+      const nextMcc = mcc !== undefined ? mcc || null : existing?.mcc || null;
+      const configured =
+        isValidGooglePayVpa(nextVpa || '') &&
+        !!String(nextName || '').trim() &&
+        isValidMcc(nextMcc || '');
+      const nextEnabled =
+        isEnabled !== undefined ? isEnabled && configured : !!existing?.is_enabled && configured;
+      const prevSettings =
+        existing?.settings && typeof existing.settings === 'object' ? existing.settings : {};
+      const nextSettings = {
+        ...prevSettings,
+        allow_cod: allowCod !== undefined ? allowCod : prevSettings.allow_cod !== false,
+      };
+
+      const { rows } = await pool.query(
+        `INSERT INTO public.google_pay_connections (
+           owner_id, merchant_vpa, payee_name, mcc, is_enabled, is_configured, settings,
+           connected_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $5 THEN now() ELSE NULL END, now())
+         ON CONFLICT (owner_id) DO UPDATE SET
+           merchant_vpa = EXCLUDED.merchant_vpa,
+           payee_name = EXCLUDED.payee_name,
+           mcc = EXCLUDED.mcc,
+           is_enabled = EXCLUDED.is_enabled,
+           is_configured = EXCLUDED.is_configured,
+           settings = EXCLUDED.settings,
+           connected_at = CASE
+             WHEN EXCLUDED.is_enabled AND NOT google_pay_connections.is_enabled THEN now()
+             WHEN EXCLUDED.is_enabled THEN COALESCE(google_pay_connections.connected_at, now())
+             ELSE google_pay_connections.connected_at
+           END,
+           updated_at = now()
+         RETURNING *`,
+        [userId, nextVpa, nextName, nextMcc, nextEnabled, configured, JSON.stringify(nextSettings)]
+      );
+
+      if (nextEnabled) {
+        await setOnlinePaymentProvider(userId, 'google_pay');
+      }
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.google_pay.update',
+        targetType: 'customer',
+        targetId: userId,
+        metadata: { merchant_vpa: nextVpa, is_enabled: nextEnabled },
+        req,
+      });
+
+      const provider = await getOnlinePaymentProvider(userId);
+      res.json({
+        online_payment_provider: provider,
+        google_pay: normalizeGooglePayConnection(rows[0]),
+        ready: isGooglePayReady(rows[0]),
+      });
+    } catch (err) {
+      console.error('PUT cms google-pay:', err);
+      res.status(err.status || 500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/cms/customers/:userId/online-payment-provider', requireCmsAuth, async (req, res) => {
+    if (!canEdit(req.cmsAdmin)) return res.status(403).json({ error: 'Not enough permissions' });
+    const { userId } = req.params;
+    const provider = req.body?.provider ?? null;
+    if (provider !== null && provider !== 'razorpay' && provider !== 'google_pay') {
+      return res.status(400).json({ error: 'Invalid provider' });
+    }
+    try {
+      if (!(await assertCustomerExists(userId))) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      if (provider === 'google_pay') {
+        const conn = await getGooglePayConnection(userId);
+        if (!isGooglePayReady(conn)) {
+          return res.status(400).json({ error: 'Google Pay is not configured for this customer' });
+        }
+      }
+      const saved = await setOnlinePaymentProvider(userId, provider);
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.customers.online_payment_provider',
+        targetType: 'customer',
+        targetId: userId,
+        metadata: { provider: saved },
+        req,
+      });
+      res.json({ online_payment_provider: saved });
+    } catch (err) {
+      console.error('PATCH cms online-payment-provider:', err);
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 }

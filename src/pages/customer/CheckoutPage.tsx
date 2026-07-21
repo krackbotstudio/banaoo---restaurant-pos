@@ -21,6 +21,7 @@ interface PaymentSettings {
   online_payments_enabled: boolean;
   online_checkout_enabled?: boolean;
   razorpay_connected?: boolean;
+  online_payment_provider?: string | null;
   allow_cod?: boolean;
 }
 
@@ -344,7 +345,10 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
                   : "border-gray-200 text-gray-600"
               } ${!onlineAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
             >
-              <Smartphone className="h-4 w-4" /> Online payment
+              <Smartphone className="h-4 w-4" />{" "}
+              {paymentSettings?.online_payment_provider === "google_pay"
+                ? "Google Pay / UPI"
+                : "Online payment"}
             </button>
           </div>
           {!onlineAvailable && (

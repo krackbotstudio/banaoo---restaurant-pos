@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Save, Truck, Unplug } from "lucide-react";
+import { Check, Copy, Loader2, RefreshCw, Save, Truck, Unplug } from "lucide-react";
 import { API_URL } from "@/lib/api-url";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ interface ShiprocketSettings {
   pickup_address: PickupAddress;
   pickup_location_name: string;
   cod_enabled: boolean;
+  webhook_secret: string | null;
 }
 
 interface DeliveryRow {
@@ -47,6 +48,7 @@ interface DeliveryRow {
   shiprocket: {
     is_connected: boolean;
     connected_at: string | null;
+    webhook_url: string;
     settings: ShiprocketSettings;
   };
 }
@@ -64,6 +66,7 @@ export function CmsCustomerDeliveryPanel({ userId }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [copied, setCopied] = useState<"url" | "secret" | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +92,37 @@ export function CmsCustomerDeliveryPanel({ userId }: Props) {
   }, [load]);
 
   const current = rows.find((r) => r.outlet.id === selectedId) || null;
+
+  const updateCurrentSettings = (patch: Partial<ShiprocketSettings>) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.outlet.id === selectedId
+          ? {
+              ...row,
+              shiprocket: {
+                ...row.shiprocket,
+                settings: { ...row.shiprocket.settings, ...patch },
+              },
+            }
+          : row
+      )
+    );
+  };
+
+  const generateWebhookSecret = () => {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    updateCurrentSettings({
+      webhook_secret: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    });
+  };
+
+  const copyValue = async (value: string, type: "url" | "secret") => {
+    await navigator.clipboard.writeText(value);
+    setCopied(type);
+    window.setTimeout(() => setCopied(null), 1500);
+    toast.success(type === "url" ? "Webhook URL copied" : "Webhook secret copied");
+  };
 
   const patchSettings = async (outletId: string, patch: Partial<ShiprocketSettings>) => {
     setSavingId(outletId);
@@ -259,6 +293,72 @@ export function CmsCustomerDeliveryPanel({ userId }: Props) {
                       Connect Shiprocket
                     </Button>
                   )}
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+                <div>
+                  <p className="text-sm font-medium">Webhook connection</p>
+                  <p className="text-xs text-muted-foreground">
+                    Add this callback in Shiprocket to receive delivery status updates for this outlet.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Webhook URL</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={current.shiprocket.webhook_url || ""}
+                      className="font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!current.shiprocket.webhook_url}
+                      onClick={() => void copyValue(current.shiprocket.webhook_url, "url")}
+                    >
+                      {copied === "url" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Webhook secret (header: x-api-key)</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      readOnly
+                      value={settings.webhook_secret || ""}
+                      placeholder="Generate a secret to verify callbacks"
+                      className="min-w-64 flex-1 font-mono text-xs"
+                    />
+                    <Button type="button" variant="outline" onClick={generateWebhookSecret}>
+                      <RefreshCw className="mr-1 h-4 w-4" />
+                      {settings.webhook_secret ? "Regenerate" : "Generate"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!settings.webhook_secret}
+                      onClick={() => void copyValue(settings.webhook_secret || "", "secret")}
+                    >
+                      {copied === "secret" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void patchSettings(selectedId, {
+                          webhook_secret: settings.webhook_secret,
+                        })
+                      }
+                    >
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save webhook"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Configure the same value in Shiprocket as the webhook API key.
+                  </p>
                 </div>
               </div>
 

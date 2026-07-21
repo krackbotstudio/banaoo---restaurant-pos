@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, MapPin, Pencil, Phone, Plus, Power, Store, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  LocateFixed,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  Power,
+  Store,
+  Trash2,
+} from "lucide-react";
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "@/lib/leaflet-setup";
 import { API_URL } from "@/lib/api-url";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +43,8 @@ export interface CmsOutletRow {
   name: string;
   address: string | null;
   phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
   is_active: boolean;
   operation_mode?: "standard" | "self_service" | null;
   created_at?: string;
@@ -44,6 +60,8 @@ type FormState = {
   name: string;
   address: string;
   phone: string;
+  latitude: number | null;
+  longitude: number | null;
   operation_mode: "standard" | "self_service";
 };
 
@@ -51,8 +69,79 @@ const emptyForm: FormState = {
   name: "",
   address: "",
   phone: "",
+  latitude: null,
+  longitude: null,
   operation_mode: "standard",
 };
+
+function MapClickHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(event) {
+      onMove(event.latlng.lat, event.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function MapPosition({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 });
+  }, [lat, lng, map]);
+  return null;
+}
+
+function MapSizeInvalidator() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = window.setTimeout(() => map.invalidateSize(), 150);
+    return () => window.clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
+function PickupLocationMap({
+  latitude,
+  longitude,
+  onMove,
+}: {
+  latitude: number | null;
+  longitude: number | null;
+  onMove: (lat: number, lng: number) => void;
+}) {
+  return (
+    <div className="h-56 overflow-hidden rounded-lg border">
+      <MapContainer
+        center={[latitude ?? 20.5937, longitude ?? 78.9629]}
+        zoom={latitude == null ? 5 : 16}
+        className="h-full w-full"
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+        />
+        <MapSizeInvalidator />
+        <MapClickHandler onMove={onMove} />
+        {latitude != null && longitude != null && (
+          <>
+            <Marker
+              position={[latitude, longitude]}
+              draggable
+              eventHandlers={{
+                dragend: (event) => {
+                  const marker = event.target as L.Marker;
+                  const position = marker.getLatLng();
+                  onMove(position.lat, position.lng);
+                },
+              }}
+            />
+            <MapPosition lat={latitude} lng={longitude} />
+          </>
+        )}
+      </MapContainer>
+    </div>
+  );
+}
 
 export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: Props) {
   const [outlets, setOutlets] = useState<CmsOutletRow[]>(initialOutlets ?? []);
@@ -62,6 +151,7 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
   const [editing, setEditing] = useState<CmsOutletRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<CmsOutletRow | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const loadOutlets = useCallback(async () => {
     setLoading(true);
@@ -101,6 +191,8 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
       name: outlet.name || "",
       address: outlet.address || "",
       phone: outlet.phone || "",
+      latitude: outlet.latitude == null ? null : Number(outlet.latitude),
+      longitude: outlet.longitude == null ? null : Number(outlet.longitude),
       operation_mode: outlet.operation_mode === "self_service" ? "self_service" : "standard",
     });
     setDialogOpen(true);
@@ -117,6 +209,8 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
         name: form.name.trim(),
         address: form.address.trim() || null,
         phone: form.phone.trim() || null,
+        latitude: form.latitude,
+        longitude: form.longitude,
         operation_mode: form.operation_mode,
       };
       const res = editing
@@ -143,6 +237,29 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
     } finally {
       setSaving(false);
     }
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Location access is not supported by this browser");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setForm((current) => ({
+          ...current,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }));
+        setLocating(false);
+      },
+      () => {
+        toast.error("Could not get the current location. Click the map to place the pin.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const activateOutlet = async (outlet: CmsOutletRow) => {
@@ -284,7 +401,7 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit outlet" : "Add outlet"}</DialogTitle>
             <DialogDescription>
@@ -321,6 +438,64 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
                 onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
                 placeholder="Contact number"
               />
+            </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <Label>Shiprocket pickup pin</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Click or drag the map pin to set this outlet&apos;s exact pickup location.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {(form.latitude != null || form.longitude != null) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          latitude: null,
+                          longitude: null,
+                        }))
+                      }
+                    >
+                      Clear pin
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={locating}
+                    onClick={useCurrentLocation}
+                  >
+                    {locating ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LocateFixed className="mr-1 h-4 w-4" />
+                    )}
+                    Use current location
+                  </Button>
+                </div>
+              </div>
+              <PickupLocationMap
+                latitude={form.latitude}
+                longitude={form.longitude}
+                onMove={(latitude, longitude) =>
+                  setForm((current) => ({ ...current, latitude, longitude }))
+                }
+              />
+              {form.latitude != null && form.longitude != null ? (
+                <p className="font-mono text-xs text-muted-foreground">
+                  {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
+                </p>
+              ) : (
+                <p className="text-xs text-amber-600">
+                  Pickup pin not set. Shiprocket Quick bookings require outlet coordinates.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Operation mode</Label>

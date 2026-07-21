@@ -35,7 +35,7 @@ export const DOC_ARTICLES: DocArticleMeta[] = [
     description: "Create your account, add outlets, build your menu, and invite staff.",
     section: "start",
     sectionTitle: "Getting started",
-    lastUpdated: "2026-05-20",
+    lastUpdated: "2026-07-21",
     file: "getting-started",
   },
   {
@@ -53,7 +53,7 @@ export const DOC_ARTICLES: DocArticleMeta[] = [
     description: "Dine-in, takeaway, delivery, counter mode, discounts, and order flow.",
     section: "operations",
     sectionTitle: "Daily operations",
-    lastUpdated: "2026-05-28",
+    lastUpdated: "2026-07-21",
     file: "orders-and-pos",
   },
   {
@@ -107,7 +107,7 @@ export const DOC_ARTICLES: DocArticleMeta[] = [
     description: "Common issues, print failures, login, and support contact.",
     section: "help",
     sectionTitle: "Help",
-    lastUpdated: "2026-05-28",
+    lastUpdated: "2026-07-21",
     file: "faq-troubleshooting",
   },
 ];

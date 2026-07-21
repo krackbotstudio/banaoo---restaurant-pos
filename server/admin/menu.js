@@ -87,12 +87,36 @@ function normalizeImportItem(raw) {
   const name = String(raw?.name || '').trim();
   const price = Number(raw?.price ?? raw?.base_price);
   if (!name || !Number.isFinite(price) || price < 0) return null;
+  const variants = (Array.isArray(raw?.variants) ? raw.variants : [])
+    .map((variant) => {
+      const variantName = String(variant?.name || '').trim();
+      const absolutePrice = Number(variant?.price ?? variant?.base_price);
+      if (!variantName || !Number.isFinite(absolutePrice) || absolutePrice < 0) return null;
+      return {
+        name: variantName,
+        price_adjustment: Number((absolutePrice - price).toFixed(2)),
+        is_default: variant?.is_default === true,
+      };
+    })
+    .filter(Boolean);
+
+  if (variants.length > 0) {
+    const selectedDefault = Math.max(
+      0,
+      variants.findIndex((variant) => variant.is_default)
+    );
+    variants.forEach((variant, index) => {
+      variant.is_default = index === selectedDefault;
+    });
+  }
+
   return {
     name,
     description: raw.description ? String(raw.description).trim() : null,
     base_price: price,
     is_veg: raw.is_veg === false ? false : raw.is_veg === true ? true : true,
     category: raw.category ? String(raw.category).trim() : null,
+    variants,
   };
 }
 
@@ -627,6 +651,9 @@ export function registerCmsMenuRoutes(app) {
            RETURNING id, name, base_price`,
           [outletId, categoryId, item.name, item.description, item.base_price, item.is_veg]
         );
+        if (item.variants.length > 0) {
+          await syncItemVariants(rows[0].id, item.variants);
+        }
         inserted.push(rows[0]);
       }
 

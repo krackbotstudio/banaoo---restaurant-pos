@@ -16,6 +16,7 @@ export interface SubscriptionAddons {
   whatsapp: boolean;
   shiprocket: boolean;
   razorpay: boolean;
+  google_pay_india: boolean;
 }
 
 export const EMPTY_ADDONS: SubscriptionAddons = {
@@ -28,6 +29,7 @@ export const EMPTY_ADDONS: SubscriptionAddons = {
   whatsapp: false,
   shiprocket: false,
   razorpay: false,
+  google_pay_india: false,
 };
 
 export function aggregateAddonsFromRows(
@@ -63,6 +65,9 @@ export function aggregateAddonsFromRows(
         break;
       case "razorpay_payments":
         out.razorpay = out.razorpay || qty > 0;
+        break;
+      case "google_pay_india":
+        out.google_pay_india = out.google_pay_india || qty > 0;
         break;
       default:
         break;
@@ -112,6 +117,8 @@ export function computeEffectiveLimits(
     zomatoIntegration: base.zomatoIntegration || addons.zomato,
     whatsappIntegration: base.whatsappIntegration || addons.whatsapp,
     shiprocketDelivery: base.shiprocketDelivery || addons.shiprocket,
+    razorpayPayments: base.razorpayPayments || addons.razorpay,
+    googlePayIndia: base.googlePayIndia || addons.google_pay_india,
     platformIntegrations:
       base.platformIntegrations || addons.swiggy || addons.zomato,
   };

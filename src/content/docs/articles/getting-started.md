@@ -40,6 +40,10 @@ Thermal printers power kitchen tickets and customer bills. See [Printers](/docs/
 - Send items to **Kitchen** automatically if auto-print is enabled.
 - Complete payment and print the bill from the order screen.
 
+## 7. Accept customer online payments (optional)
+
+Under **Add-ons**, activate either **Razorpay payments** or **Google Pay India** (both free). Then open **Settings → Payments**, configure the provider, and choose which one is active for your ordering link. See [Orders & POS](/docs/orders-and-pos) for Google Pay VPA/MCC and UTR confirmation steps.
+
 ## Next steps
 
 | Topic | Article |
