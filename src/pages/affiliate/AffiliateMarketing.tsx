@@ -20,11 +20,11 @@ export default function AffiliateMarketing() {
   };
 
   const socialMessages = {
-    whatsapp: `🍽️ Running a restaurant? Check out banaoo.io - the easiest way to manage your restaurant!\n\nSign up with my link and start your free trial: ${referralLink}`,
-    twitter: `I've been using @banaoo_io for restaurant management and it's been a game changer! 🚀\n\nCheck it out: ${referralLink}`,
+    whatsapp: `🍽️ Running a restaurant? Check out Flaze - the easiest way to manage your restaurant!\n\nSign up with my link and start your free trial: ${referralLink}`,
+    twitter: `I've been using @flazee for restaurant management and it's been a game changer! 🚀\n\nCheck it out: ${referralLink}`,
     email: {
-      subject: "Transform Your Restaurant with banaoo.io",
-      body: `Hi there,\n\nI wanted to share an amazing restaurant management platform I've been recommending - banaoo.io.\n\nIt helps restaurants with:\n- Digital menu management\n- Order management\n- Kitchen display system\n- Analytics and reporting\n\nYou can start with a free trial using my referral link:\n${referralLink}\n\nLet me know if you have any questions!\n\nBest regards`,
+      subject: "Transform Your Restaurant with Flaze",
+      body: `Hi there,\n\nI wanted to share an amazing restaurant management platform I've been recommending - Flaze.\n\nIt helps restaurants with:\n- Digital menu management\n- Order management\n- Kitchen display system\n- Analytics and reporting\n\nYou can start with a free trial using my referral link:\n${referralLink}\n\nLet me know if you have any questions!\n\nBest regards`,
     },
   };
 
@@ -43,7 +43,7 @@ export default function AffiliateMarketing() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Marketing Materials</h1>
-        <p className="text-muted-foreground">Resources to help you promote banaoo.io</p>
+        <p className="text-muted-foreground">Resources to help you promote Flaze</p>
       </div>
 
       {/* Referral Link */}

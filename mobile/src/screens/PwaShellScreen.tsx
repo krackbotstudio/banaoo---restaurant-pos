@@ -555,7 +555,7 @@ export function PwaShellScreen({ onOpenPrinters }: PwaShellScreenProps) {
   if (!WEBAPP_URL) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.title}>Banaoo POS Mobile</Text>
+        <Text style={styles.title}>Flaze POS Mobile</Text>
         <Text style={styles.text}>Set EXPO_PUBLIC_WEBAPP_URL in mobile/.env to render the POS shell.</Text>
       </View>
     );
@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#fed7aa",
-    backgroundColor: "#fff7ed",
+    backgroundColor: "#FFF1E6",
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",

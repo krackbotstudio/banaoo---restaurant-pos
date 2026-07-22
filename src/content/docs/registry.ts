@@ -95,7 +95,7 @@ export const DOC_ARTICLES: DocArticleMeta[] = [
   {
     slug: "mobile-app",
     title: "Mobile app (Android)",
-    description: "Install the Banaoo APK, permissions, and using POS in the app.",
+    description: "Install the Flaze APK, permissions, and using POS in the app.",
     section: "hardware",
     sectionTitle: "Hardware & mobile",
     lastUpdated: "2026-05-20",

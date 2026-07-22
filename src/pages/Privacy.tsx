@@ -13,7 +13,7 @@ export default function Privacy() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Privacy Policy"
-        description="banaoo's Privacy Policy: what data we collect, how we use it, who we share it with, and your rights as a customer or restaurant owner."
+        description="Flaze's Privacy Policy: what data we collect, how we use it, who we share it with, and your rights as a customer or restaurant owner."
         path="/privacy"
       />
       <StructuredData
@@ -33,8 +33,8 @@ export default function Privacy() {
 
           <div className="space-y-10 text-sm leading-relaxed">
             <p className="text-muted-foreground text-base">
-              At banaoo.io, we take your privacy seriously. This policy explains what data we collect, why we
-              collect it, how it's used, and your rights over it. By using banaoo.io you agree to the practices
+              At Flaze, we take your privacy seriously. This policy explains what data we collect, why we
+              collect it, how it's used, and your rights over it. By using Flaze you agree to the practices
               described here.
             </p>
 
@@ -56,8 +56,8 @@ export default function Privacy() {
                 to understand how the product is used.
               </p>
               <p className="text-muted-foreground">
-                <strong className="text-foreground">Banaoo Android app:</strong> Our mobile app loads the same
-                banaoo.io POS in a secure in-app browser and may request Bluetooth permissions so you can pair
+                <strong className="text-foreground">Flaze Android app:</strong> Our mobile app loads the same
+                Flaze POS in a secure in-app browser and may request Bluetooth permissions so you can pair
                 nearby thermal printers. We do not use Bluetooth or location to track where you are; printer
                 pairing is optional and controlled from the app settings.
               </p>
@@ -66,7 +66,7 @@ export default function Privacy() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">2. How We Use Your Information</h2>
               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
-                <li>Provide, maintain, and improve the banaoo.io platform and its features.</li>
+                <li>Provide, maintain, and improve the Flaze platform and its features.</li>
                 <li>Process your subscription payments and send receipts and billing notifications.</li>
                 <li>Send transactional emails (account confirmation, password reset, subscription reminders).</li>
                 <li>
@@ -81,7 +81,7 @@ export default function Privacy() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">3. Third-Party Services We Use</h2>
               <p className="text-muted-foreground">
-                We work with trusted third parties to operate banaoo.io:
+                We work with trusted third parties to operate Flaze:
               </p>
               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
                 <li>
@@ -147,8 +147,8 @@ export default function Privacy() {
               </ul>
               <p className="text-muted-foreground">
                 To exercise any of these rights, email us at{" "}
-                <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                  connect@banaoo.in
+                <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                  connect@flazee.com
                 </a>
                 .
               </p>
@@ -167,7 +167,7 @@ export default function Privacy() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">8. Children's Privacy</h2>
               <p className="text-muted-foreground">
-                banaoo.io is a B2B platform intended for business owners and operators aged 18 and above. We
+                Flaze is a B2B platform intended for business owners and operators aged 18 and above. We
                 do not knowingly collect personal data from anyone under 18. If we become aware that we have
                 done so, we will delete that data immediately.
               </p>
@@ -178,7 +178,7 @@ export default function Privacy() {
               <p className="text-muted-foreground">
                 We may update this Privacy Policy from time to time. We will notify you of material changes by
                 email or through an in-app notice at least 14 days before the changes take effect. Your
-                continued use of banaoo.io after the effective date constitutes acceptance of the updated
+                continued use of Flaze after the effective date constitutes acceptance of the updated
                 policy.
               </p>
             </section>
@@ -189,11 +189,11 @@ export default function Privacy() {
                 For any privacy-related questions, requests, or concerns, please contact:
               </p>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">banaoo.io</p>
+                <p className="font-medium text-foreground">Flaze</p>
                 <p>
                   Email:{" "}
-                  <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                    connect@banaoo.in
+                  <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                    connect@flazee.com
                   </a>
                 </p>
                 <p>Governing law: India (Information Technology Act, 2000)</p>

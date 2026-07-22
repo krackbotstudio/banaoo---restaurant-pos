@@ -231,11 +231,11 @@ const styles = StyleSheet.create({
   deviceId: { color: "#64748b", fontSize: 11 },
   assignBtn: {
     borderWidth: 1,
-    borderColor: "#f97316",
+    borderColor: tokens.colors.primary,
     borderRadius: 6,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    backgroundColor: "#fff7ed",
+    backgroundColor: "#FFF1E6",
   },
   assignText: { color: "#c2410c", fontWeight: "700", fontSize: 12 },
   button: {
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
-    backgroundColor: "#f97316",
+    backgroundColor: tokens.colors.primary,
     height: 44,
   },
   buttonText: {

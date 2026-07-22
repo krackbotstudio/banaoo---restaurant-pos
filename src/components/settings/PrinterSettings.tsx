@@ -495,7 +495,7 @@ function PrinterCard({
 
   const handleCalibrationPrint = async () => {
     if (config.transport === "network") {
-      toast.info("Calibration print: use Native printer settings in the Banaoo Android app.");
+      toast.info("Calibration print: use Native printer settings in the Flaze Android app.");
       return;
     }
     if (config.printMode !== "serial" || config.usbPortIndex === null) {
@@ -522,7 +522,7 @@ function PrinterCard({
     setTesting(true);
     try {
       if (config.transport === "network") {
-        toast.info("Wi‑Fi/LAN test print: use the Banaoo Android app → Settings → Printers → Native printer settings.");
+        toast.info("Wi‑Fi/LAN test print: use the Flaze Android app → Settings → Printers → Native printer settings.");
         return;
       }
 
@@ -708,7 +708,7 @@ function PrinterCard({
           <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3 dark:border-amber-800 dark:bg-amber-950/20">
             <p className="text-sm text-amber-800 dark:text-amber-300">
               Wi‑Fi/LAN uses the printer IP on your shop network (port 9100). Configure and test in the{" "}
-              <strong>Banaoo Android app</strong> — mobile browsers cannot send raw network prints.
+              <strong>Flaze Android app</strong> — mobile browsers cannot send raw network prints.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

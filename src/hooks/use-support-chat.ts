@@ -14,7 +14,7 @@ export function useSupportChat() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! 👋 I'm here to help you with banaoo.in. Ask me about features, pricing, or how to get started!",
+      content: "Hi! 👋 I'm here to help you with Flaze. Ask me about features, pricing, or how to get started!",
       timestamp: new Date(),
     },
   ]);
@@ -141,7 +141,7 @@ export function useSupportChat() {
         {
           id: `error-${Date.now()}`,
           role: "assistant",
-          content: "Sorry, I'm having trouble connecting right now. Please try again or reach out to us at connect@banaoo.in",
+          content: "Sorry, I'm having trouble connecting right now. Please try again or reach out to us at connect@flazee.com",
           timestamp: new Date(),
         },
       ]);
@@ -155,7 +155,7 @@ export function useSupportChat() {
       {
         id: "welcome",
         role: "assistant",
-        content: "Hi! 👋 I'm here to help you with banaoo.in. Ask me about features, pricing, or how to get started!",
+        content: "Hi! 👋 I'm here to help you with Flaze. Ask me about features, pricing, or how to get started!",
         timestamp: new Date(),
       },
     ]);

@@ -20,7 +20,7 @@ function FeatureValue({ cell }: { cell: FeatureCell }) {
     return <Minus className="h-4 w-4 text-muted-foreground/50 mx-auto" aria-label="Not included" />;
   }
   if (cell.kind === "addon") {
-    return <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Add-on</span>;
+    return <span className="text-xs font-medium text-accent">Add-on</span>;
   }
   return <span className="text-xs font-medium text-foreground">{cell.value}</span>;
 }
@@ -32,7 +32,7 @@ function PlanCta({ plan }: { plan: PlanDefinition }) {
     const subject = encodeURIComponent(plan.mailtoSubject ?? "Expand Plan Enquiry");
     return (
       <Button variant="outline" className="w-full" asChild>
-        <a href={`mailto:connect@banaoo.in?subject=${subject}`}>{plan.ctaLabel}</a>
+        <a href={`mailto:connect@flazee.com?subject=${subject}`}>{plan.ctaLabel}</a>
       </Button>
     );
   }

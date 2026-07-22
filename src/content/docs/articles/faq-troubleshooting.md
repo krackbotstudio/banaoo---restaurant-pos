@@ -41,10 +41,10 @@ Enable **Bill with kitchen handoff** in printer settings. Print customer bill fi
 ## Mobile app
 
 **App blank or login loop.**  
-Check internet. Confirm `banaoo.in` is reachable. Clear app cache or reinstall APK.
+Check internet. Confirm `flazee.com` is reachable. Clear app cache or reinstall APK.
 
 **Bluetooth scan empty.**  
-Pair printer in Android **Settings → Bluetooth** first, then scan in Banaoo native printer settings.
+Pair printer in Android **Settings → Bluetooth** first, then scan in Flaze native printer settings.
 
 ## Billing & GST
 
@@ -69,11 +69,11 @@ Restart the API server after updates. The add-on is free — no Razorpay checkou
 Activate the **Google Pay India** add-on, enter a valid merchant VPA / payee name / MCC, enable it, and set **Online payment provider** to Google Pay in **Settings → Payments**. Only one provider is shown at a time.
 
 **Customer paid in Google Pay but order is pending.**  
-They must submit the UTR on the payment page. Confirm the payment under **Payments** (awaiting confirmation). Google Pay India settles to your VPA — Banaoo does not auto-capture funds.
+They must submit the UTR on the payment page. Confirm the payment under **Payments** (awaiting confirmation). Google Pay India settles to your VPA — Flaze does not auto-capture funds.
 
 ## Still stuck?
 
-- Email **connect@banaoo.in**
+- Email **connect@flazee.com**
 - Use the **support chat** on the website
 - Include: outlet name, order number, printer type (BT/LAN/USB), and whether you use the APK or browser
 

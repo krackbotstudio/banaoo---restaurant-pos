@@ -4,7 +4,7 @@ export const TOUR_MODULES: Record<TourModuleId, TourModule> = {
   overview: {
     id: "overview",
     title: "Full app overview",
-    description: "A quick pass through navigation and the main areas of Banaoo.",
+    description: "A quick pass through navigation and the main areas of Flaze.",
     route: "/dashboard",
     estimatedMinutes: 4,
     steps: [

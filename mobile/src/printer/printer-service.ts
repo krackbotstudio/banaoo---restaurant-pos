@@ -432,7 +432,7 @@ export async function testKitchenPrint(settings: MobilePrinterSettings): Promise
 export async function testBillingPrint(settings: MobilePrinterSettings): Promise<PrintResult> {
   return printBillingReceipt(settings, {
     orderNumber: "TEST",
-    outletName: settings.billingPrinter.name || "Banaoo",
+    outletName: settings.billingPrinter.name || "Flaze",
     orderType: "dine_in",
     items: [{ name: "Test Item", quantity: 1, totalPrice: 100, gstRate: 5 }],
     subtotal: 100,

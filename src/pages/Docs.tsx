@@ -17,7 +17,7 @@ export default function Docs() {
     <>
       <SEO
         title="Documentation"
-        description="banaoo documentation — guides for setting up your restaurant POS, kitchen display, online orders, printers and the Android app."
+        description="Flaze documentation — guides for setting up your restaurant POS, kitchen display, online orders, printers and the Android app."
         path="/docs"
       />
       <StructuredData
@@ -28,12 +28,12 @@ export default function Docs() {
       />
     <DocsLayout
       title="Documentation"
-      description="Guides for setting up and running your restaurant on banaoo — POS, kitchen, billing, printers, and the Android app."
+      description="Guides for setting up and running your restaurant on Flaze — POS, kitchen, billing, printers, and the Android app."
     >
       <div className="grid gap-6 sm:grid-cols-2 mb-10">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">New to banaoo?</CardTitle>
+            <CardTitle className="text-base">New to Flaze?</CardTitle>
             <CardDescription>Start here in under 10 minutes</CardDescription>
           </CardHeader>
           <CardContent>
@@ -100,8 +100,8 @@ export default function Docs() {
           FAQ & troubleshooting
         </Link>{" "}
         or email{" "}
-        <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-          connect@banaoo.in
+        <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+          connect@flazee.com
         </a>
         .
       </p>

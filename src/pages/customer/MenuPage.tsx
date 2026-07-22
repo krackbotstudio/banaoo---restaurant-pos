@@ -364,7 +364,7 @@ function VoiceOrderPanel({ menuItems, onClose }: { menuItems: MenuItem[]; onClos
       <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={() => { stopListening(); onClose(); }} />
       <div className="fixed bottom-16 left-0 right-0 z-50 max-w-lg mx-auto px-4 pb-4">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-primary to-orange-400 px-5 py-4 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-primary to-accent px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-white" />
               <span className="text-white font-bold text-sm">AI Voice Order</span>

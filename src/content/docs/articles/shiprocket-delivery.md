@@ -1,6 +1,6 @@
 # Shiprocket Quick — food delivery
 
-Banaoo books **Shiprocket Quick** hyperlocal **2-wheeler** riders for **your own** restaurant food delivery orders (customer ordering link and POS). National surface/air couriers are not used. Swiggy and Zomato aggregator orders are **not** sent to Shiprocket.
+Flaze books **Shiprocket Quick** hyperlocal **2-wheeler** riders for **your own** restaurant food delivery orders (customer ordering link and POS). National surface/air couriers are not used. Swiggy and Zomato aggregator orders are **not** sent to Shiprocket.
 
 ## Before you start
 
@@ -11,7 +11,7 @@ Banaoo books **Shiprocket Quick** hyperlocal **2-wheeler** riders for **your own
 | **Dedicated API user** (not your main login) | Shiprocket → Settings → API → Create API user |
 | **Restaurant GPS** on outlet map | Outlets → outlet detail → location |
 | **Customer delivery pin** at checkout | Map + pincode, city, state |
-| **Pickup address + pincode** | Banaoo → Settings → Delivery → Shiprocket Quick |
+| **Pickup address + pincode** | Flaze → Settings → Delivery → Shiprocket Quick |
 
 ## Enable the feature
 
@@ -27,7 +27,7 @@ Banaoo books **Shiprocket Quick** hyperlocal **2-wheeler** riders for **your own
 4. Under **Modules to access**, enable at least **Orders (create, update)** and **Shipments**.
 5. Click **Create User** and note the API password (Shiprocket may email it to your main account).
 
-> **Common mistake:** Using your main Shiprocket login in Banaoo returns *Invalid email and password combination*. Always use the API user credentials.
+> **Common mistake:** Using your main Shiprocket login in Flaze returns *Invalid email and password combination*. Always use the API user credentials.
 
 ## Configure delivery settings
 
@@ -35,7 +35,7 @@ On **Settings → Delivery → Shiprocket Quick**:
 
 | Setting | Purpose |
 |---------|---------|
-| **Auto-book Quick rider** | When on, Banaoo books a 2-wheeler after you mark a delivery order **Preparing** |
+| **Auto-book Quick rider** | When on, Flaze books a 2-wheeler after you mark a delivery order **Preparing** |
 | **Prep time (minutes)** | Delay before booking (time to prepare food before rider pickup) |
 | **Food package weight** | Weight sent to Shiprocket Quick (max 5 kg) |
 | **Pickup address + pincode** | Restaurant pickup for the courier |
@@ -54,9 +54,9 @@ Customers order via your **outlet ordering link** and must set their **delivery 
 
 ### 2. Accept and start preparing
 
-In **Orders**, open the delivery order and move status to **Preparing**. Banaoo schedules Shiprocket booking after your configured prep time.
+In **Orders**, open the delivery order and move status to **Preparing**. Flaze schedules Shiprocket booking after your configured prep time.
 
-### 3. Track in Banaoo
+### 3. Track in Flaze
 
 - **Orders** — open the order → **Shiprocket Delivery** panel (AWB, courier, timeline, Track / Retry / Cancel).
 - **Dashboard** — **Delivery overview** cards (pending booking, out for delivery, delivered today, etc.).
@@ -64,7 +64,7 @@ In **Orders**, open the delivery order and move status to **Preparing**. Banaoo 
 
 ### 4. Status updates
 
-Shiprocket sends webhooks to your copied webhook URL. If a webhook is missed, Banaoo polls Shiprocket every few minutes for in-flight shipments.
+Shiprocket sends webhooks to your copied webhook URL. If a webhook is missed, Flaze polls Shiprocket every few minutes for in-flight shipments.
 
 ## Order detail actions
 
@@ -72,7 +72,7 @@ Shiprocket sends webhooks to your copied webhook URL. If a webhook is missed, Ba
 |--------|-------------|
 | **Track** | Open Shiprocket tracking in a new tab |
 | **Retry booking** | After a booking failure |
-| **Cancel shipment** | Cancel the Shiprocket shipment (order in Banaoo stays active) |
+| **Cancel shipment** | Cancel the Shiprocket shipment (order in Flaze stays active) |
 
 ## Discovery shortcut
 

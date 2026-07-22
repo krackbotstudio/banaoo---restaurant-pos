@@ -10,7 +10,7 @@ import { useLayoutEffect } from "react";
 export function useDynamicManifest({
   name,
   startUrl,
-  themeColor = "#f97316",
+  themeColor = "#FF4500",
 }: {
   name: string;
   startUrl: string;
@@ -50,7 +50,7 @@ export function useDynamicManifest({
     // Restore on unmount (in case user navigates to a non-restaurant page)
     return () => {
       if (linkEl) linkEl.href = previous;
-      if (themeMeta) themeMeta.content = "#f97316";
+      if (themeMeta) themeMeta.content = "#FF4500";
     };
   }, [name, startUrl, themeColor]);
 }

@@ -32,7 +32,7 @@ interface Props {
 export function CmsCustomerBrandingPanel({ userId, branding, onSaved }: Props) {
   const [form, setForm] = useState({
     brand_name: branding.brand_name || "",
-    brand_color: branding.brand_color || "#f97316",
+    brand_color: branding.brand_color || "#FF4500",
     logo_url: branding.logo_url || "",
     ordering_slug: branding.ordering_slug || "",
     app_theme: branding.app_theme === "dark" ? "dark" : "light",
@@ -43,7 +43,7 @@ export function CmsCustomerBrandingPanel({ userId, branding, onSaved }: Props) {
   useEffect(() => {
     setForm({
       brand_name: branding.brand_name || "",
-      brand_color: branding.brand_color || "#f97316",
+      brand_color: branding.brand_color || "#FF4500",
       logo_url: branding.logo_url || "",
       ordering_slug: branding.ordering_slug || "",
       app_theme: branding.app_theme === "dark" ? "dark" : "light",
@@ -172,7 +172,7 @@ export function CmsCustomerBrandingPanel({ userId, branding, onSaved }: Props) {
             <div className="flex items-center gap-3">
               <input
                 type="color"
-                value={form.brand_color || "#f97316"}
+                value={form.brand_color || "#FF4500"}
                 onChange={(e) => setForm((s) => ({ ...s, brand_color: e.target.value }))}
                 className="h-10 w-12 rounded border cursor-pointer"
               />

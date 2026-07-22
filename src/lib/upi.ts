@@ -10,7 +10,7 @@ export function buildUpiPayUrl(params: {
   const pn = encodeURIComponent(params.payeeName.slice(0, 80));
   const am = params.amount.toFixed(2);
   const tr = encodeURIComponent(params.transactionRef.slice(0, 40));
-  const tn = encodeURIComponent((params.note ?? "Banaoo order").slice(0, 80));
+  const tn = encodeURIComponent((params.note ?? "Flaze order").slice(0, 80));
   return `upi://pay?pa=${encodeURIComponent(pa)}&pn=${pn}&am=${am}&cu=INR&tn=${tn}&tr=${tr}`;
 }
 

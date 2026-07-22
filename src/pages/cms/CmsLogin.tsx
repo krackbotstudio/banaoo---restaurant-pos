@@ -56,7 +56,7 @@ export default function CmsLogin() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Tectangle CMS</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Platform administration for Banaoo
+                Platform administration for Flaze
               </p>
             </div>
           </div>
@@ -104,7 +104,7 @@ export default function CmsLogin() {
           <p className="text-center text-xs text-muted-foreground">
             Restaurant owners sign in at{" "}
             <a href="/auth" className="text-primary hover:underline">
-              banaoo.io/auth
+              flazee.com/auth
             </a>
           </p>
         </div>

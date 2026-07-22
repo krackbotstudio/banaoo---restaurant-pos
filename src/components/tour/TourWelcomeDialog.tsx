@@ -32,7 +32,7 @@ export function TourWelcomeDialog({
             <div className="p-2 rounded-lg gradient-warm">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <DialogTitle>Welcome to Banaoo</DialogTitle>
+            <DialogTitle>Welcome to Flaze</DialogTitle>
           </div>
           <DialogDescription>
             Take a quick interactive tour to learn how to take orders, manage your menu, and run

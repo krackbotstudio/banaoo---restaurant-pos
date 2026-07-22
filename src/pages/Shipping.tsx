@@ -13,7 +13,7 @@ export default function Shipping() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Shipping & Delivery Policy"
-        description="Service delivery and access policy for banaoo's restaurant management platform — how subscriptions are activated and supported."
+        description="Service delivery and access policy for Flaze's restaurant management platform — how subscriptions are activated and supported."
         path="/shipping"
       />
       <StructuredData
@@ -35,7 +35,7 @@ export default function Shipping() {
             {/* Important callout */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
               <p className="text-sm text-foreground font-medium">
-                banaoo.io is a 100% cloud-based software platform.
+                Flaze is a 100% cloud-based software platform.
               </p>
               <p className="text-sm text-muted-foreground mt-1">
                 There are no physical products shipped as part of your subscription. Access to the platform
@@ -46,7 +46,7 @@ export default function Shipping() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">1. Digital Service Delivery</h2>
               <p className="text-muted-foreground">
-                banaoo.io is a Software-as-a-Service (SaaS) product. Upon completing registration and
+                Flaze is a Software-as-a-Service (SaaS) product. Upon completing registration and
                 (where applicable) subscribing to a paid plan, you receive immediate access to the platform
                 through your web browser on any device — no downloads, no hardware required, no waiting.
               </p>
@@ -63,8 +63,8 @@ export default function Shipping() {
                 address that requires verification, you will receive a confirmation link. Click the link to
                 activate your account. If you do not receive the email within 5 minutes, check your spam
                 folder or contact us at{" "}
-                <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                  connect@banaoo.in
+                <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                  connect@flazee.com
                 </a>
                 .
               </p>
@@ -73,7 +73,7 @@ export default function Shipping() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">3. Service Availability</h2>
               <p className="text-muted-foreground">
-                The banaoo.io platform is accessible 24/7 from anywhere with an internet connection. We
+                The Flaze platform is accessible 24/7 from anywhere with an internet connection. We
                 target 99.9% monthly uptime. Planned maintenance windows are communicated in advance via
                 email and in-app notifications, and are typically scheduled between 2:00 AM – 5:00 AM IST
                 to minimise disruption.
@@ -83,13 +83,13 @@ export default function Shipping() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">4. No Physical Shipping</h2>
               <p className="text-muted-foreground">
-                banaoo.io does not sell, ship, or deliver physical hardware, printers, tablets, or
+                Flaze does not sell, ship, or deliver physical hardware, printers, tablets, or
                 accessories directly. Our platform is designed to work with your existing devices (phones,
                 tablets, laptops, desktops) without requiring any proprietary hardware.
               </p>
               <p className="text-muted-foreground">
                 If you require hardware recommendations (receipt printers, KDS screens, tablets) that are
-                compatible with banaoo.io, our support team can guide you to partner vendors. Those
+                compatible with Flaze, our support team can guide you to partner vendors. Those
                 purchases would be made directly with the respective vendor and governed by their
                 shipping/returns policies.
               </p>
@@ -121,11 +121,11 @@ export default function Shipping() {
                 For any questions about accessing the platform or receiving your digital deliverables:
               </p>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">banaoo.io Support</p>
+                <p className="font-medium text-foreground">Flaze Support</p>
                 <p>
                   Email:{" "}
-                  <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                    connect@banaoo.in
+                  <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                    connect@flazee.com
                   </a>
                 </p>
                 <p>Support hours: Mon–Sat, 9:00 AM – 6:00 PM IST</p>

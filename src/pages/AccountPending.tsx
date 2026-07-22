@@ -43,10 +43,10 @@ export default function AccountPending() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4">
       {/* Logo */}
       <div className="flex items-center justify-center h-16 w-16 rounded-2xl gradient-warm glow-primary mb-6">
-        <img src="/logo.png" alt="Banaoo" className="h-8 w-8 object-contain brightness-0 invert" />
+        <img src="/logo.png" alt="Flaze" className="h-8 w-8 object-contain" />
       </div>
 
-      <h1 className="font-display text-3xl font-bold tracking-tight mb-1">banaoo.io</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight mb-1">Flaze</h1>
 
       <div className="mt-10 max-w-md w-full text-center space-y-6">
         {isRejected ? (
@@ -63,8 +63,8 @@ export default function AccountPending() {
             <div className="p-4 bg-muted/50 rounded-xl border text-sm text-muted-foreground">
               <Mail className="h-4 w-4 inline mr-2" />
               Questions? Email us at{" "}
-              <a href="mailto:connect@banaoo.in" className="text-primary underline font-medium">
-                connect@banaoo.in
+              <a href="mailto:connect@flazee.com" className="text-primary underline font-medium">
+                connect@flazee.com
               </a>
             </div>
           </>
@@ -121,8 +121,8 @@ export default function AccountPending() {
             <div className="text-sm text-muted-foreground">
               <Mail className="h-4 w-4 inline mr-1.5" />
               Questions?{" "}
-              <a href="mailto:connect@banaoo.in" className="text-primary underline">
-                connect@banaoo.in
+              <a href="mailto:connect@flazee.com" className="text-primary underline">
+                connect@flazee.com
               </a>
             </div>
           </>

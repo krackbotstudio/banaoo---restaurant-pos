@@ -22,6 +22,7 @@ import {
 } from "../services/orders";
 import { printKitchenSlip } from "../printer/printer-service";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
+import { tokens } from "../theme/tokens";
 
 export function KitchenScreen() {
   const { currentOutlet } = useOutlet();
@@ -254,8 +255,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   orderRowSelected: {
-    borderColor: "#f97316",
-    backgroundColor: "#fff7ed",
+    borderColor: tokens.colors.primary,
+    backgroundColor: "#FFF1E6",
   },
   orderNo: { fontWeight: "700", color: "#1e293b" },
   status: { textTransform: "capitalize", fontWeight: "700", color: "#334155" },
@@ -273,7 +274,7 @@ const styles = StyleSheet.create({
   itemStatus: { color: "#64748b", fontSize: 12, textTransform: "capitalize", marginTop: 2 },
   itemAction: {
     borderRadius: 8,
-    backgroundColor: "#f97316",
+    backgroundColor: tokens.colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

@@ -13,7 +13,7 @@ export default function Terms() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Terms & Conditions"
-        description="Read the banaoo Terms and Conditions covering subscriptions, billing, acceptable use, intellectual property and data ownership."
+        description="Read the Flaze Terms and Conditions covering subscriptions, billing, acceptable use, intellectual property and data ownership."
         path="/terms"
       />
       <StructuredData
@@ -33,7 +33,7 @@ export default function Terms() {
 
           <div className="space-y-10 text-sm leading-relaxed">
             <p className="text-muted-foreground text-base">
-              Please read these Terms and Conditions carefully before using banaoo.io. By accessing or using
+              Please read these Terms and Conditions carefully before using Flaze. By accessing or using
               our platform, you agree to be bound by these terms. If you do not agree, you may not use our
               services.
             </p>
@@ -42,7 +42,7 @@ export default function Terms() {
               <h2 className="text-lg font-semibold">1. Acceptance of Terms</h2>
               <p className="text-muted-foreground">
                 These Terms constitute a legally binding agreement between you ("Restaurant Owner," "User," or
-                "you") and banaoo.io ("we," "us," or "our"). By creating an account, subscribing to a plan, or
+                "you") and Flaze ("we," "us," or "our"). By creating an account, subscribing to a plan, or
                 using any part of our platform, you accept these Terms in full.
               </p>
             </section>
@@ -50,7 +50,7 @@ export default function Terms() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">2. Description of Service</h2>
               <p className="text-muted-foreground">
-                banaoo.io provides a cloud-based point-of-sale (POS) and restaurant management platform,
+                Flaze provides a cloud-based point-of-sale (POS) and restaurant management platform,
                 including but not limited to: order management, kitchen display system, menu management,
                 staff management, multi-outlet dashboards, customer analytics, and integrations with
                 third-party delivery and payment platforms.
@@ -67,8 +67,8 @@ export default function Terms() {
                 You must provide accurate, current, and complete information when creating your account. You
                 are responsible for maintaining the confidentiality of your login credentials and for all
                 activities conducted under your account. You must notify us immediately at{" "}
-                <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                  connect@banaoo.in
+                <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                  connect@flazee.com
                 </a>{" "}
                 if you suspect any unauthorised access.
               </p>
@@ -135,7 +135,7 @@ export default function Terms() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">7. Your Data</h2>
               <p className="text-muted-foreground">
-                You own the data you enter into banaoo.io (menus, orders, customer records, etc.). By using
+                You own the data you enter into Flaze (menus, orders, customer records, etc.). By using
                 the platform, you grant us a limited licence to store, process, and display that data solely
                 to provide the service. We will never sell your restaurant data to third parties. For full
                 details, see our{" "}
@@ -150,7 +150,7 @@ export default function Terms() {
               <h2 className="text-lg font-semibold">8. Intellectual Property</h2>
               <p className="text-muted-foreground">
                 All platform software, design, branding, and content (excluding your data) is owned by
-                banaoo.io and protected under applicable copyright, trademark, and intellectual property laws.
+                Flaze and protected under applicable copyright, trademark, and intellectual property laws.
                 You may not copy, modify, distribute, or create derivative works without our express written
                 permission.
               </p>
@@ -159,7 +159,7 @@ export default function Terms() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">9. Third-Party Integrations</h2>
               <p className="text-muted-foreground">
-                banaoo.io integrates with third-party services (Zomato, Swiggy, Razorpay, WhatsApp, etc.).
+                Flaze integrates with third-party services (Zomato, Swiggy, Razorpay, WhatsApp, etc.).
                 These integrations are subject to the respective third party's terms of service. We are not
                 responsible for the availability, accuracy, or actions of these third-party services.
               </p>
@@ -177,7 +177,7 @@ export default function Terms() {
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">11. Limitation of Liability</h2>
               <p className="text-muted-foreground">
-                To the maximum extent permitted by law, banaoo.io shall not be liable for any indirect,
+                To the maximum extent permitted by law, Flaze shall not be liable for any indirect,
                 incidental, special, consequential, or punitive damages, including but not limited to loss of
                 revenue, loss of data, or business interruption arising from your use of the service.
               </p>
@@ -210,7 +210,7 @@ export default function Terms() {
               <h2 className="text-lg font-semibold">14. Changes to These Terms</h2>
               <p className="text-muted-foreground">
                 We may revise these Terms at any time. We will notify you of significant changes via email at
-                least 14 days before the changes take effect. Your continued use of banaoo.io constitutes
+                least 14 days before the changes take effect. Your continued use of Flaze constitutes
                 acceptance of the revised Terms.
               </p>
             </section>
@@ -221,11 +221,11 @@ export default function Terms() {
                 If you have questions about these Terms, please contact us:
               </p>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">banaoo.io</p>
+                <p className="font-medium text-foreground">Flaze</p>
                 <p>
                   Email:{" "}
-                  <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                    connect@banaoo.in
+                  <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                    connect@flazee.com
                   </a>
                 </p>
                 <p>Jurisdiction: Bengaluru, Karnataka, India</p>

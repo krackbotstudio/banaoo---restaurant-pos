@@ -40,7 +40,7 @@ export function PageHeader({
               <div className="flex items-center justify-center h-10 w-10 rounded-xl gradient-primary glow-primary transition-transform group-hover:scale-105">
                 <ChefHat className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-display text-xl font-bold hidden sm:block">banaoo.io</span>
+              <span className="font-display text-xl font-bold hidden sm:block">Flaze</span>
             </Link>
           )}
           {showBack && (

@@ -257,7 +257,7 @@ function writeBillingReceiptBody(
   } else {
     d.line(totalLine);
   }
-  d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by banaoo.in");
+  d.dashes(w).align("C").line("Thank you!").line("Visit us again soon").line("Powered by flazee.com");
 }
 
 function writeKitchenHandoffBody(

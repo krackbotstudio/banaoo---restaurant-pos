@@ -1,6 +1,6 @@
 # Mobile app (Android)
 
-The **Banaoo Android app** wraps the same POS web app (`banaoo.in`) and adds native **Bluetooth** and **LAN** printing.
+The **Flaze Android app** wraps the same POS web app (`flazee.com`) and adds native **Bluetooth** and **LAN** printing.
 
 ## Install
 
@@ -38,7 +38,7 @@ Settings sync with print jobs sent from the web POS inside the WebView.
 
 ## Deploy notes for owners
 
-- Web app must be deployed to the same URL configured in the app (`banaoo.in`).
+- Web app must be deployed to the same URL configured in the app (`flazee.com`).
 - APK and web should be updated together when print bridge changes.
 
 ## Related

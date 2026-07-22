@@ -32,7 +32,7 @@ import {
   Legend,
 } from "recharts";
 
-const PIE_COLORS = ["#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#eab308"];
+const PIE_COLORS = ["#FF4500", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#F89800"];
 
 const fmtCurrency = (v: number) =>
   `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -236,7 +236,7 @@ export default function Analytics() {
       customer_phone: o.customer_phone ?? "",
       total_inr: Number(o.total ?? 0).toFixed(2),
     }));
-    downloadCsv(`banaoo_orders_${outletSlug}_${period}d.csv`, toCsv(rows));
+    downloadCsv(`flaze_orders_${outletSlug}_${period}d.csv`, toCsv(rows));
     toast.success(`Exported ${rows.length} orders`);
   };
 
@@ -258,7 +258,7 @@ export default function Analytics() {
           total_price_inr: Number(it.total_price ?? 0).toFixed(2),
         };
       });
-    downloadCsv(`banaoo_items_${outletSlug}_${period}d.csv`, toCsv(rows));
+    downloadCsv(`flaze_items_${outletSlug}_${period}d.csv`, toCsv(rows));
     toast.success(`Exported ${rows.length} order items`);
   };
 
@@ -274,7 +274,7 @@ export default function Analytics() {
       { metric: `Best ${bucketBy === "week" ? "Week" : "Day"}`, value: `${kpis.bestDay.date} (₹${Math.round(kpis.bestDay.revenue)})` },
       ...topItems.map((it, i) => ({ metric: `Top Item #${i + 1}`, value: `${it.name} — ${it.qty} sold (₹${Math.round(it.revenue)})` })),
     ];
-    downloadCsv(`banaoo_summary_${outletSlug}_${period}d.csv`, toCsv(rows));
+    downloadCsv(`flaze_summary_${outletSlug}_${period}d.csv`, toCsv(rows));
     toast.success("Exported summary");
   };
 
@@ -412,7 +412,7 @@ export default function Analytics() {
                   type="monotone"
                   dataKey="revenue"
                   name="Revenue"
-                  stroke="#f97316"
+                  stroke="#FF4500"
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -461,7 +461,7 @@ export default function Analytics() {
                       tickFormatter={(v) => v.length > 14 ? v.slice(0, 14) + "…" : v}
                     />
                     <Tooltip formatter={(v: number) => [`${v} sold`, "Quantity"]} />
-                    <Bar dataKey="qty" name="Qty Sold" fill="#f97316" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="qty" name="Qty Sold" fill="#FF4500" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

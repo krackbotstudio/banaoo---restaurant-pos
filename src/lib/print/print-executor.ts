@@ -91,7 +91,7 @@ async function executeKitchenBatch(batch: RoutedPrintBatch): Promise<ExecuteResu
   if (config.transport === "network") {
     return {
       ok: false,
-      message: `Configure ${printer.name} in the Banaoo Android app (LAN/BT).`,
+      message: `Configure ${printer.name} in the Flaze Android app (LAN/BT).`,
     };
   }
 
@@ -224,7 +224,7 @@ export async function executeTestPrint(printer: PrinterRecord): Promise<ExecuteR
   }
 
   if (config.transport === "network") {
-    return { ok: false, message: "Test LAN print: use the Banaoo Android app" };
+    return { ok: false, message: "Test LAN print: use the Flaze Android app" };
   }
   if (config.usbPortIndex === null) {
     return { ok: false, message: "Assign a USB/serial port first" };

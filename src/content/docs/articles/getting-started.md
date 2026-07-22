@@ -1,6 +1,6 @@
-# Getting started with banaoo
+# Getting started with Flaze
 
-banaoo is a cloud POS and restaurant management platform for Indian restaurants. You can run orders, kitchen, billing, staff, and analytics from the web dashboard or the Android app.
+Flaze is a cloud POS and restaurant management platform for Indian restaurants. You can run orders, kitchen, billing, staff, and analytics from the web dashboard or the Android app.
 
 ## 1. Create your account
 
@@ -53,4 +53,4 @@ Under **Add-ons**, activate either **Razorpay payments** or **Google Pay India**
 | Kitchen screen | [Kitchen display](/docs/kitchen) |
 | Receipts | [Billing & receipts](/docs/billing-and-receipts) |
 
-Need help? Email **connect@banaoo.in** or use the chat widget on the site.
+Need help? Email **connect@flazee.com** or use the chat widget on the site.

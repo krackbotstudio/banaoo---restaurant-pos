@@ -1,13 +1,14 @@
 import { Helmet } from "react-helmet-async";
+import { BRAND } from "@/lib/brand";
 
-const SITE_URL = "https://banaoo.io";
+const SITE_URL = BRAND.siteUrl;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-default.png`;
-const DEFAULT_TITLE = "banaoo — One App to Run Your Restaurant";
+const DEFAULT_TITLE = `${BRAND.name} — One App to Run Your Restaurant`;
 const DEFAULT_DESCRIPTION =
   "POS, online orders, kitchen display & payments — purpose-built for Indian restaurants, cloud kitchens, QSRs and self-service counters.";
 
 export interface SEOProps {
-  /** Page-specific title. Will be appended with " — banaoo" unless `disableSuffix` is true. */
+  /** Page-specific title. Will be appended with the brand name unless `disableSuffix` is true. */
   title?: string;
   /** Pass true to use the title verbatim (e.g. for the homepage). */
   disableSuffix?: boolean;
@@ -42,7 +43,7 @@ export interface SEOProps {
  * Usage:
  *   <SEO
  *     title="About"
- *     description="Learn why banaoo was built — for restaurant owners, by restaurant owners."
+ *     description="Learn why Flaze was built — for restaurant owners, by restaurant owners."
  *     path="/about"
  *   />
  */
@@ -63,7 +64,7 @@ export function SEO({
   const fullTitle = title
     ? disableSuffix
       ? title
-      : `${title} — banaoo`
+      : `${title} — ${BRAND.name}`
     : DEFAULT_TITLE;
 
   const url = `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;

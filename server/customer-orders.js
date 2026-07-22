@@ -586,7 +586,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         });
         const upiIntent = `upi://pay?pa=${encodeURIComponent(gpay.merchant_vpa)}&pn=${encodeURIComponent(
           gpay.payee_name.slice(0, 80)
-        )}&am=${Number(subtotal).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Banaoo order')}&tr=${encodeURIComponent(
+        )}&am=${Number(subtotal).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Flaze order')}&tr=${encodeURIComponent(
           transactionRef
         )}`;
 
@@ -868,7 +868,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
                 upi_intent_url: `upi://pay?pa=${encodeURIComponent(gpay.merchant_vpa)}&pn=${encodeURIComponent(
                   (gpay.payee_name || sRow.outlet_name || '').slice(0, 80)
                 )}&am=${Number(sPayload.total).toFixed(2)}&cu=INR&tn=${encodeURIComponent(
-                  'Banaoo order'
+                  'Flaze order'
                 )}&tr=${encodeURIComponent(transactionRef)}`,
                 merchant_vpa: gpay.merchant_vpa,
                 payee_name: gpay.payee_name,

@@ -118,7 +118,7 @@ export function buildGooglePayPaymentRequest({
         mc: mcc.trim(),
         tr: String(transactionRef).slice(0, 40),
         ...(referenceUrl ? { url: referenceUrl } : {}),
-        tn: 'Banaoo order',
+        tn: 'Flaze order',
       },
     },
   ];

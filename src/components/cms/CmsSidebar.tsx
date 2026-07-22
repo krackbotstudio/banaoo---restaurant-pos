@@ -75,7 +75,7 @@ export function CmsSidebar() {
             <img src="/tectangle-logo.png" alt="Tectangle" className="h-9 w-9 object-contain shrink-0" />
             <div className="min-w-0">
               <p className="font-semibold text-sm leading-tight truncate">Tectangle CMS</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">banaoo platform</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Flaze platform</p>
             </div>
           </div>
         )}

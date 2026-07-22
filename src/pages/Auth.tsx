@@ -352,7 +352,7 @@ export default function Auth() {
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <SEO
         title={mode === "signup" ? "Create your account" : "Sign in"}
-        description="Sign in to your banaoo restaurant account or create a new one to start managing your restaurant in minutes."
+        description="Sign in to your Flaze restaurant account or create a new one to start managing your restaurant in minutes."
         path="/auth"
         noindex
       />
@@ -365,11 +365,11 @@ export default function Auth() {
               <img
                 src="/logo.png"
                 alt=""
-                className="h-5 w-5 object-contain brightness-0 invert"
+                className="h-5 w-5 object-contain"
               />
             </span>
             <span className="font-display text-lg font-bold tracking-tight">
-              banaoo
+              Flaze
             </span>
           </Link>
 

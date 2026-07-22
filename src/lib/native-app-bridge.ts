@@ -1,4 +1,4 @@
-/** Bridge helpers for the Banaoo Android/iOS WebView shell (not customer PWA). */
+/** Bridge helpers for the Flaze Android/iOS WebView shell (not customer PWA). */
 
 declare global {
   interface Window {
@@ -24,7 +24,7 @@ function getReactNativeHost(): { postMessage: (message: string) => void } | unde
   return undefined;
 }
 
-/** True when running inside the native Banaoo app WebView. */
+/** True when running inside the native Flaze app WebView. */
 export function isBanaooNativeApp(): boolean {
   if (typeof window === "undefined") return false;
   if (window.__BANAOO_NATIVE_APP__ || window.__BANAOO_NATIVE_PRINTER_BRIDGE__) return true;

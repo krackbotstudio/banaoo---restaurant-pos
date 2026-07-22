@@ -19,6 +19,7 @@ import {
   MenuItemRow,
   placeNewOrder,
 } from "../services/menu";
+import { tokens } from "../theme/tokens";
 
 export function NewOrderScreen() {
   const { user } = useAuth();
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: "#fff",
   },
-  typeBtnActive: { borderColor: "#f97316", backgroundColor: "#fff7ed" },
+  typeBtnActive: { borderColor: tokens.colors.primary, backgroundColor: "#FFF1E6" },
   typeText: { color: "#334155", fontWeight: "700" },
   typeTextActive: { color: "#c2410c" },
   tableInput: {
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: "#fff",
   },
-  categoryChipActive: { borderColor: "#f97316", backgroundColor: "#fff7ed" },
+  categoryChipActive: { borderColor: tokens.colors.primary, backgroundColor: "#FFF1E6" },
   categoryText: { color: "#334155" },
   categoryTextActive: { color: "#c2410c", fontWeight: "700" },
   loadingBox: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
   menuMeta: { color: "#64748b", fontSize: 12 },
   addBtn: {
     borderRadius: 8,
-    backgroundColor: "#f97316",
+    backgroundColor: tokens.colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

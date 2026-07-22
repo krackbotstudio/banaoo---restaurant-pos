@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Banaoo",
+    "name": "Flaze",
     "slug": "banaoo-pos-mobile",
     "scheme": "banaoo",
     "version": "0.0.19",
@@ -54,8 +54,8 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "https://banaoo.in",
-      "webappUrl": "https://banaoo.in",
+      "apiUrl": "https://flazee.com",
+      "webappUrl": "https://flazee.com",
       "eas": {
         "projectId": "ff1f4b1f-181e-415c-a2db-2e70d060a4f2"
       }

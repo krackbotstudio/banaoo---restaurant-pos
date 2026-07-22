@@ -1,24 +1,15 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, QrCode } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const brandNames = [
-  "banaoo",   // English
-  "बनाओ",     // Hindi
-  "బనావో",   // Telugu
-  "பனாவோ",  // Tamil
-  "ബനാവോ",  // Malayalam
-  "ಬನಾವೋ",  // Kannada
-  "بنائو",    // Urdu
-];
 
 const tools = [
   {
@@ -33,54 +24,14 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, loading } = useAuth();
 
-  // Brand name typing animation
-  const [typedBrand, setTypedBrand] = useState("banaoo");
-  const [brandIdx, setBrandIdx] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    const current = brandNames[brandIdx];
-    const isFull = typedBrand === current;
-    const delay = isDeleting ? 50 : isFull ? 2000 : 90;
-
-    const t = setTimeout(() => {
-      if (!isDeleting) {
-        if (!isFull) {
-          setTypedBrand(current.slice(0, typedBrand.length + 1));
-        } else {
-          setIsDeleting(true);
-        }
-      } else {
-        if (typedBrand.length > 0) {
-          setTypedBrand(current.slice(0, typedBrand.length - 1));
-        } else {
-          setIsDeleting(false);
-          setBrandIdx((i) => (i + 1) % brandNames.length);
-        }
-      }
-    }, delay);
-
-    return () => clearTimeout(t);
-  }, [typedBrand, brandIdx, isDeleting]);
-
   const dashboardHref = profile && !profile.onboarding_completed ? "/onboarding" : "/dashboard";
   const dashboardLabel = profile && !profile.onboarding_completed ? "Complete Setup" : "Go to Dashboard";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2" aria-label="banaoo home">
-          <img src="/logo.png" alt="" className="h-9 w-9 object-contain" />
-          {/* Canonical brand text for crawlers, screen readers and social-card scrapers */}
-          <span className="sr-only">banaoo</span>
-          {/* Decorative animated text — hidden from accessibility tree */}
-          <span
-            className="text-xl font-bold min-w-[5rem] inline-block"
-            aria-hidden="true"
-          >
-            {typedBrand}
-            <span className="inline-block w-0.5 h-4 bg-foreground ml-0.5 align-middle animate-pulse" />
-          </span>
+        <Link to="/" className="flex items-center" aria-label="Flaze home">
+          <BrandLogo variant="darkTagline" className="h-9 w-auto" />
         </Link>
 
         {/* Desktop Navigation */}

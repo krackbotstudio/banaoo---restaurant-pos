@@ -51,7 +51,7 @@ export function isNativePrinterBridgeExpected(): boolean {
   return typeof window !== "undefined" && !!window.__BANAOO_NATIVE_PRINTER_BRIDGE__;
 }
 
-/** True when running inside the Banaoo app WebView (APK), with or without the inject flag. */
+/** True when running inside the Flaze app WebView (APK), with or without the inject flag. */
 export function isNativePrintCapable(): boolean {
   if (typeof window === "undefined") return false;
   if (window.__BANAOO_NATIVE_PRINTER_BRIDGE__ || window.__BANAOO_NATIVE_APP__) return true;

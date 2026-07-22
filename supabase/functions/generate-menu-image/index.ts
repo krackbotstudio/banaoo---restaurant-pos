@@ -46,7 +46,7 @@ async function fromWikipedia(query: string): Promise<Photo[]> {
   try {
     const res = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`,
-      { headers: { "User-Agent": "banaoo-restaurant-app/1.0" } }
+      { headers: { "User-Agent": "flaze-restaurant-app/1.0" } }
     );
     if (!res.ok) return [];
     const data = await res.json();

@@ -169,9 +169,9 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className={`border-b border-sidebar-border shrink-0 ${collapsed ? "py-2.5 px-1" : "px-3 py-2.5"}`}>
         {collapsed ? (
-          /* Collapsed: Banaoo mark on top, restaurant icon below */
+          /* Collapsed: Flaze mark on top, restaurant icon below */
           <div className="flex flex-col items-center gap-2">
-            <img src="/logo.png" alt="Banaoo" className="h-9 w-9 object-contain" />
+            <img src="/logo.png" alt="Flaze" className="h-9 w-9 object-contain" />
             {profile?.logo_url ? (
               <img
                 src={getImageUrl(profile.logo_url)}
@@ -185,10 +185,10 @@ export function AppSidebar() {
             )}
           </div>
         ) : (
-          /* Expanded: Banaoo logo (primary, left) + restaurant logo (secondary, right) */
+          /* Expanded: Flaze logo (primary, left) + restaurant logo (secondary, right) */
           <div className="flex items-center gap-2 min-w-0">
-            {/* Banaoo — primary brand */}
-            <img src="/logo.png" alt="Banaoo" className="h-11 w-11 object-contain shrink-0" />
+            {/* Flaze — primary brand */}
+            <img src="/logo.png" alt="Flaze" className="h-11 w-11 object-contain shrink-0" />
 
             {/* Divider */}
             <div className="w-px h-9 bg-border shrink-0" />
@@ -203,7 +203,7 @@ export function AppSidebar() {
                 />
               ) : (
                 <div className="rounded-lg gradient-warm shrink-0 p-2.5">
-                  <img src="/logo.png" alt="Default logo" className="h-5 w-5 object-contain brightness-0 invert" />
+                  <img src="/logo.png" alt="Default logo" className="h-5 w-5 object-contain" />
                 </div>
               )}
               <div className="flex flex-col min-w-0 gap-0.5">
