@@ -7,6 +7,7 @@ import {
   Phone,
   Plus,
   Power,
+  QrCode,
   Store,
   Trash2,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { OrderingLinkRow } from "@/components/customer/OrderingLinkRow";
 
 export interface CmsOutletRow {
   id: string;
@@ -53,6 +55,8 @@ export interface CmsOutletRow {
 interface Props {
   userId: string;
   initialOutlets?: CmsOutletRow[];
+  brandName?: string | null;
+  orderingSlug?: string | null;
   onChanged?: () => void;
 }
 
@@ -143,7 +147,13 @@ function PickupLocationMap({
   );
 }
 
-export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: Props) {
+export function CmsCustomerOutletsPanel({
+  userId,
+  initialOutlets,
+  brandName,
+  orderingSlug,
+  onChanged,
+}: Props) {
   const [outlets, setOutlets] = useState<CmsOutletRow[]>(initialOutlets ?? []);
   const [loading, setLoading] = useState(initialOutlets === undefined);
   const [saving, setSaving] = useState(false);
@@ -151,7 +161,11 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
   const [editing, setEditing] = useState<CmsOutletRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<CmsOutletRow | null>(null);
+  const [orderingTarget, setOrderingTarget] = useState<CmsOutletRow | null>(null);
   const [locating, setLocating] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const displayBrand = brandName?.trim() || null;
 
   const loadOutlets = useCallback(async () => {
     setLoading(true);
@@ -368,6 +382,14 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOrderingTarget(outlet)}
+                    >
+                      <QrCode className="h-4 w-4 mr-1" />
+                      QR / Link
+                    </Button>
                     {!outlet.is_active && (
                       <Button
                         size="sm"
@@ -524,6 +546,61 @@ export function CmsCustomerOutletsPanel({ userId, initialOutlets, onChanged }: P
             </Button>
             <Button onClick={() => void saveOutlet()} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Save" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!orderingTarget} onOpenChange={(open) => !open && setOrderingTarget(null)}>
+        <DialogContent className="flex max-h-[min(92vh,920px)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-4 overflow-hidden p-4 sm:p-6">
+          <DialogHeader className="shrink-0 space-y-1.5 text-left">
+            <DialogTitle className="pr-8">Online ordering — {orderingTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Share this link or QR code so customers can order from this outlet.
+            </DialogDescription>
+          </DialogHeader>
+          {orderingTarget && (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+              <div className="grid gap-5 md:grid-cols-2 md:gap-6">
+                <OrderingLinkRow
+                  label="Direct outlet link"
+                  hint="Goes straight to this outlet"
+                  url={`${origin}/r/${orderingTarget.id}`}
+                  openPath={`/r/${orderingTarget.id}`}
+                  restaurantName={displayBrand || orderingTarget.name}
+                  outletName={orderingTarget.name}
+                  showQr
+                />
+                {orderingSlug ? (
+                  <OrderingLinkRow
+                    label="Brand ordering page"
+                    hint="All outlets with GPS distance"
+                    url={`${origin}/order/${orderingSlug}`}
+                    openPath={`/order/${orderingSlug}`}
+                    restaurantName={displayBrand || orderingTarget.name}
+                    showQr
+                  />
+                ) : (
+                  <p className="h-fit text-xs text-muted-foreground rounded-lg border border-dashed px-3 py-3 self-start">
+                    No brand ordering slug set yet. Configure it under Settings → Branding to also
+                    share <span className="font-mono">/order/…</span>.
+                  </p>
+                )}
+              </div>
+              {(orderingTarget.latitude == null || orderingTarget.longitude == null) && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    No GPS pin on this outlet — brand page won&apos;t show distance. Edit the outlet
+                    and set the pickup pin.
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter className="shrink-0 sm:justify-end">
+            <Button variant="outline" onClick={() => setOrderingTarget(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
