@@ -55,6 +55,8 @@ interface OverviewResponse {
     name: string;
     address: string | null;
     phone?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     is_active: boolean;
     operation_mode?: "standard" | "self_service" | null;
   }>;
@@ -538,11 +540,15 @@ export default function CmsCustomerDetail() {
             <TabsContent value="outlets">
               <CmsCustomerOutletsPanel
                 userId={userId}
+                brandName={overview.profile.brand_name}
+                orderingSlug={overview.profile.ordering_slug}
                 initialOutlets={overview.outlets?.map((o) => ({
                   id: o.id,
                   name: o.name,
                   address: o.address,
                   phone: o.phone ?? null,
+                  latitude: o.latitude ?? null,
+                  longitude: o.longitude ?? null,
                   is_active: o.is_active,
                   operation_mode: o.operation_mode ?? null,
                 }))}
