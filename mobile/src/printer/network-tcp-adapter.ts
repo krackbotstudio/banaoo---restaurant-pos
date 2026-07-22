@@ -49,7 +49,7 @@ export async function testNetworkConnection(host: string, port: number | string 
   const trimmed = host.trim();
   if (!trimmed) throw new Error("Printer IP address is required");
   const portNum = typeof port === "number" ? port : Number(port) || 9100;
-  const testBytes = new TextEncoder().encode("Banaoo OK\n");
+  const testBytes = new TextEncoder().encode("Flaze OK\n");
   await printViaNetwork({
     host: trimmed,
     port: portNum,

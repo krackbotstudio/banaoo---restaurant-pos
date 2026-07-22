@@ -183,7 +183,7 @@ export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps
         <div style={{ textAlign: "center", fontSize: "8pt", marginTop: "2mm", lineHeight: "1.5" }}>
           <div style={{ fontWeight: "bold" }}>Thank you!</div>
           <div>Visit us again soon</div>
-          <div style={{ marginTop: "2mm", color: "#888" }}>Powered by banaoo.in</div>
+          <div style={{ marginTop: "2mm", color: "#888" }}>Powered by flazee.com</div>
         </div>
 
         {/* Feed space so thermal cutter doesn't clip last line */}

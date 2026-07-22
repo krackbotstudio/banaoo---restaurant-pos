@@ -533,6 +533,72 @@ export function registerCmsMenuRoutes(app) {
     }
   });
 
+  app.post('/api/cms/outlets/:outletId/menu/items/bulk-delete', requireCmsAuth, async (req, res) => {
+    if (!canEditMenu(req.cmsAdmin)) {
+      return res.status(403).json({ error: 'Not enough permissions' });
+    }
+    const { outletId } = req.params;
+    const itemIds = [
+      ...new Set(
+        (Array.isArray(req.body?.item_ids) ? req.body.item_ids : [])
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (itemIds.length === 0) {
+      return res.status(400).json({ error: 'item_ids array is required' });
+    }
+
+    try {
+      const { rows: ownedItems } = await pool.query(
+        `SELECT id FROM public.menu_items
+         WHERE outlet_id = $1 AND id = ANY($2::uuid[])`,
+        [outletId, itemIds]
+      );
+      if (ownedItems.length === 0) {
+        return res.status(404).json({ error: 'No matching menu items found' });
+      }
+
+      let deleted = 0;
+      let hidden = 0;
+      for (const { id } of ownedItems) {
+        try {
+          const result = await pool.query(
+            `DELETE FROM public.menu_items WHERE id = $1 AND outlet_id = $2`,
+            [id, outletId]
+          );
+          deleted += result.rowCount;
+        } catch (err) {
+          if (err.code !== '23503') throw err;
+          const result = await pool.query(
+            `UPDATE public.menu_items
+             SET is_available = false, updated_at = now()
+             WHERE id = $1 AND outlet_id = $2`,
+            [id, outletId]
+          );
+          hidden += result.rowCount;
+        }
+      }
+
+      await logAdminAction({
+        adminId: req.cmsAdmin?.source === 'admin_users' ? req.cmsAdmin.id : null,
+        adminEmail: req.cmsAdmin?.email ?? null,
+        action: 'cms.menu.items.bulk_delete',
+        targetType: 'outlet',
+        targetId: outletId,
+        metadata: { requested: itemIds.length, deleted, hidden, item_ids: itemIds },
+        req,
+      });
+
+      res.json({ success: true, deleted, hidden, processed: deleted + hidden });
+    } catch (err) {
+      console.error('POST menu/items/bulk-delete:', err);
+      res.status(err.code === '22P02' ? 400 : 500).json({
+        error: err.code === '22P02' ? 'Invalid menu item ID' : err.message,
+      });
+    }
+  });
+
   app.patch('/api/cms/outlets/:outletId/menu/items/bulk', requireCmsAuth, async (req, res) => {
     if (!canEditMenu(req.cmsAdmin)) {
       return res.status(403).json({ error: 'Not enough permissions' });

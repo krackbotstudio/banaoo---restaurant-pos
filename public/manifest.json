@@ -1,11 +1,11 @@
 {
-  "name": "banaoo – Order Food",
-  "short_name": "banaoo",
+  "name": "Flaze – Order Food",
+  "short_name": "Flaze",
   "description": "Order food from your favourite restaurant",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#f97316",
+  "theme_color": "#FF4500",
   "orientation": "any",
   "icons": [
     {

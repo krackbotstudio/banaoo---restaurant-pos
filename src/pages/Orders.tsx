@@ -708,7 +708,7 @@ export default function Orders() {
   <div class="center" style="font-size:${pt - 1}pt;margin-top:2mm;line-height:1.6">
     <div class="bold">Thank you!</div>
     <div>Visit us again soon</div>
-    <div style="margin-top:2mm;font-size:10pt">Powered by banaoo.in</div>
+    <div style="margin-top:2mm;font-size:10pt">Powered by flazee.com</div>
   </div>
   <div style="height:10mm"></div>
 </body>

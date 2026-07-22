@@ -52,7 +52,7 @@ export function AuthScreen() {
     >
       <AppCard style={styles.card}>
         <Image source={require("../../assets/icon.png")} style={styles.logo} resizeMode="contain" />
-        <AppTitle style={styles.title}>Banaoo POS</AppTitle>
+        <AppTitle style={styles.title}>Flaze POS</AppTitle>
         <Text style={styles.subtitle}>Use the same account and data as your web POS.</Text>
 
         {isSignup && (

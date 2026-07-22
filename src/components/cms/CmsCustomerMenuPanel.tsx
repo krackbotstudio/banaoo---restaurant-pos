@@ -261,6 +261,46 @@ export function CmsCustomerMenuPanel({ userId, initialOutlets }: Props) {
     void loadMenu();
   };
 
+  const handleBulkDelete = async () => {
+    if (!outletId || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (
+      !confirm(
+        `Delete ${count} selected menu item${count === 1 ? "" : "s"}? Items used in past orders will be marked unavailable instead.`
+      )
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/cms/outlets/${outletId}/menu/items/bulk-delete`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item_ids: [...selectedIds] }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk delete failed");
+
+      const details = [
+        data.deleted ? `${data.deleted} deleted` : "",
+        data.hidden ? `${data.hidden} marked unavailable` : "",
+      ].filter(Boolean);
+      toast.success(details.join(", ") || "Selected items removed");
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      await loadMenu();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete selected items");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -329,9 +369,24 @@ export function CmsCustomerMenuPanel({ userId, initialOutlets }: Props) {
                   </Button>
                 )}
                 {selectionMode && selectedIds.size > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => setBulkEditOpen(true)}>
-                    Bulk edit ({selectedIds.size})
-                  </Button>
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setBulkEditOpen(true)}>
+                      Bulk edit ({selectedIds.size})
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={saving}
+                      onClick={() => void handleBulkDelete()}
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-1" />
+                      )}
+                      Delete ({selectedIds.size})
+                    </Button>
+                  </>
                 )}
                 <MenuImportDialog
                   outletId={outletId}
@@ -351,7 +406,15 @@ export function CmsCustomerMenuPanel({ userId, initialOutlets }: Props) {
           <div className="flex flex-wrap gap-3">
             <div className="space-y-1 min-w-[200px] flex-1 max-w-md">
               <Label>Outlet</Label>
-              <Select value={outletId} onValueChange={(v) => { setOutletId(v); setFilterCategory("all"); }}>
+              <Select
+                value={outletId}
+                onValueChange={(v) => {
+                  setOutletId(v);
+                  setFilterCategory("all");
+                  setSelectionMode(false);
+                  setSelectedIds(new Set());
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -419,6 +482,37 @@ export function CmsCustomerMenuPanel({ userId, initialOutlets }: Props) {
               </div>
 
               <div className="space-y-2">
+                {selectionMode && items.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                    <p className="text-sm text-muted-foreground">
+                      {selectedIds.size} of {items.length} menu items selected
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setSelectedIds((current) => {
+                            const next = new Set(current);
+                            items.forEach((item) => next.add(item.id));
+                            return next;
+                          })
+                        }
+                      >
+                        Select all ({items.length})
+                      </Button>
+                      {selectedIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelectedIds(new Set())}
+                        >
+                          Clear selection
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {filteredItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6 border rounded-lg">
                     No items in this view. Use AI Import or Add item.

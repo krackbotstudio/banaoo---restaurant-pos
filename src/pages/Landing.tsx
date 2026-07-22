@@ -38,17 +38,10 @@ const heroVideos = [
   "/Videos/hero-orders.mp4",
 ];
 
-// ─── Typing words (Banaoo in multiple languages) ──────────────────────────────
+// ─── Typing words (Flaze and food-service variants) ───────────────────────────
 
 const typingWords = [
-  "Banaoo!",    // English
-  "बनाओ!",      // Hindi
-  "బనావో!",    // Telugu
-  "பனாவோ!",   // Tamil
-  "ബനാവോ!",   // Malayalam
-  "ಬನಾವೋ!",   // Kannada
-  "بنائو!",     // Urdu
-  "Banaoo!",    // English again (loop smoothly)
+  "Flaze!",
 ];
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -148,7 +141,7 @@ const steps = [
 const testimonials = [
   {
     quote:
-      "banaoo.io cut our order errors by 80%. The kitchen display alone was worth the switch. Setup was genuinely 10 minutes.",
+      "Flaze cut our order errors by 80%. The kitchen display alone was worth the switch. Setup was genuinely 10 minutes.",
     name: "Rohan Mehta",
     restaurant: "Spice Garden",
     city: "Mumbai",
@@ -282,7 +275,7 @@ export default function Landing() {
 
       const anchor = document.createElement("a");
       anchor.href = resolvedUrl;
-      anchor.download = "banaoo-app-V.0.08.apk";
+      anchor.download = "flaze-app-latest.apk";
       anchor.rel = "noopener";
       document.body.appendChild(anchor);
       anchor.click();
@@ -309,17 +302,17 @@ export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="banaoo — One App to Run Your Restaurant | POS, Online Orders, KDS"
+        title="Flaze — One App to Run Your Restaurant | POS, Online Orders, KDS"
         disableSuffix
-        description="banaoo is an all-in-one restaurant management platform built for Indian restaurants, cloud kitchens, QSRs and self-service counters. POS, kitchen display, online orders, UPI payments, multi-outlet analytics — set up in minutes."
+        description="Flaze is an all-in-one restaurant management platform built for Indian restaurants, cloud kitchens, QSRs and self-service counters. POS, kitchen display, online orders, UPI payments, multi-outlet analytics — set up in minutes."
         path="/"
       />
       <StructuredData
         data={buildFaqPage([
           {
-            question: "What is banaoo?",
+            question: "What is Flaze?",
             answer:
-              "banaoo is an all-in-one restaurant management platform with POS, online orders, kitchen display, payments and multi-outlet analytics — purpose-built for Indian restaurants, cloud kitchens, QSRs and self-service counters.",
+              "Flaze is an all-in-one restaurant management platform with POS, online orders, kitchen display, payments and multi-outlet analytics — purpose-built for Indian restaurants, cloud kitchens, QSRs and self-service counters.",
           },
           {
             question: "Is there a free trial?",
@@ -327,19 +320,19 @@ export default function Landing() {
               "Yes. Every account gets a 7-day free trial with no credit card required. You only pay when you choose to continue, starting with a 3-month plan.",
           },
           {
-            question: "Does banaoo work for cloud kitchens and QSRs?",
+            question: "Does Flaze work for cloud kitchens and QSRs?",
             answer:
-              "Yes. banaoo automatically configures table-less workflows, self-service counters and delivery integrations for cloud kitchens, QSRs, food carts and other takeaway-first business types.",
+              "Yes. Flaze automatically configures table-less workflows, self-service counters and delivery integrations for cloud kitchens, QSRs, food carts and other takeaway-first business types.",
           },
           {
             question: "Which payment methods are supported?",
             answer:
-              "banaoo supports UPI, debit and credit cards, net-banking and cash. Online payments are powered by Razorpay; staff can also collect direct UPI / cash payments at the counter.",
+              "Flaze supports UPI, debit and credit cards, net-banking and cash. Online payments are powered by Razorpay; staff can also collect direct UPI / cash payments at the counter.",
           },
           {
             question: "Do I need any special hardware?",
             answer:
-              "No special hardware is required. banaoo runs in any modern browser and on Android. We support common Bluetooth and LAN thermal printers when you want printed KOTs and bills.",
+              "No special hardware is required. Flaze runs in any modern browser and on Android. We support common Bluetooth and LAN thermal printers when you want printed KOTs and bills.",
           },
         ])}
       />
@@ -368,7 +361,7 @@ export default function Landing() {
             <p className="text-base md:text-lg text-white/70 font-medium tracking-wide">
               For all the Food Creators across the world!{" "}
               {/* Canonical brand name for crawlers and screen readers */}
-              <span className="sr-only">banaoo!</span>
+              <span className="sr-only">Flaze!</span>
               {/* Decorative cycling text — hidden from accessibility tree */}
               <span className="text-primary font-bold" aria-hidden="true">
                 {typedText}
@@ -378,7 +371,7 @@ export default function Landing() {
 
             <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-tight animate-slide-up text-white">
               Run your restaurant{" "}
-              <span className="bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-accent via-primary to-destructive bg-clip-text text-transparent">
                 smarter.
               </span>
             </h1>
@@ -419,23 +412,23 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Stats Bar ── */}
-      <section className="border-y border-border bg-muted/40 py-8">
-        <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+      {/* ── Stats ── */}
+      <section className="relative overflow-hidden bg-black text-white border-y border-white/10">
+        <div className="absolute inset-0 landing-mesh opacity-80" />
+        <div className="absolute inset-0 landing-grid-fade opacity-60" />
+        <div className="container relative py-14 md:py-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4">
             {stats.map((stat, i) => (
               <div
                 key={stat.label}
-                className={`text-center ${
-                  i < stats.length - 1
-                    ? "md:border-r md:border-border"
-                    : ""
+                className={`text-center md:text-left px-2 ${
+                  i < stats.length - 1 ? "md:border-r md:border-white/10" : ""
                 }`}
               >
-                <p className="text-3xl md:text-4xl font-bold text-primary">
+                <p className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-br from-accent via-primary to-destructive bg-clip-text text-transparent">
                   {stat.value}
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-white/55 mt-2 uppercase tracking-[0.18em]">
                   {stat.label}
                 </p>
               </div>
@@ -445,34 +438,42 @@ export default function Landing() {
       </section>
 
       {/* ── Platform Integrations ── */}
-      <section className="py-16 overflow-hidden">
-        <div className="container mb-8 text-center">
-          <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
-            Works with your favourite platforms
+      <section className="py-14 overflow-hidden bg-[#0a0a0a] border-b border-white/5">
+        <div className="container mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-primary uppercase tracking-[0.2em] mb-2">
+              Integrations
+            </p>
+            <h2 className="text-xl md:text-2xl font-bold text-white">
+              Plugs into the stack you already use
+            </h2>
+          </div>
+          <p className="text-sm text-white/45 max-w-sm">
+            Delivery, payments, maps — connected without spreadsheet gymnastics.
           </p>
         </div>
-        <div className="relative flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+        <div className="relative flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
           <div
             ref={marqueeRef}
-            className="flex gap-6 animate-[marquee_30s_linear_infinite] shrink-0"
+            className="flex gap-3 animate-[marquee_28s_linear_infinite] shrink-0"
           >
             {platforms.map((p, i) => (
               <div
                 key={`${p}-${i}`}
-                className="shrink-0 px-6 py-3 rounded-full border border-border bg-background text-sm font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors whitespace-nowrap"
+                className="shrink-0 px-5 py-2.5 border border-white/10 bg-white/[0.03] text-sm font-medium text-white/70 hover:border-primary/50 hover:text-primary transition-colors whitespace-nowrap"
               >
                 {p}
               </div>
             ))}
           </div>
           <div
-            className="flex gap-6 animate-[marquee_30s_linear_infinite] shrink-0"
+            className="flex gap-3 animate-[marquee_28s_linear_infinite] shrink-0 ml-3"
             aria-hidden
           >
             {platforms.map((p, i) => (
               <div
                 key={`${p}-dup-${i}`}
-                className="shrink-0 px-6 py-3 rounded-full border border-border bg-background text-sm font-medium text-muted-foreground whitespace-nowrap"
+                className="shrink-0 px-5 py-2.5 border border-white/10 bg-white/[0.03] text-sm font-medium text-white/70 whitespace-nowrap"
               >
                 {p}
               </div>
@@ -481,183 +482,250 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Features Bento Grid ── */}
-      <section className="py-20 bg-muted/30">
-        <div className="container">
-          <div className="text-center space-y-4 mb-14">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-              Everything you need
+      {/* ── Features ── */}
+      <section className="relative py-24 md:py-28 overflow-hidden">
+        <div className="absolute top-0 right-0 w-[420px] h-[420px] bg-primary/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[320px] h-[320px] bg-accent/10 blur-3xl pointer-events-none" />
+        <div className="container relative">
+          <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+            <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
+              <p className="text-xs font-semibold text-primary uppercase tracking-[0.2em]">
+                Everything you need
+              </p>
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                Powerful features,{" "}
+                <span className="bg-gradient-to-r from-accent via-primary to-destructive bg-clip-text text-transparent">
+                  zero complexity
+                </span>
+              </h2>
+              <p className="text-muted-foreground text-lg leading-relaxed">
+                Built by operators tired of clunky POS systems — so every screen
+                earns its place on a busy service night.
+              </p>
+              <Button
+                asChild
+                className="gradient-warm text-white border-0 gap-2 hover:opacity-90"
+              >
+                <Link to="/auth?mode=signup">
+                  Explore the product
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
-            <h2 className="text-3xl md:text-5xl font-bold">
-              Powerful features,{" "}
-              <span className="text-primary">zero complexity</span>
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-              Built by restaurant operators who were tired of clunky,
-              overcomplicated POS systems.
+
+            <div className="lg:col-span-7 space-y-4">
+              {/* Live dashboard mock — visual product anchor */}
+              <div className="border border-border bg-black text-white overflow-hidden shadow-warm">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/[0.03]">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 bg-destructive animate-pulse" />
+                    <span className="text-xs font-medium text-white/70">Live outlets</span>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-widest text-primary">Today</span>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-xs text-white/45 uppercase tracking-widest">Net sales</p>
+                      <p className="text-3xl font-bold mt-1">₹73,800</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-accent font-medium">▲ 18% vs yesterday</p>
+                      <p className="text-xs text-white/40 mt-1">142 orders · 3 outlets</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 h-20 items-end">
+                    {[40, 65, 48, 80, 55, 92, 70].map((h, i) => (
+                      <div
+                        key={i}
+                        className="w-full bg-gradient-to-t from-destructive/80 via-primary to-accent/90 opacity-90"
+                        style={{ height: `${h}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-2 pt-1">
+                    {[
+                      { name: "Outlet A · Bandra", amt: "₹24,500", hot: true },
+                      { name: "Outlet B · Andheri", amt: "₹18,200", hot: false },
+                      { name: "Outlet C · Powai", amt: "₹31,100", hot: true },
+                    ].map((row) => (
+                      <div
+                        key={row.name}
+                        className="flex items-center justify-between text-sm border-t border-white/5 pt-2"
+                      >
+                        <span className="text-white/70 flex items-center gap-2">
+                          <span className={`h-1.5 w-1.5 ${row.hot ? "bg-primary" : "bg-white/30"}`} />
+                          {row.name}
+                        </span>
+                        <span className="font-semibold tabular-nums">{row.amt}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                {features.slice(1).map((feature, i) => (
+                  <div
+                    key={feature.title}
+                    className="landing-edge group border border-border bg-background/80 backdrop-blur-sm p-5 hover:bg-primary/[0.04] hover:border-primary/30 transition-all duration-300"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 shrink-0 flex items-center justify-center bg-gradient-to-br from-accent/20 via-primary/15 to-destructive/10 border border-primary/15 group-hover:from-accent/30 group-hover:via-primary/25 transition-colors">
+                        <feature.icon className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="space-y-1 min-w-0">
+                        <h3 className="font-semibold text-sm leading-snug">{feature.title}</h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {feature.description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── How It Works ── */}
+      <section className="relative py-24 md:py-28 bg-black text-white overflow-hidden">
+        <div className="absolute inset-0 landing-mesh" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent hidden md:block" />
+        <div className="container relative">
+          <div className="max-w-2xl mb-14 md:mb-20">
+            <p className="text-xs font-semibold text-primary uppercase tracking-[0.2em] mb-3">
+              Simple onboarding
             </p>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+              Up and running in{" "}
+              <span className="text-primary">3 steps</span>
+            </h2>
           </div>
 
-          {/* Bento: 1 large + 2 columns of smalls */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Large card */}
-            <div className="lg:col-span-1 lg:row-span-2 rounded-2xl border border-border bg-background p-8 flex flex-col gap-6 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all group">
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-primary/20 to-orange-400/10 flex items-center justify-center group-hover:from-primary/30 transition-colors">
-                <LayoutDashboard className="h-7 w-7 text-primary" />
-              </div>
-              <div className="space-y-3 flex-1">
-                <h3 className="text-xl font-semibold">
-                  Multi-Outlet Dashboard
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Control every location from a single screen — real-time
-                  sales, staff activity, and live orders at a glance. Perfect
-                  for growing chains and cloud kitchens.
-                </p>
-              </div>
-              <div className="rounded-xl bg-muted/60 p-4 space-y-2">
-                {["Outlet A — ₹24,500 today", "Outlet B — ₹18,200 today", "Outlet C — ₹31,100 today"].map(
-                  (row) => (
-                    <div
-                      key={row}
-                      className="flex items-center gap-2 text-sm text-muted-foreground"
-                    >
-                      <span className="h-2 w-2 rounded-full bg-primary/60 shrink-0" />
-                      {row}
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* Small cards — right 2 columns */}
-            {features.slice(1).map((feature) => (
+          <div className="grid md:grid-cols-3 gap-8 md:gap-6">
+            {steps.map((step, i) => (
               <div
-                key={feature.title}
-                className="rounded-2xl border border-border bg-background p-6 flex gap-4 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 transition-all group"
+                key={step.number}
+                className="relative border border-white/10 bg-white/[0.03] p-6 md:p-8 hover:border-primary/40 transition-colors group"
               >
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                  <feature.icon className="h-5 w-5 text-primary" />
+                <p className="text-6xl md:text-7xl font-bold leading-none mb-6 bg-gradient-to-br from-accent via-primary to-destructive bg-clip-text text-transparent opacity-90 group-hover:opacity-100 transition-opacity">
+                  {step.number}
+                </p>
+                <div className="h-10 w-10 mb-4 flex items-center justify-center border border-primary/30 bg-primary/10">
+                  <step.icon className="h-5 w-5 text-primary" />
                 </div>
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-sm">{feature.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {feature.description}
-                  </p>
-                </div>
+                <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
+                <p className="text-sm text-white/55 leading-relaxed">
+                  {step.description}
+                </p>
+                {i < steps.length - 1 && (
+                  <ArrowRight className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-primary/50 z-10" />
+                )}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── How It Works ── */}
-      <section className="py-24">
-        <div className="container">
-          <div className="text-center space-y-4 mb-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-              Simple onboarding
+      {/* ── Testimonials ── */}
+      <section className="py-24 md:py-28 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-muted/60 via-background to-background" />
+        <div className="container relative">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+            <div className="space-y-3 max-w-xl">
+              <p className="text-xs font-semibold text-primary uppercase tracking-[0.2em]">
+                What restaurateurs say
+              </p>
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+                Loved by restaurant owners
+              </h2>
             </div>
-            <h2 className="text-3xl md:text-5xl font-bold">
-              Up and running in{" "}
-              <span className="text-primary">3 steps</span>
-            </h2>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} className="h-5 w-5 fill-accent text-accent" />
+              ))}
+              <span className="ml-2 text-sm text-muted-foreground">4.9 average</span>
+            </div>
           </div>
 
-          <div className="relative max-w-4xl mx-auto">
-            {/* Connecting line — desktop */}
-            <div className="hidden md:block absolute top-10 left-[calc(16.67%-1px)] right-[calc(16.67%-1px)] h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-
-            <div className="grid md:grid-cols-3 gap-10">
-              {steps.map((step, i) => (
-                <div key={step.number} className="relative text-center group">
-                  <div className="flex justify-center mb-6">
-                    <div className="relative">
-                      <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary/20 to-orange-400/10 border-2 border-primary/20 flex items-center justify-center group-hover:border-primary/50 transition-colors">
-                        <step.icon className="h-8 w-8 text-primary" />
-                      </div>
-                      <span className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold mb-3">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {step.description}
+          <div className="grid lg:grid-cols-12 gap-4">
+            {/* Featured quote */}
+            <blockquote className="lg:col-span-7 border border-border bg-black text-white p-8 md:p-10 flex flex-col justify-between min-h-[280px]">
+              <div>
+                <div className="flex gap-0.5 mb-6">
+                  {Array.from({ length: testimonials[0].stars }).map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-accent text-accent" />
+                  ))}
+                </div>
+                <p className="text-xl md:text-2xl font-medium leading-relaxed text-white/90">
+                  &ldquo;{testimonials[0].quote}&rdquo;
+                </p>
+              </div>
+              <footer className="mt-8 pt-6 border-t border-white/10 flex items-center gap-3">
+                <div className="h-11 w-11 flex items-center justify-center text-sm font-bold text-white gradient-warm">
+                  {testimonials[0].initials}
+                </div>
+                <div>
+                  <p className="font-semibold">{testimonials[0].name}</p>
+                  <p className="text-sm text-white/50">
+                    {testimonials[0].restaurant} · {testimonials[0].city}
                   </p>
                 </div>
+              </footer>
+            </blockquote>
+
+            <div className="lg:col-span-5 flex flex-col gap-4">
+              {testimonials.slice(1).map((t) => (
+                <blockquote
+                  key={t.name}
+                  className="flex-1 border border-border bg-background p-6 md:p-7 flex flex-col justify-between hover:border-primary/35 transition-colors"
+                >
+                  <div>
+                    <div className="flex gap-0.5 mb-4">
+                      {Array.from({ length: t.stars }).map((_, i) => (
+                        <Star key={i} className="h-3.5 w-3.5 fill-accent text-accent" />
+                      ))}
+                    </div>
+                    <p className="text-sm md:text-base text-foreground/80 leading-relaxed">
+                      &ldquo;{t.quote}&rdquo;
+                    </p>
+                  </div>
+                  <footer className="mt-6 pt-4 border-t border-border flex items-center gap-3">
+                    <div className="h-9 w-9 flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br from-accent via-primary to-destructive">
+                      {t.initials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.restaurant}, {t.city}
+                      </p>
+                    </div>
+                  </footer>
+                </blockquote>
               ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      <section className="py-20 bg-muted/30">
-        <div className="container">
-          <div className="text-center space-y-4 mb-14">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-              What restaurateurs say
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold">
-              Loved by restaurant owners
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t) => (
-              <div
-                key={t.name}
-                className="rounded-2xl border border-border bg-background p-6 space-y-4 hover:border-primary/30 hover:shadow-md transition-all"
-              >
-                {/* Stars */}
-                <div className="flex gap-0.5">
-                  {Array.from({ length: t.stars }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className="h-4 w-4 fill-amber-400 text-amber-400"
-                    />
-                  ))}
-                </div>
-                {/* Quote mark */}
-                <p className="text-2xl text-primary/20 font-serif leading-none">
-                  &ldquo;
-                </p>
-                <p className="text-sm text-muted-foreground leading-relaxed -mt-4">
-                  {t.quote}
-                </p>
-                {/* Author */}
-                <div className="flex items-center gap-3 pt-2 border-t border-border">
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    {t.initials}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.restaurant}, {t.city}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Why banaoo.io ── */}
-      <section className="py-20">
-        <div className="container">
-          <div className="grid md:grid-cols-2 gap-16 items-center">
+      {/* ── Why Flaze ── */}
+      <section className="relative py-24 md:py-28 overflow-hidden border-y border-border">
+        <div className="absolute inset-0 landing-mesh opacity-50" />
+        <div className="container relative">
+          <div className="grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                Why banaoo.io
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold leading-tight">
+              <p className="text-xs font-semibold text-primary uppercase tracking-[0.2em]">
+                Why Flaze
+              </p>
+              <h2 className="text-4xl md:text-5xl font-bold leading-[1.1] tracking-tight">
                 Built for Indian restaurants, by people who love food
               </h2>
-              <p className="text-muted-foreground leading-relaxed">
-                We started banaoo.io after watching talented restaurant owners
-                struggle with clunky, expensive POS systems that weren't built
+              <p className="text-muted-foreground text-lg leading-relaxed">
+                We started Flaze after watching talented restaurant owners
+                struggle with clunky, expensive POS systems that weren&apos;t built
                 for how Indian restaurants actually operate. So we built
                 something better.
               </p>
@@ -672,16 +740,16 @@ export default function Landing() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-px bg-border border border-border">
               {whyItems.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-xl border border-border bg-background p-4 flex flex-col items-center gap-2 text-center hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                  className="bg-background p-4 md:p-5 flex flex-col items-start gap-3 hover:bg-primary/[0.06] transition-colors group"
                 >
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <div className="h-9 w-9 flex items-center justify-center bg-gradient-to-br from-accent/25 via-primary/15 to-destructive/10 border border-primary/15 group-hover:border-primary/40 transition-colors">
                     <item.icon className="h-4 w-4 text-primary" />
                   </div>
-                  <p className="text-xs font-medium leading-tight">
+                  <p className="text-xs md:text-sm font-medium leading-snug">
                     {item.label}
                   </p>
                 </div>
@@ -692,17 +760,18 @@ export default function Landing() {
       </section>
 
       {/* ── Final CTA ── */}
-      <section className="py-24">
+      <section className="py-16 md:py-20">
         <div className="container">
-          <div className="relative rounded-3xl overflow-hidden">
-            <div className="gradient-warm absolute inset-0 opacity-90" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
-            <div className="relative px-8 py-16 md:py-24 text-center space-y-6">
-              <h2 className="text-3xl md:text-5xl font-bold text-white">
+          <div className="relative overflow-hidden">
+            <div className="gradient-warm absolute inset-0" />
+            <div className="absolute inset-0 landing-grid-fade opacity-40" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.2),transparent_55%)]" />
+            <div className="relative px-6 py-16 md:px-12 md:py-24 text-center space-y-6">
+              <h2 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
                 Ready to transform your restaurant?
               </h2>
-              <p className="text-white/80 max-w-xl mx-auto text-lg">
-                Join 500+ restaurants already running smarter with banaoo.io.
+              <p className="text-white/85 max-w-xl mx-auto text-lg">
+                Join 500+ restaurants already running smarter with Flaze.
                 Start free — no credit card, no commitment.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-2">
@@ -717,7 +786,7 @@ export default function Landing() {
                   </Link>
                 </Button>
               </div>
-              <p className="text-white/60 text-xs">
+              <p className="text-white/65 text-xs">
                 7-day free trial · No credit card required · Cancel anytime
               </p>
             </div>
@@ -730,7 +799,7 @@ export default function Landing() {
       <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Download Banaoo Android App</DialogTitle>
+            <DialogTitle>Download Flaze Android App</DialogTitle>
             <DialogDescription>
               Share your email and contact number to get the latest APK instantly.
             </DialogDescription>

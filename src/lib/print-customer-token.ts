@@ -76,7 +76,7 @@ export async function printCustomerTokenSlip(
     return {
       ok: false,
       message:
-        "Wi‑Fi/LAN printing must be configured in the Banaoo Android app (Settings → Printers → Native printer settings).",
+        "Wi‑Fi/LAN printing must be configured in the Flaze Android app (Settings → Printers → Native printer settings).",
     };
   }
 

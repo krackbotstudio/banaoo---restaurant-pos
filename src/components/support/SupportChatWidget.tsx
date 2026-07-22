@@ -44,7 +44,7 @@ export function SupportChatWidget() {
   };
 
   const handleContactTeam = () => {
-    window.location.href = "mailto:connect@banaoo.in?subject=Support Request";
+    window.location.href = "mailto:connect@flazee.com?subject=Support Request";
   };
 
   return (
@@ -66,7 +66,7 @@ export function SupportChatWidget() {
                 <MessageCircle className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm">banaoo.in Support</h3>
+                <h3 className="font-semibold text-sm">Flaze Support</h3>
                 <p className="text-xs opacity-80">We typically reply instantly</p>
               </div>
             </div>
@@ -115,7 +115,7 @@ export function SupportChatWidget() {
               onClick={handleContactTeam}
             >
               <Mail className="h-3 w-3" />
-              Talk to our team at connect@banaoo.in
+              Talk to our team at connect@flazee.com
             </Button>
           </div>
 

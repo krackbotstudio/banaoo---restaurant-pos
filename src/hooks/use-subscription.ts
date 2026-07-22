@@ -339,11 +339,11 @@ export function useSubscription() {
         key: orderData.key_id,
         amount: orderData.amount,
         currency: orderData.currency,
-        name: "banaoo.io",
+        name: "Flaze",
         description,
         order_id: orderData.order_id,
         prefill: { email: user.email ?? "" },
-        theme: { color: "#f97316" },
+        theme: { color: "#FF4500" },
         modal: { ondismiss: () => resolve(false) },
         handler: async (response: {
           razorpay_order_id: string;
@@ -357,7 +357,7 @@ export function useSubscription() {
           } catch (err) {
             console.error("Payment verification error:", err);
             toast.error(
-              "Payment received but activation failed. Contact connect@banaoo.in"
+              "Payment received but activation failed. Contact connect@flazee.com"
             );
             resolve(false);
           }

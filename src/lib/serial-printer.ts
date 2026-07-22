@@ -460,7 +460,7 @@ function writeBillingReceiptBody(
 
   d.dashes(w);
   d.align("C").line("Thank you!").line("Visit us again soon");
-  d.line("Powered by banaoo.in");
+  d.line("Powered by flazee.com");
 }
 
 export interface KitchenHandoffSlipData {

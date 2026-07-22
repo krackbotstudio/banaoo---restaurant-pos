@@ -1,4 +1,4 @@
-/** Map Shiprocket / webhook status strings to Banaoo shipment status */
+/** Map Shiprocket / webhook status strings to Flaze shipment status */
 const SR_TO_BANAOO = {
   NEW: 'shipment_created',
   AWB_ASSIGNED: 'awaiting_rider',

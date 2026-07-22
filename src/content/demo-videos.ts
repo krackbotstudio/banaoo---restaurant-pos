@@ -33,7 +33,7 @@ export const DEMO_VIDEOS: DemoVideo[] = [
   {
     id: "create-account",
     driveFileId: "1tRfNknKxiB2WYYTk8BcqxGw6nYmlTeha",
-    title: "How to create a Banaoo account",
+    title: "How to create a Flaze account",
     description: "Sign up and set up your restaurant owner account.",
     category: "getting-started",
   },
@@ -41,7 +41,7 @@ export const DEMO_VIDEOS: DemoVideo[] = [
     id: "owner-sign-in",
     driveFileId: "1TBTr66bbn2KO1cPOkH8PDECq01A4lKoA",
     title: "How to sign in as restaurant owner",
-    description: "Log in to your Banaoo dashboard as the owner.",
+    description: "Log in to your Flaze dashboard as the owner.",
     category: "getting-started",
   },
   {
@@ -62,7 +62,7 @@ export const DEMO_VIDEOS: DemoVideo[] = [
     id: "outlet-settings",
     driveFileId: "16Wz26KH6oXVxjFy1EUW7efJHjnOYPJng",
     title: "Configure outlet settings",
-    description: "Outlet-level settings in the Banaoo restaurant app.",
+    description: "Outlet-level settings in the Flaze restaurant app.",
     category: "outlets",
   },
   {

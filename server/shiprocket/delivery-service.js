@@ -108,7 +108,7 @@ function buildQuickHyperlocalPayload(order, items, settings, coords) {
     billing_pincode: pincode,
     billing_state: state,
     billing_country: 'India',
-    billing_email: 'customer@banaoo.in',
+    billing_email: 'customer@flazee.com',
     billing_phone: phone,
     shipping_is_billing: true,
     latitude: coords.deliveryLat,

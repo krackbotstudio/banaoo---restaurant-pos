@@ -130,7 +130,7 @@ export default function Onboarding() {
           <div className="flex items-center justify-center h-16 w-16 rounded-2xl gradient-warm mx-auto mb-4">
             <ChefHat className="h-8 w-8 text-white" />
           </div>
-          <h1 className="font-display text-3xl font-bold">Welcome to banaoo.io</h1>
+          <h1 className="font-display text-3xl font-bold">Welcome to Flaze</h1>
           <p className="text-muted-foreground mt-2">Let's set up your account in 2 quick steps</p>
         </div>
 

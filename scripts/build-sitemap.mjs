@@ -12,7 +12,7 @@ import { dirname, resolve } from "node:path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const SITE_URL = process.env.SITE_URL || "https://banaoo.io";
+const SITE_URL = process.env.SITE_URL || "https://flazee.com";
 const PUBLIC_DIR = resolve(__dirname, "..", "public");
 const TODAY = new Date().toISOString().split("T")[0];
 

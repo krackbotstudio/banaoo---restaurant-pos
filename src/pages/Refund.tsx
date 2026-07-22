@@ -13,7 +13,7 @@ export default function Refund() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Refund & Cancellation Policy"
-        description="banaoo's Refund and Cancellation Policy — eligibility, processing timelines and how to request a refund on your subscription."
+        description="Flaze's Refund and Cancellation Policy — eligibility, processing timelines and how to request a refund on your subscription."
         path="/refund"
       />
       <StructuredData
@@ -33,7 +33,7 @@ export default function Refund() {
 
           <div className="space-y-10 text-sm leading-relaxed">
             <p className="text-muted-foreground text-base">
-              We want you to be completely satisfied with banaoo.io. This policy explains your options if
+              We want you to be completely satisfied with Flaze. This policy explains your options if
               you are not happy with your subscription.
             </p>
 
@@ -77,8 +77,8 @@ export default function Refund() {
               <ol className="list-decimal pl-5 space-y-2 text-muted-foreground">
                 <li>
                   Email us at{" "}
-                  <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                    connect@banaoo.in
+                  <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                    connect@flazee.com
                   </a>{" "}
                   with the subject line "Refund Request."
                 </li>
@@ -141,8 +141,8 @@ export default function Refund() {
               <p className="text-muted-foreground">
                 If you believe you have been charged incorrectly, please contact us within{" "}
                 <strong className="text-foreground">30 days of the charge</strong> at{" "}
-                <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                  connect@banaoo.in
+                <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                  connect@flazee.com
                 </a>
                 . We will investigate promptly and issue a correction or refund if the charge was in error.
                 Please do not file a chargeback without contacting us first — we will resolve legitimate
@@ -156,11 +156,11 @@ export default function Refund() {
                 For any questions about this policy or to initiate a refund:
               </p>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">banaoo.io Support</p>
+                <p className="font-medium text-foreground">Flaze Support</p>
                 <p>
                   Email:{" "}
-                  <a href="mailto:connect@banaoo.in" className="text-primary underline underline-offset-2">
-                    connect@banaoo.in
+                  <a href="mailto:connect@flazee.com" className="text-primary underline underline-offset-2">
+                    connect@flazee.com
                   </a>
                 </p>
                 <p>Response time: within 2 business days</p>

@@ -21,7 +21,7 @@ export default function DocsArticle() {
   const prev = index > 0 ? DOC_ARTICLES[index - 1] : null;
   const next = index >= 0 && index < DOC_ARTICLES.length - 1 ? DOC_ARTICLES[index + 1] : null;
 
-  const articleUrl = `https://banaoo.io/docs/${article.slug}`;
+  const articleUrl = `https://flazee.com/docs/${article.slug}`;
 
   return (
     <>
@@ -32,7 +32,7 @@ export default function DocsArticle() {
         type="article"
         publishedTime={article.lastUpdated}
         modifiedTime={article.lastUpdated}
-        author="banaoo"
+        author="Flaze"
       />
       <StructuredData
         data={buildBreadcrumbList([
@@ -49,14 +49,14 @@ export default function DocsArticle() {
           description: article.description,
           datePublished: article.lastUpdated,
           dateModified: article.lastUpdated,
-          author: { "@type": "Organization", name: "banaoo", url: "https://banaoo.io" },
+          author: { "@type": "Organization", name: "Flaze", url: "https://flazee.com" },
           publisher: {
             "@type": "Organization",
-            name: "banaoo",
-            url: "https://banaoo.io",
+            name: "Flaze",
+            url: "https://flazee.com",
             logo: {
               "@type": "ImageObject",
-              url: "https://banaoo.io/logo.png",
+              url: "https://flazee.com/logo.png",
             },
           },
           mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },

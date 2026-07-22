@@ -74,7 +74,7 @@ For orders from your **customer ordering link** (not Swiggy/Zomato):
 1. Customer chooses **Delivery** at checkout (address, pincode, city, state required).
 2. Order appears in **Orders** with type **delivery**.
 3. Mark the order **Preparing** when the kitchen accepts it.
-4. If **Settings → Delivery → Shiprocket** is connected with **Auto-book delivery** on, Banaoo books a rider after your prep time.
+4. If **Settings → Delivery → Shiprocket** is connected with **Auto-book delivery** on, Flaze books a rider after your prep time.
 5. Open the order to see **Shiprocket Delivery** — AWB, courier, timeline, Track / Retry / Cancel.
 6. **Dashboard** shows delivery overview stats for the active outlet.
 

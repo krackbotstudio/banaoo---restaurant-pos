@@ -236,7 +236,7 @@ function VoicePOSOrder({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary to-orange-400 px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-primary to-accent px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-white" />
             <span className="text-white font-bold">AI Voice Order</span>

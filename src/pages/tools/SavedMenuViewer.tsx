@@ -273,12 +273,12 @@ export default function SavedMenuViewer() {
             {menuData.categories.length} categories • {totalItems} items
           </p>
           <a
-            href="https://banaoo.io"
+            href="https://flazee.com"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-primary transition-colors"
           >
-            Powered by <span className="font-semibold">banaoo.io</span>
+            Powered by <span className="font-semibold">flazee.com</span>
           </a>
         </div>
       </footer>

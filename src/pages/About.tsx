@@ -37,8 +37,8 @@ export default function About() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="About banaoo"
-        description="Meet the team behind banaoo — restaurant operators and engineers building a modern POS and management platform for Indian restaurants, cloud kitchens, QSRs and self-service counters."
+        title="About Flaze"
+        description="Meet the team behind Flaze — restaurant operators and engineers building a modern POS and management platform for Indian restaurants, cloud kitchens, QSRs and self-service counters."
         path="/about"
       />
       <StructuredData
@@ -53,7 +53,7 @@ export default function About() {
       <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
         <div className="container text-center space-y-6 max-w-3xl">
           <h1 className="text-4xl md:text-5xl font-bold">
-            About banaoo.io
+            About Flaze
           </h1>
           <p className="text-muted-foreground text-lg">
             Passionate problem solvers building meaningful technology for restaurants and food businesses.
@@ -68,7 +68,7 @@ export default function About() {
             <h2 className="text-2xl md:text-3xl font-bold">Our Story</h2>
             <div className="text-muted-foreground space-y-4 text-left md:text-center">
               <p>
-                banaoo.io began with a simple obsession: the food industry is full of talented
+                Flaze began with a simple obsession: the food industry is full of talented
                 people held back by messy tools, fragmented workflows, and software that was never
                 designed around how a real service floor actually runs.
               </p>
@@ -83,7 +83,7 @@ export default function About() {
                 simple on the surface and dependable underneath?
               </p>
               <p>
-                banaoo.io helps restaurants run orders, kitchens, billing, and customer-facing flows
+                Flaze helps restaurants run orders, kitchens, billing, and customer-facing flows
                 with software that stays customer-centric—because your success is the measure of ours.
               </p>
             </div>

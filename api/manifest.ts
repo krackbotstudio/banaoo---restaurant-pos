@@ -1,7 +1,7 @@
 /**
  * Vercel serverless function: /api/manifest
  * Returns a restaurant-specific Web App Manifest so Chrome installs
- * the correct restaurant's ordering app (not the generic banaoo app).
+ * the correct restaurant's ordering app (not the generic Flaze app).
  *
  * Query params:
  *   name      - Restaurant name (e.g. "Spice Garden")
@@ -11,7 +11,7 @@
 export default function handler(req: any, res: any) {
   const name = String(req.query?.name || "Order Food");
   const startUrl = String(req.query?.start_url || "/");
-  const color = String(req.query?.color || "#f97316");
+  const color = String(req.query?.color || "#FF4500");
 
   // Truncate short_name to 12 chars (manifest spec recommendation)
   const shortName = name.length > 12 ? name.slice(0, 12) : name;

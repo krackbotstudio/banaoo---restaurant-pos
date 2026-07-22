@@ -41,7 +41,7 @@ function generateEmailHtml({ customerName, planType, periodMonths, amount, start
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Subscription Confirmation - banaoo.in</title>
+  <title>Subscription Confirmation - Flaze</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f7fafc;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f7fafc; padding: 40px 20px;">
@@ -51,7 +51,7 @@ function generateEmailHtml({ customerName, planType, periodMonths, amount, start
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 12px 12px 0 0; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">🎉 Welcome to banaoo.in!</h1>
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">🎉 Welcome to Flaze!</h1>
               <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 16px;">Your subscription is now active</p>
             </td>
           </tr>
@@ -63,7 +63,7 @@ function generateEmailHtml({ customerName, planType, periodMonths, amount, start
                 Hi <strong>${customerName || 'there'}</strong>,
               </p>
               <p style="color: #4a5568; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
-                Thank you for choosing banaoo.in! Your payment has been successfully processed and your subscription is now active.
+                Thank you for choosing Flaze! Your payment has been successfully processed and your subscription is now active.
               </p>
               
               <!-- Plan Details Card -->
@@ -120,7 +120,7 @@ function generateEmailHtml({ customerName, planType, periodMonths, amount, start
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center" style="padding: 20px 0;">
-                    <a href="https://banaoo.in/dashboard" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                    <a href="https://flazee.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #FF4500 0%, #E80808 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px;">
                       Go to Dashboard →
                     </a>
                   </td>
@@ -133,10 +133,10 @@ function generateEmailHtml({ customerName, planType, periodMonths, amount, start
           <tr>
             <td style="background-color: #f7fafc; padding: 30px 40px; border-radius: 0 0 12px 12px; border-top: 1px solid #e2e8f0;">
               <p style="color: #718096; font-size: 14px; line-height: 1.6; margin: 0 0 10px; text-align: center;">
-                Need help? Contact us at <a href="mailto:connect@banaoo.in" style="color: #667eea; text-decoration: none;">connect@banaoo.in</a>
+                Need help? Contact us at <a href="mailto:connect@flazee.com" style="color: #FF4500; text-decoration: none;">connect@flazee.com</a>
               </p>
               <p style="color: #a0aec0; font-size: 12px; margin: 0; text-align: center;">
-                © ${new Date().getFullYear()} banaoo.in - Restaurant Management Platform
+                © ${new Date().getFullYear()} Flaze - Restaurant Management Platform
               </p>
             </td>
           </tr>
@@ -168,10 +168,10 @@ export async function sendSubscriptionConfirmation({
   const plan = PLAN_DETAILS[planType] || PLAN_DETAILS.starter;
 
   const payload = {
-    sender: { name: 'banaoo.in', email: 'krackbotstudio@gmail.com' },
+    sender: { name: 'Flaze', email: 'connect@flazee.com' },
     to: [{ email, name: customerName || email }],
-    replyTo: { email: 'krackbotstudio@gmail.com', name: 'banaoo.in Support' },
-    subject: `🎉 Welcome to banaoo.in ${plan.name} Plan!`,
+    replyTo: { email: 'connect@flazee.com', name: 'Flaze Support' },
+    subject: `🎉 Welcome to Flaze ${plan.name} Plan!`,
     htmlContent: generateEmailHtml({
       customerName,
       planType,

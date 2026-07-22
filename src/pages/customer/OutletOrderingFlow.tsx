@@ -233,7 +233,7 @@ export function OutletOrderingFlow({
   useDynamicManifest({
     name: restaurantName,
     startUrl: basePath,
-    themeColor: branding?.brand_color || "#f97316",
+    themeColor: branding?.brand_color || "#FF4500",
   });
 
   if (step === "phone") {

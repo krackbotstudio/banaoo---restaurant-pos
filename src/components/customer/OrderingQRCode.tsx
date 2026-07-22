@@ -76,7 +76,7 @@ function useQrExport(svgRef: React.RefObject<SVGSVGElement | null>, fileLabel: s
     }
     svg { display: block; }
     .name { font-size: 24px; font-weight: 700; color: #111827; }
-    .cta { font-size: 14px; font-weight: 600; color: #f97316; margin-top: 8px; }
+    .cta { font-size: 14px; font-weight: 600; color: #FF4500; margin-top: 8px; }
     .url { font-size: 10px; color: #9ca3af; margin-top: 6px; word-break: break-all; max-width: 260px; }
   </style>
 </head>

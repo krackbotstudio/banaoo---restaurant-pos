@@ -94,7 +94,7 @@ function billingPrinterReady(settings: OutletPrinterSettings): string | null {
   const b = settings.billingPrinter;
   if (isNativePrinterBridgeExpected()) return null;
   if (b.transport === "network") {
-    return "Configure the billing printer in the Banaoo Android app (Native printer settings).";
+    return "Configure the billing printer in the Flaze Android app (Native printer settings).";
   }
   const portIndex = b.usbPortIndex;
   const useSerial =

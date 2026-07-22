@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Footer() {
   return (
@@ -7,9 +8,8 @@ export function Footer() {
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="space-y-4">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/logo.png" alt="banaoo.io" className="h-9 w-9 object-contain" />
-              <span className="text-xl font-bold">banaoo.io</span>
+            <Link to="/" className="inline-flex items-center">
+              <BrandLogo variant="darkTagline" className="h-10 w-auto" />
             </Link>
             <p className="text-sm text-muted-foreground">
               Modern restaurant management system to streamline your operations and boost efficiency.
@@ -74,7 +74,7 @@ export function Footer() {
           <div className="space-y-4">
             <h4 className="font-semibold">Contact</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>connect@banaoo.in</li>
+              <li>connect@flazee.com</li>
               <li>Hyderabad, India</li>
             </ul>
           </div>

@@ -103,7 +103,7 @@ export default function BillingCheckout() {
       ? `${getPlanDisplayName(intent.plan_type)} — ${intent.period_months} month${intent.period_months > 1 ? "s" : ""}`
       : intent?.kind === "addon" && intent.addon_type
         ? `${getAddonCatalogItem(intent.addon_type as AddonType)?.name ?? "Add-on"} checkout`
-        : "Banaoo checkout";
+        : "Flaze checkout";
 
   return (
     <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
@@ -121,7 +121,7 @@ export default function BillingCheckout() {
           <CardTitle>{done ? "Payment successful" : title}</CardTitle>
           <CardDescription>
             {fromMobile
-              ? "Complete payment in your browser. Return to the Banaoo app when finished."
+              ? "Complete payment in your browser. Return to the Flaze app when finished."
               : "Secure checkout powered by Razorpay"}
           </CardDescription>
         </CardHeader>
@@ -146,7 +146,7 @@ export default function BillingCheckout() {
             <div className="flex flex-col gap-2">
               {done && fromMobile && (
                 <Button asChild variant="default">
-                  <a href="banaoo://billing/complete">Open Banaoo app</a>
+                  <a href="banaoo://billing/complete">Open Flaze app</a>
                 </Button>
               )}
               <Button variant="outline" onClick={() => navigate("/settings?tab=subscription")}>

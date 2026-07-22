@@ -59,7 +59,7 @@ export default function Affiliate() {
     {
       number: "01",
       title: "Sign Up",
-      description: "Apply to become a Banaoo affiliate. We'll review and approve within 48 hours.",
+      description: "Apply to become a Flaze affiliate. We'll review and approve within 48 hours.",
     },
     {
       number: "02",
@@ -90,9 +90,9 @@ export default function Affiliate() {
         "Once approved, you'll get access to an affiliate dashboard where you can see all your referrals, their subscription status, and your earnings in real-time.",
     },
     {
-      question: "Can I refer existing Banaoo restaurants?",
+      question: "Can I refer existing Flaze restaurants?",
       answer:
-        "No, only new restaurant sign-ups through your referral link count. The referral must be their first time signing up for Banaoo.",
+        "No, only new restaurant sign-ups through your referral link count. The referral must be their first time signing up for Flaze.",
     },
     {
       question: "What happens if a restaurant cancels?",
@@ -110,7 +110,7 @@ export default function Affiliate() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Affiliate Program — earn 10% recurring commission"
-        description="Refer restaurants to banaoo and earn 10% recurring commission on every subscription. Real-time dashboard, lifetime tracking, monthly payouts."
+        description="Refer restaurants to Flaze and earn 10% recurring commission on every subscription. Real-time dashboard, lifetime tracking, monthly payouts."
         path="/affiliate"
       />
       <StructuredData
@@ -134,7 +134,7 @@ export default function Affiliate() {
             <span className="text-primary block">Referring Restaurants</span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Join the Banaoo affiliate program and earn recurring commissions for every restaurant you bring to our platform. No limits, no caps.
+            Join the Flaze affiliate program and earn recurring commissions for every restaurant you bring to our platform. No limits, no caps.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild>
@@ -181,7 +181,7 @@ export default function Affiliate() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Why Join Our Program?</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Everything you need to succeed as a Banaoo affiliate
+              Everything you need to succeed as a Flaze affiliate
             </p>
           </div>
 
@@ -261,7 +261,7 @@ export default function Affiliate() {
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Start Earning?</h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Join hundreds of affiliates already earning with Banaoo
+            Join hundreds of affiliates already earning with Flaze
           </p>
           <Button size="lg" asChild>
             <Link to="/affiliate/auth">Apply Now</Link>

@@ -269,7 +269,7 @@ export function AddPrinterWizard({
 
   const runBluetoothScan = () => {
     if (!inNative) {
-      toast.error("Bluetooth scan is only available in the Banaoo mobile app");
+      toast.error("Bluetooth scan is only available in the Flaze mobile app");
       return;
     }
     setScanning(true);
@@ -277,7 +277,7 @@ export function AddPrinterWizard({
     const posted = postNativeBluetoothScan(isBle ? "ble" : "classic");
     if (!posted) {
       setScanning(false);
-      toast.error("Could not start scan. Reopen the Banaoo app and try again.");
+      toast.error("Could not start scan. Reopen the Flaze app and try again.");
     }
   };
 
@@ -404,7 +404,7 @@ export function AddPrinterWizard({
                       className="gap-2"
                       onClick={() => {
                         if (!openNativePrinterSettings()) {
-                          toast.error("Open this screen in the Banaoo app to pair Bluetooth printers.");
+                          toast.error("Open this screen in the Flaze app to pair Bluetooth printers.");
                         }
                       }}
                     >

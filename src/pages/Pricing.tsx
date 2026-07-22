@@ -9,7 +9,7 @@ export default function Pricing() {
       {/* Hidden from public navigation today; in-app FeatureGate still routes here. Noindex prevents Google from showing it in SERPs while we figure out the public pricing story. */}
       <SEO
         title="Plans & Pricing"
-        description="Compare banaoo plans — Starter, Pro and Enterprise. Transparent pricing, 7-day free trial, no credit card required."
+        description="Compare Flaze plans — Starter, Pro and Enterprise. Transparent pricing, 7-day free trial, no credit card required."
         path="/pricing"
         noindex
       />

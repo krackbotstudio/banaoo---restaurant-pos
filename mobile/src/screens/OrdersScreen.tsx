@@ -22,6 +22,7 @@ import {
 } from "../services/orders";
 import { printBillingReceipt } from "../printer/printer-service";
 import { usePrinterSettings } from "../printer/usePrinterSettings";
+import { tokens } from "../theme/tokens";
 
 const ORDER_FILTERS: Array<OrderStatus | "all"> = [
   "all",
@@ -419,8 +420,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   filterChipActive: {
-    borderColor: "#f97316",
-    backgroundColor: "#fff7ed",
+    borderColor: tokens.colors.primary,
+    backgroundColor: "#FFF1E6",
   },
   filterLabel: { color: "#334155", textTransform: "capitalize" },
   filterLabelActive: { color: "#c2410c", fontWeight: "700" },
@@ -444,8 +445,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   orderRowSelected: {
-    borderColor: "#f97316",
-    backgroundColor: "#fff7ed",
+    borderColor: tokens.colors.primary,
+    backgroundColor: "#FFF1E6",
   },
   orderNo: { fontWeight: "700", color: "#1e293b" },
   orderMeta: { color: "#64748b", fontSize: 12 },
@@ -464,7 +465,7 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   actionBtn: {
     flex: 1,
-    backgroundColor: "#f97316",
+    backgroundColor: tokens.colors.primary,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -523,8 +524,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   modeBtnActive: {
-    borderColor: "#f97316",
-    backgroundColor: "#fff7ed",
+    borderColor: tokens.colors.primary,
+    backgroundColor: "#FFF1E6",
   },
   modeText: { color: "#334155", fontWeight: "700", fontSize: 12 },
   modeTextActive: { color: "#c2410c" },

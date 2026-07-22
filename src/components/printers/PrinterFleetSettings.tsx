@@ -163,7 +163,7 @@ export function PrinterFleetSettings() {
       ) : (
         <p className="text-xs text-muted-foreground rounded-lg border p-3">
           Wi‑Fi/LAN and USB printing are available here. For Bluetooth Classic or BLE printers, use the{" "}
-          <strong>Banaoo Android app</strong>.
+          <strong>Flaze Android app</strong>.
         </p>
       )}
 

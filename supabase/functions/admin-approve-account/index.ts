@@ -78,14 +78,14 @@ serve(async (req) => {
             user_id: target_user_id,
             type: "subscription",
             title: "Account Approved! 🎉",
-            message: "Your banaoo.io account has been approved. You can now choose a plan and start managing your restaurant.",
+            message: "Your Flaze account has been approved. You can now choose a plan and start managing your restaurant.",
             action_url: "/select-plan",
           }
         : {
             user_id: target_user_id,
             type: "subscription",
             title: "Account Application Update",
-            message: "Your banaoo.io account application requires further review. Please contact connect@banaoo.in for assistance.",
+            message: "Your Flaze account application requires further review. Please contact connect@flazee.com for assistance.",
             action_url: null,
           };
 

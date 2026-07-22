@@ -1,6 +1,6 @@
 # Printers
 
-banaoo supports thermal receipt printers for **kitchen tickets (KOT)** and **billing**. You can manage multiple printers per outlet (**printer fleet**) or use legacy kitchen/billing roles.
+Flaze supports thermal receipt printers for **kitchen tickets (KOT)** and **billing**. You can manage multiple printers per outlet (**printer fleet**) or use legacy kitchen/billing roles.
 
 ## Where to configure
 
@@ -24,7 +24,7 @@ Assign **categories** to route menu items to specific kitchen printers when usin
 ## Connection methods
 
 - **USB / Web Serial** — desktop Chrome with compatible ESC/POS printer.
-- **Bluetooth** — via **Banaoo Android app** (pair in system Bluetooth, then select device in native settings).
+- **Bluetooth** — via **Flaze Android app** (pair in system Bluetooth, then select device in native settings).
 - **LAN / Wi‑Fi** — printer IP and port (usually 9100) in native settings.
 
 ## Test print

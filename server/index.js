@@ -951,7 +951,7 @@ app.post('/api/mobile-app/download-request', async (req, res) => {
 app.get('/api/manifest', (req, res) => {
   const name = String(req.query?.name || 'Order Food');
   const startUrl = String(req.query?.start_url || '/');
-  const color = String(req.query?.color || '#f97316');
+  const color = String(req.query?.color || '#FF4500');
 
   const shortName = name.length > 12 ? name.slice(0, 12) : name;
 
@@ -1563,12 +1563,12 @@ app.post('/api/admin/accounts/action', requireAdminAccess, async (req, res) => {
     const notificationData = action === 'approve'
       ? {
           title: "Account Approved! 🎉",
-          message: "Your banaoo.io account has been approved. You can now choose a plan and start managing your restaurant.",
+          message: "Your Flaze account has been approved. You can now choose a plan and start managing your restaurant.",
           action_url: "/select-plan",
         }
       : {
           title: "Account Application Update",
-          message: "Your banaoo.io account application requires further review. Please contact connect@banaoo.in for assistance.",
+          message: "Your Flaze account application requires further review. Please contact connect@flazee.com for assistance.",
           action_url: null,
         };
 
@@ -2034,7 +2034,7 @@ app.post('/api/generate-menu-image', async (req, res) => {
   const fromWikipedia = async (query) => {
     try {
       const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`, {
-        headers: { 'User-Agent': 'banaoo-restaurant-app/1.0' }
+        headers: { 'User-Agent': 'flaze-restaurant-app/1.0' }
       });
       if (!res.ok) return [];
       const data = await res.json();
@@ -2245,7 +2245,7 @@ app.post('/api/support-chat', async (req, res) => {
     return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
   }
 
-  const systemPrompt = `You are the banaoo.in support assistant. banaoo.in is a restaurant management platform that helps restaurant owners manage their business efficiently.
+  const systemPrompt = `You are the Flaze support assistant. Flaze is a restaurant management platform that helps restaurant owners manage their business efficiently.
 
 **Platform Features:**
 - Multi-outlet management - Manage multiple restaurant locations from one dashboard
@@ -2266,16 +2266,16 @@ app.post('/api/support-chat', async (req, res) => {
 All plans include a 14-day free trial with no credit card required.
 
 **Contact Information:**
-- Email: connect@banaoo.in
+- Email: connect@flazee.com
 
 **Guidelines:**
 - Be helpful, friendly, and concise
 - Answer questions about features, pricing, and how to use the platform
-- For billing issues, account problems, or complex technical requests, offer to connect them with the team at connect@banaoo.in
+- For billing issues, account problems, or complex technical requests, offer to connect them with the team at connect@flazee.com
 - If you don't know something specific, acknowledge it and suggest contacting support
 - Keep responses brief but informative
 - Use bullet points for lists when helpful
-- When users want to talk to a human, provide the email connect@banaoo.in`;
+- When users want to talk to a human, provide the email connect@flazee.com`;
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -2297,7 +2297,7 @@ All plans include a 14-day free trial with no credit card required.
       }
       const errorText = await response.text();
       console.error('OpenAI error:', response.status, errorText);
-      return res.status(500).json({ error: 'Something went wrong. Please try again or contact connect@banaoo.in' });
+      return res.status(500).json({ error: 'Something went wrong. Please try again or contact connect@flazee.com' });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');

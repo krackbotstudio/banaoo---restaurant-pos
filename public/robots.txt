@@ -1,4 +1,4 @@
-# banaoo.io – crawler directives
+# flazee.com – crawler directives
 # Public marketing pages: indexable.
 # Application/admin/customer-ordering routes: blocked from crawling.
 
@@ -80,4 +80,4 @@ Disallow: /
 User-agent: Google-Extended
 Disallow: /
 
-Sitemap: https://banaoo.io/sitemap.xml
+Sitemap: https://flazee.com/sitemap.xml

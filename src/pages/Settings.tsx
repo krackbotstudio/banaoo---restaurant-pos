@@ -171,7 +171,7 @@ export default function Settings() {
 
   // Branding state
   const [brandName, setBrandName] = useState(profile?.brand_name || "");
-  const [brandColor, setBrandColor] = useState(profile?.brand_color || "#f97316");
+  const [brandColor, setBrandColor] = useState(profile?.brand_color || "#FF4500");
   const [logoPreview, setLogoPreview] = useState<string | null>(profile?.logo_url || null);
   const [savingBranding, setSavingBranding] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -223,7 +223,7 @@ export default function Settings() {
       setPhone(profile.phone || "");
       setBusinessType(profile.business_type || "");
       setBrandName(profile.brand_name || "");
-      setBrandColor(profile.brand_color || "#f97316");
+      setBrandColor(profile.brand_color || "#FF4500");
       setLogoPreview(profile.logo_url || null);
       setUpiVpa(profile.upi_vpa || "");
       setUpiDisplayName(profile.upi_display_name || "");
@@ -1347,7 +1347,7 @@ export default function Settings() {
                         <li key={f} className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />{f}</li>
                       ))}
                     </ul>
-                    <Button variant="outline" className="w-full" onClick={() => window.open("mailto:connect@banaoo.in?subject=Expand Plan Enquiry", "_blank")}>
+                    <Button variant="outline" className="w-full" onClick={() => window.open("mailto:connect@flazee.com?subject=Expand Plan Enquiry", "_blank")}>
                       Contact Us
                     </Button>
                   </div>
