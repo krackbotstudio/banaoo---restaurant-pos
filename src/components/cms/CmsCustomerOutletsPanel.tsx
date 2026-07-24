@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Loader2,
   LocateFixed,
@@ -8,6 +8,7 @@ import {
   Plus,
   Power,
   QrCode,
+  Search,
   Store,
   Trash2,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "@/lib/leaflet-setup";
 import { API_URL } from "@/lib/api-url";
+import { forwardGeocode } from "@/lib/geocoding";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,9 +165,61 @@ export function CmsCustomerOutletsPanel({
   const [deleteTarget, setDeleteTarget] = useState<CmsOutletRow | null>(null);
   const [orderingTarget, setOrderingTarget] = useState<CmsOutletRow | null>(null);
   const [locating, setLocating] = useState(false);
+  const [geocodingAddress, setGeocodingAddress] = useState(false);
+  const addressGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addressGeocodeRequestId = useRef(0);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const displayBrand = brandName?.trim() || null;
+
+  useEffect(() => {
+    return () => {
+      if (addressGeocodeTimer.current) clearTimeout(addressGeocodeTimer.current);
+    };
+  }, []);
+
+  const pinAddressOnMap = useCallback(async (query: string, { silent = false } = {}) => {
+    const trimmed = query.trim();
+    if (trimmed.length < 8) {
+      if (!silent) toast.error("Enter a more complete address to find it on the map");
+      return false;
+    }
+    const requestId = ++addressGeocodeRequestId.current;
+    setGeocodingAddress(true);
+    try {
+      const hit = await forwardGeocode(trimmed);
+      if (requestId !== addressGeocodeRequestId.current) return false;
+      if (!hit) {
+        if (!silent) toast.error("Could not find that address on the map");
+        return false;
+      }
+      setForm((current) => ({
+        ...current,
+        latitude: hit.lat,
+        longitude: hit.lng,
+      }));
+      if (!silent) {
+        toast.success("Pickup pin placed", {
+          description: hit.displayName,
+        });
+      }
+      return true;
+    } finally {
+      if (requestId === addressGeocodeRequestId.current) {
+        setGeocodingAddress(false);
+      }
+    }
+  }, []);
+
+  const handleAddressChange = (value: string) => {
+    setForm((s) => ({ ...s, address: value }));
+    if (addressGeocodeTimer.current) clearTimeout(addressGeocodeTimer.current);
+    const trimmed = value.trim();
+    if (trimmed.length < 12) return;
+    addressGeocodeTimer.current = setTimeout(() => {
+      void pinAddressOnMap(trimmed, { silent: true });
+    }, 900);
+  };
 
   const loadOutlets = useCallback(async () => {
     setLoading(true);
@@ -194,12 +248,18 @@ export function CmsCustomerOutletsPanel({
   }, [userId, initialOutlets, loadOutlets]);
 
   const openCreate = () => {
+    if (addressGeocodeTimer.current) clearTimeout(addressGeocodeTimer.current);
+    addressGeocodeRequestId.current += 1;
+    setGeocodingAddress(false);
     setEditing(null);
     setForm(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (outlet: CmsOutletRow) => {
+    if (addressGeocodeTimer.current) clearTimeout(addressGeocodeTimer.current);
+    addressGeocodeRequestId.current += 1;
+    setGeocodingAddress(false);
     setEditing(outlet);
     setForm({
       name: outlet.name || "",
@@ -443,14 +503,35 @@ export function CmsCustomerOutletsPanel({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cms-outlet-address">Address</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="cms-outlet-address">Address</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={geocodingAddress || form.address.trim().length < 8}
+                  onClick={() => void pinAddressOnMap(form.address)}
+                >
+                  {geocodingAddress ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="mr-1 h-4 w-4" />
+                  )}
+                  Find on map
+                </Button>
+              </div>
               <Textarea
                 id="cms-outlet-address"
                 value={form.address}
-                onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))}
+                onChange={(e) => handleAddressChange(e.target.value)}
                 rows={2}
                 placeholder="Full address"
               />
+              <p className="text-xs text-muted-foreground">
+                {geocodingAddress
+                  ? "Looking up this address…"
+                  : "Typing a full address places the Shiprocket pickup pin automatically. You can still drag the pin to fine-tune."}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="cms-outlet-phone">Phone</Label>
