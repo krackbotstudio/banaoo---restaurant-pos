@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
-import { Loader2 } from "lucide-react";
+import { Loader2, Phone, CheckCircle2, Bike } from "lucide-react";
 import { ShiprocketLogo } from "@/components/shiprocket/ShiprocketLogo";
 import { DeliveryTrackingMap, TrackActivity } from "@/components/customer/DeliveryTrackingMap";
 
@@ -12,6 +12,7 @@ interface DeliveryStatus {
   courier_name: string | null;
   tracking_url: string | null;
   estimated_delivery_at: string | null;
+  delivered_at: string | null;
   delivery_latitude: number | null;
   delivery_longitude: number | null;
   outlet_name: string | null;
@@ -19,6 +20,9 @@ interface DeliveryStatus {
   outlet_longitude: number | null;
   rider_name: string | null;
   rider_phone: string | null;
+  rider_vehicle: string | null;
+  rider_latitude: number | null;
+  rider_longitude: number | null;
   track_activities: TrackActivity[];
   timeline: { event_code: string; event_message: string; occurred_at: string }[];
 }
@@ -46,7 +50,7 @@ function stepIndex(status: string, orderStatus: string): number {
 }
 
 function pollIntervalMs(status: string): number {
-  if (["out_for_delivery", "picked_up", "rider_assigned"].includes(status)) return 20_000;
+  if (["out_for_delivery", "picked_up", "rider_assigned"].includes(status)) return 10_000;
   return 30_000;
 }
 
@@ -100,19 +104,38 @@ export function CustomerDeliveryTimeline({
   if (!data) return null;
 
   const active = stepIndex(data.delivery_status, data.order_status);
-  const isTerminal = data.delivery_status === "delivered" || data.delivery_status === "cancelled";
+  const isDelivered = data.delivery_status === "delivered";
+  const isTerminal = isDelivered || data.delivery_status === "cancelled";
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
+    <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4 shadow-sm">
       <div className="flex items-center gap-2">
         <ShiprocketLogo variant="icon" className="h-5 w-5" />
-        <span className="text-sm font-semibold text-gray-900">Delivery tracking</span>
+        <span className="text-sm font-semibold text-gray-900">Live Delivery Tracking</span>
         {!isTerminal && (
-          <span className="text-[10px] text-gray-400 ml-auto">Updates every 20–30s</span>
+          <span className="text-[10px] text-emerald-600 font-medium ml-auto flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+            Live (10s refresh)
+          </span>
         )}
       </div>
 
-      <p className="text-sm font-medium text-primary">{data.label}</p>
+      {isDelivered ? (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+          <div>
+            <p className="text-xs font-bold text-emerald-900">Order Delivered!</p>
+            <p className="text-[11px] text-emerald-700">
+              Your food was delivered successfully by {data.rider_name || data.courier_name || "the delivery partner"}.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          {data.label}
+        </p>
+      )}
 
       <DeliveryTrackingMap
         deliveryLat={data.delivery_latitude}
@@ -124,34 +147,54 @@ export function CustomerDeliveryTimeline({
         trackActivities={data.track_activities}
         trackingUrl={data.tracking_url}
         riderName={data.rider_name || data.courier_name}
+        riderLat={data.rider_latitude}
+        riderLng={data.rider_longitude}
       />
 
-      <div className="flex justify-between gap-1">
+      <div className="flex justify-between gap-1 pt-1">
         {STEPS.map((step, i) => (
           <div key={step.key} className="flex-1 text-center">
             <div
-              className={`mx-auto h-2 w-2 rounded-full mb-1 ${
+              className={`mx-auto h-2 w-2 rounded-full mb-1 transition-colors ${
                 i <= active ? "bg-primary" : "bg-gray-200"
               }`}
             />
-            <span className={`text-[10px] leading-tight block ${i <= active ? "text-gray-800" : "text-gray-400"}`}>
+            <span className={`text-[10px] leading-tight block ${i <= active ? "text-gray-800 font-medium" : "text-gray-400"}`}>
               {step.label}
             </span>
           </div>
         ))}
       </div>
 
-      {data.rider_phone && (
-        <p className="text-xs text-gray-500">
-          Rider phone:{" "}
-          <a href={`tel:${data.rider_phone}`} className="text-primary font-medium">
-            {data.rider_phone}
-          </a>
-        </p>
+      {(data.rider_name || data.rider_phone) && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+              <Bike className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-900">{data.rider_name || "Assigned Rider"}</p>
+              <p className="text-[11px] text-gray-500">
+                {data.rider_vehicle ? `Vehicle: ${data.rider_vehicle} · ` : ""}
+                {data.courier_name || "Shiprocket Quick"}
+              </p>
+            </div>
+          </div>
+
+          {data.rider_phone && (
+            <a
+              href={`tel:${data.rider_phone}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors shadow-xs"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Call Rider
+            </a>
+          )}
+        </div>
       )}
 
       {data.awb_code && (
-        <p className="text-xs text-gray-400">AWB: {data.awb_code}</p>
+        <p className="text-[11px] text-gray-400">AWB Tracking Code: {data.awb_code}</p>
       )}
     </div>
   );

@@ -596,7 +596,9 @@ export async function syncShipmentTracking(shipmentRow) {
     rider.rider_name !== shipmentRow.rider_name ||
     rider.rider_phone !== shipmentRow.rider_phone ||
     rider.rider_vehicle !== shipmentRow.rider_vehicle ||
-    rider.rider_id !== shipmentRow.rider_id;
+    rider.rider_id !== shipmentRow.rider_id ||
+    rider.rider_latitude !== shipmentRow.rider_latitude ||
+    rider.rider_longitude !== shipmentRow.rider_longitude;
   const isSnapshotChanged =
     JSON.stringify(snapshot.activities) !==
     JSON.stringify(shipmentRow.last_track_snapshot?.activities || []);
@@ -625,6 +627,8 @@ export async function syncShipmentTracking(shipmentRow) {
        rider_vehicle = $7,
        rider_id = $8,
        rider_assigned_at = $9,
+       rider_latitude = COALESCE($10, rider_latitude),
+       rider_longitude = COALESCE($11, rider_longitude),
        updated_at = now(),
        delivered_at = CASE WHEN $4 = 'delivered' THEN now() ELSE delivered_at END
      WHERE id = $1`,
@@ -638,6 +642,8 @@ export async function syncShipmentTracking(shipmentRow) {
       rider.rider_vehicle,
       rider.rider_id,
       riderAssignedAt,
+      rider.rider_latitude,
+      rider.rider_longitude,
     ]
   );
 
@@ -687,6 +693,8 @@ export async function syncShipmentTracking(shipmentRow) {
     rider_vehicle: rider.rider_vehicle,
     rider_id: rider.rider_id,
     rider_assigned_at: riderAssignedAt,
+    rider_latitude: rider.rider_latitude ?? shipmentRow.rider_latitude,
+    rider_longitude: rider.rider_longitude ?? shipmentRow.rider_longitude,
   };
 }
 

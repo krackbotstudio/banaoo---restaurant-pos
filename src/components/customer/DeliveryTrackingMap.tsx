@@ -22,13 +22,15 @@ interface DeliveryTrackingMapProps {
   trackActivities?: TrackActivity[];
   trackingUrl?: string | null;
   riderName?: string | null;
+  riderLat?: number | null;
+  riderLng?: number | null;
 }
 
 function pinIcon(color: string, label: string) {
   return L.divIcon({
     className: "",
     html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%)">
-      <div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25)">${label}</div>
+      <div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3)">${label}</div>
       <div style="width:12px;height:12px;background:${color};border:2px solid #fff;border-radius:50%;margin-top:2px;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>
     </div>`,
     iconSize: [0, 0],
@@ -38,7 +40,9 @@ function pinIcon(color: string, label: string) {
 
 const restaurantIcon = pinIcon("#16a34a", "Restaurant");
 const deliveryIcon = pinIcon("#7c3aed", "You");
+const riderIcon = pinIcon("#2563eb", "🏍 Rider");
 const scanIcon = pinIcon("#ea580c", "Last update");
+const deliveredIcon = pinIcon("#16a34a", "✓ Delivered");
 
 function FitBounds({ points }: { points: [number, number][] }) {
   const map = useMap();
@@ -74,6 +78,8 @@ export function DeliveryTrackingMap({
   trackActivities = [],
   trackingUrl,
   riderName,
+  riderLat,
+  riderLng,
 }: DeliveryTrackingMapProps) {
   const [lastScanCoords, setLastScanCoords] = useState<[number, number] | null>(null);
   const [geocodingScan, setGeocodingScan] = useState(false);
@@ -111,26 +117,26 @@ export function DeliveryTrackingMap({
       ? ([outletLat, outletLng] as [number, number])
       : null;
 
+  const riderExplicitPoint =
+    riderLat != null && riderLng != null
+      ? ([riderLat, riderLng] as [number, number])
+      : null;
+
+  const riderPoint = riderExplicitPoint ?? lastScanCoords;
+
   const mapPoints = useMemo(() => {
     const pts: [number, number][] = [];
     if (outletPoint) pts.push(outletPoint);
     if (deliveryPoint) pts.push(deliveryPoint);
-    if (lastScanCoords) pts.push(lastScanCoords);
+    if (riderPoint) pts.push(riderPoint);
     return pts;
-  }, [outletPoint, deliveryPoint, lastScanCoords]);
+  }, [outletPoint, deliveryPoint, riderPoint]);
 
-  const routeLine = useMemo(() => {
-    if (!deliveryPoint) return null;
-    if (["picked_up", "out_for_delivery"].includes(deliveryStatus) && lastScanCoords) {
-      return [lastScanCoords, deliveryPoint] as [number, number][];
-    }
-    if (outletPoint) {
-      return [outletPoint, deliveryPoint] as [number, number][];
-    }
-    return null;
-  }, [deliveryPoint, outletPoint, lastScanCoords, deliveryStatus]);
+  const isDelivered = deliveryStatus === "delivered";
+  const isEnRoute = ["picked_up", "out_for_delivery"].includes(deliveryStatus);
+  const isAssigned = ["rider_assigned", "awaiting_rider"].includes(deliveryStatus);
 
-  const mapCenter = deliveryPoint ?? outletPoint ?? DEFAULT_CENTER;
+  const mapCenter = riderPoint ?? deliveryPoint ?? outletPoint ?? DEFAULT_CENTER;
   const canShowMap = deliveryPoint != null;
 
   if (!canShowMap) {
@@ -143,7 +149,7 @@ export function DeliveryTrackingMap({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: 220 }}>
+      <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: 230 }}>
         <MapContainer
           center={mapCenter}
           zoom={14}
@@ -164,11 +170,28 @@ export function DeliveryTrackingMap({
             </Marker>
           )}
 
-          <Marker position={deliveryPoint} icon={deliveryIcon}>
-            <Popup>Delivery address</Popup>
+          <Marker position={deliveryPoint} icon={isDelivered ? deliveredIcon : deliveryIcon}>
+            <Popup>{isDelivered ? "Delivered here" : "Delivery address"}</Popup>
           </Marker>
 
-          {lastScanCoords && lastActivity && (
+          {riderPoint && !isDelivered && (
+            <Marker position={riderPoint} icon={riderName ? pinIcon("#2563eb", `🏍 ${riderName}`) : riderIcon}>
+              <Popup>
+                <div className="text-xs">
+                  <p className="font-semibold text-primary">{riderName || "Rider"}</p>
+                  <p className="text-gray-500">
+                    {isEnRoute
+                      ? "Out for delivery"
+                      : isAssigned
+                      ? "Rider assigned — heading to restaurant"
+                      : "Current location"}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
+          {lastScanCoords && !riderExplicitPoint && lastActivity && !isDelivered && (
             <Marker position={lastScanCoords} icon={scanIcon}>
               <Popup>
                 <span className="text-xs">
@@ -179,13 +202,28 @@ export function DeliveryTrackingMap({
             </Marker>
           )}
 
-          {routeLine && (
+          {/* Route line when Rider is assigned & heading to outlet */}
+          {isAssigned && riderPoint && outletPoint && (
             <Polyline
-              positions={routeLine}
+              positions={[riderPoint, outletPoint]}
+              pathOptions={{ color: "#2563eb", weight: 3, dashArray: "6 6" }}
+            />
+          )}
+
+          {/* Route line to Delivery point */}
+          {deliveryPoint && (
+            <Polyline
+              positions={
+                isEnRoute && riderPoint
+                  ? [riderPoint, deliveryPoint]
+                  : outletPoint
+                  ? [outletPoint, deliveryPoint]
+                  : []
+              }
               pathOptions={{
-                color: deliveryStatus === "out_for_delivery" ? "#7c3aed" : "#94a3b8",
-                weight: 3,
-                dashArray: deliveryStatus === "out_for_delivery" ? undefined : "8 8",
+                color: isDelivered ? "#16a34a" : isEnRoute ? "#7c3aed" : "#94a3b8",
+                weight: 4,
+                dashArray: isEnRoute || isDelivered ? undefined : "8 8",
               }}
             />
           )}
@@ -195,20 +233,23 @@ export function DeliveryTrackingMap({
       {geocodingScan && (
         <p className="text-[11px] text-gray-400 flex items-center gap-1">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Updating last known location…
+          Updating live location…
         </p>
       )}
 
       {lastActivity && !geocodingScan && (
         <p className="text-xs text-gray-600">
-          <span className="font-medium">Latest:</span> {lastActivity.activity}
+          <span className="font-medium">Latest status:</span> {lastActivity.activity}
           {lastActivity.location ? ` at ${lastActivity.location}` : ""}
           {lastActivity.date ? ` · ${lastActivity.date}` : ""}
         </p>
       )}
 
       {riderName && (
-        <p className="text-xs text-gray-500">Rider: {riderName}</p>
+        <p className="text-xs text-gray-700 font-medium flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+          Rider: <span className="font-semibold text-gray-900">{riderName}</span>
+        </p>
       )}
 
       {trackingUrl && (
@@ -216,10 +257,10 @@ export function DeliveryTrackingMap({
           href={trackingUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline mt-1"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          Open live courier tracking
+          Open live courier map
         </a>
       )}
     </div>
