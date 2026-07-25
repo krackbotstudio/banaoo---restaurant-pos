@@ -14,7 +14,7 @@ const ACTIVE_TRACKING_STATUSES = [
   'out_for_delivery',
 ];
 
-const TRACK_REFRESH_MS = 90_000;
+const TRACK_REFRESH_MS = 10_000;
 
 function parseSnapshotActivities(snapshot) {
   if (!snapshot) return [];
@@ -48,12 +48,23 @@ async function maybeRefreshShipmentTracking(row) {
       shipment_id: row.shipment_id,
       awb_code: row.awb_code,
       status: row.status,
+      rider_name: row.rider_name,
+      rider_phone: row.rider_phone,
+      rider_vehicle: row.rider_vehicle,
+      rider_latitude: row.rider_latitude,
+      rider_longitude: row.rider_longitude,
       tracking_url: row.tracking_url,
+      last_track_snapshot: row.last_track_snapshot,
     });
     return {
       ...row,
       status: updated.status,
       tracking_url: updated.tracking_url,
+      rider_name: updated.rider_name,
+      rider_phone: updated.rider_phone,
+      rider_vehicle: updated.rider_vehicle,
+      rider_latitude: updated.rider_latitude,
+      rider_longitude: updated.rider_longitude,
       last_track_snapshot: updated.last_track_snapshot,
       shipment_updated_at: new Date().toISOString(),
     };
@@ -128,7 +139,9 @@ export async function handleShiprocketWebhook(outletId, body, headers = {}) {
     rider.rider_name !== shipRow.rider_name ||
     rider.rider_phone !== shipRow.rider_phone ||
     rider.rider_vehicle !== shipRow.rider_vehicle ||
-    rider.rider_id !== shipRow.rider_id;
+    rider.rider_id !== shipRow.rider_id ||
+    rider.rider_latitude !== shipRow.rider_latitude ||
+    rider.rider_longitude !== shipRow.rider_longitude;
 
   if (!isStatusChanged && !isRiderChanged) {
     return { ok: true, duplicate: true, status: mapped };
@@ -154,6 +167,8 @@ export async function handleShiprocketWebhook(outletId, body, headers = {}) {
        rider_vehicle = $7,
        rider_id = $8,
        rider_assigned_at = $9,
+       rider_latitude = COALESCE($10, rider_latitude),
+       rider_longitude = COALESCE($11, rider_longitude),
        delivered_at = CASE WHEN $2 = 'delivered' THEN now() ELSE delivered_at END,
        updated_at = now()
      WHERE id = $1`,
@@ -167,6 +182,8 @@ export async function handleShiprocketWebhook(outletId, body, headers = {}) {
       rider.rider_vehicle,
       rider.rider_id,
       riderAssignedAt,
+      rider.rider_latitude,
+      rider.rider_longitude,
     ]
   );
 
@@ -222,6 +239,7 @@ export async function getPublicDeliveryStatus(orderId, customerPhone) {
             o.delivery_latitude, o.delivery_longitude, o.delivery_address,
             out.name AS outlet_name, out.latitude AS outlet_latitude, out.longitude AS outlet_longitude,
             s.id AS shipment_row_id, s.status, s.shipment_id, s.awb_code, s.courier_name, s.tracking_url,
+            s.rider_name, s.rider_phone, s.rider_vehicle, s.rider_latitude, s.rider_longitude, s.delivered_at,
             s.estimated_pickup_at, s.estimated_delivery_at, s.updated_at AS shipment_updated_at,
             s.last_track_snapshot
      FROM public.orders o
@@ -262,14 +280,18 @@ export async function getPublicDeliveryStatus(orderId, customerPhone) {
     tracking_url: row.tracking_url,
     estimated_pickup_at: row.estimated_pickup_at,
     estimated_delivery_at: row.estimated_delivery_at,
+    delivered_at: row.delivered_at,
     delivery_latitude: row.delivery_latitude != null ? Number(row.delivery_latitude) : null,
     delivery_longitude: row.delivery_longitude != null ? Number(row.delivery_longitude) : null,
     delivery_address: row.delivery_address,
     outlet_name: row.outlet_name,
     outlet_latitude: row.outlet_latitude != null ? Number(row.outlet_latitude) : null,
     outlet_longitude: row.outlet_longitude != null ? Number(row.outlet_longitude) : null,
-    rider_name: rider?.name || null,
-    rider_phone: rider?.phone || null,
+    rider_name: row.rider_name || rider?.name || null,
+    rider_phone: row.rider_phone || rider?.phone || null,
+    rider_vehicle: row.rider_vehicle || null,
+    rider_latitude: row.rider_latitude != null ? Number(row.rider_latitude) : null,
+    rider_longitude: row.rider_longitude != null ? Number(row.rider_longitude) : null,
     track_activities: trackActivities,
     timeline: events,
   };
