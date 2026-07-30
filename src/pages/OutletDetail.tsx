@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/select";
 import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
 import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
+import { LocationSearchInput } from "@/components/location/LocationSearchInput";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -104,7 +105,7 @@ function MapSizeInvalidator() {
 
 function OutletMapPicker({ lat, lng, onMove }: { lat: number | null; lng: number | null; onMove: (lat: number, lng: number) => void }) {
   return (
-    <div className="rounded-lg overflow-hidden border border-border" style={{ height: 200 }}>
+    <div className="rounded-lg overflow-hidden border border-border" style={{ height: 240 }}>
       <MapContainer
         center={[lat ?? 20.5937, lng ?? 78.9629]}
         zoom={lat ? 15 : 5}
@@ -345,7 +346,7 @@ export default function OutletDetail() {
                 Edit
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-display">Edit Outlet</DialogTitle>
                 <DialogDescription>Update outlet details</DialogDescription>
@@ -484,6 +485,18 @@ export default function OutletDetail() {
                       </button>
                     </div>
                   </div>
+                  <LocationSearchInput
+                    placeholder="Search city, area, landmark, or full address…"
+                    onSelect={(hit) => {
+                      setEditLat(hit.lat);
+                      setEditLng(hit.lng);
+                      setShowLocationPicker(true);
+                      toast({
+                        title: "Location pinned",
+                        description: hit.displayName,
+                      });
+                    }}
+                  />
                   {(editLat && editLng) && !showLocationPicker && (
                     <p className="text-xs text-muted-foreground">
                       Pinned: {editLat.toFixed(5)}, {editLng.toFixed(5)}{" "}
@@ -494,7 +507,9 @@ export default function OutletDetail() {
                     <OutletMapPicker lat={editLat} lng={editLng} onMove={(lat, lng) => { setEditLat(lat); setEditLng(lng); }} />
                   )}
                   {showLocationPicker && (
-                    <p className="text-xs text-muted-foreground">Tap on the map or drag the pin to set location</p>
+                    <p className="text-xs text-muted-foreground">
+                      Search above to find a place, or tap the map / drag the pin to fine-tune.
+                    </p>
                   )}
                 </div>
                 {isCloudKitchen ? (

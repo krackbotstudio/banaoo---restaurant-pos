@@ -1,4 +1,5 @@
 import type { FeatureKey } from "@/hooks/use-feature-gating";
+import { businessHasTables } from "@/lib/business-types";
 
 export const QUICK_ACTIONS_STORAGE_KEY = "banaoo_dashboard_quick_actions";
 export const MAX_QUICK_ACTIONS = 6;
@@ -161,6 +162,30 @@ const catalogById = new Map(QUICK_ACTION_CATALOG.map((a) => [a.id, a]));
 
 export function getQuickActionDefinition(id: string): QuickActionDefinition | undefined {
   return catalogById.get(id as QuickActionId);
+}
+
+/** Adapt quick-action copy for table-less businesses (cloud kitchen, QSR, …). */
+export function withBusinessAwareQuickAction(
+  action: QuickActionDefinition,
+  businessType?: string | null
+): QuickActionDefinition {
+  if (businessHasTables(businessType)) return action;
+  if (action.id === "new-order") {
+    return {
+      ...action,
+      description:
+        businessType === "cloud_kitchen"
+          ? "Take delivery and takeaway orders"
+          : "Take counter and takeaway orders",
+    };
+  }
+  if (action.id === "orders") {
+    return {
+      ...action,
+      description: "Open takeaway and online orders",
+    };
+  }
+  return action;
 }
 
 export type CanAccessQuickAction = (action: QuickActionDefinition) => boolean;

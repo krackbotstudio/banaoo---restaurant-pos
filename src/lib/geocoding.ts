@@ -85,7 +85,90 @@ export interface ForwardGeocodeResult {
   displayName: string;
 }
 
+export interface LocationSearchHit {
+  id: string;
+  lat: number;
+  lng: number;
+  displayName: string;
+  /** Short type / locality hint under the main label */
+  subtitle?: string;
+}
+
 const forwardCache = new Map<string, ForwardGeocodeResult | null>();
+const searchCache = new Map<string, LocationSearchHit[]>();
+
+type NominatimHit = {
+  place_id?: number | string;
+  lat: string;
+  lon: string;
+  display_name?: string;
+  type?: string;
+  class?: string;
+  address?: NominatimAddress & { country?: string; postcode?: string };
+};
+
+function hitSubtitle(hit: NominatimHit): string | undefined {
+  const parts = [
+    hit.type && hit.type !== "yes" ? hit.type.replace(/_/g, " ") : null,
+    hit.address?.city || hit.address?.town || hit.address?.village || hit.address?.suburb,
+    hit.address?.state,
+    hit.address?.country,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
+function mapNominatimHit(hit: NominatimHit): LocationSearchHit {
+  return {
+    id: String(hit.place_id ?? `${hit.lat},${hit.lon}`),
+    lat: Number(hit.lat),
+    lng: Number(hit.lon),
+    displayName: hit.display_name ?? `${hit.lat}, ${hit.lon}`,
+    subtitle: hitSubtitle(hit),
+  };
+}
+
+/**
+ * Search places worldwide and return multiple selectable results.
+ * Used by outlet location search bars.
+ */
+export async function searchLocations(
+  query: string,
+  options?: { limit?: number; countrycodes?: string }
+): Promise<LocationSearchHit[]> {
+  const trimmed = query.trim().replace(/\s+/g, " ");
+  if (trimmed.length < 3) return [];
+
+  const limit = options?.limit ?? 8;
+  const country = options?.countrycodes?.trim().toLowerCase() || "";
+  const cacheKey = `${country}|${limit}|${trimmed.toLowerCase()}`;
+  if (searchCache.has(cacheKey)) return searchCache.get(cacheKey) ?? [];
+
+  const params = new URLSearchParams({
+    q: trimmed,
+    format: "json",
+    addressdetails: "1",
+    limit: String(limit),
+  });
+  if (country) params.set("countrycodes", country);
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+      { headers: NOMINATIM_HEADERS }
+    );
+    if (!res.ok) throw new Error("geocode failed");
+    const data = (await res.json()) as NominatimHit[];
+    if (!Array.isArray(data) || data.length === 0) {
+      searchCache.set(cacheKey, []);
+      return [];
+    }
+    const results = data.map(mapNominatimHit);
+    searchCache.set(cacheKey, results);
+    return results;
+  } catch {
+    return [];
+  }
+}
 
 /** Build progressively broader search queries for Indian addresses. */
 export function buildForwardGeocodeCandidates(query: string): string[] {
@@ -142,29 +225,17 @@ export function buildForwardGeocodeCandidates(query: string): string[] {
 }
 
 async function nominatimSearch(query: string): Promise<ForwardGeocodeResult | null> {
-  const url =
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}` +
-    `&format=json&limit=5&addressdetails=1&countrycodes=in`;
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
-  if (!res.ok) throw new Error("geocode failed");
-  const data = (await res.json()) as Array<{
-    lat: string;
-    lon: string;
-    display_name?: string;
-    address?: { postcode?: string };
-  }>;
-  if (!Array.isArray(data) || data.length === 0) return null;
-
+  const hits = await searchLocations(query, { limit: 5, countrycodes: "in" });
+  if (hits.length === 0) return null;
   const pin = query.match(/\b(\d{6})\b/)?.[1];
   const preferred =
     (pin &&
-      data.find((hit) => hit.address?.postcode === pin)) ||
-    data[0];
-
+      hits.find((hit) => hit.displayName.includes(pin))) ||
+    hits[0];
   return {
-    lat: Number(preferred.lat),
-    lng: Number(preferred.lon),
-    displayName: preferred.display_name ?? query,
+    lat: preferred.lat,
+    lng: preferred.lng,
+    displayName: preferred.displayName,
   };
 }
 

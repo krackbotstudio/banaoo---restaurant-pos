@@ -30,6 +30,8 @@ export interface OutletData {
   latitude?: number | null;
   longitude?: number | null;
   owner_id?: string;
+  operation_mode?: string | null;
+  business_type?: string | null;
 }
 
 // ── Bottom Navigation ─────────────────────────────────────────────────────────

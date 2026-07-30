@@ -218,8 +218,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
     try {
       const { rows } = await pool.query(
         `SELECT o.id, o.name, o.address, o.phone, o.opening_time, o.closing_time,
-                o.latitude, o.longitude, o.owner_id,
-                p.logo_url, p.brand_color, p.brand_name
+                o.latitude, o.longitude, o.owner_id, o.operation_mode,
+                p.logo_url, p.brand_color, p.brand_name, p.business_type
          FROM public.outlets o
          JOIN public.profiles p ON p.user_id = o.owner_id
          WHERE o.id = $1 AND o.is_active = true`,
@@ -239,6 +239,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
         closing_time: o.closing_time,
         latitude: o.latitude != null ? Number(o.latitude) : null,
         longitude: o.longitude != null ? Number(o.longitude) : null,
+        operation_mode: o.operation_mode || 'standard',
+        business_type: o.business_type || null,
         branding: {
           logo_url: o.logo_url,
           brand_color: o.brand_color,
@@ -313,7 +315,7 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
       }
       const brand = profiles[0];
       const { rows: outlets } = await pool.query(
-        `SELECT id, name, address, phone, opening_time, closing_time, latitude, longitude
+        `SELECT id, name, address, phone, opening_time, closing_time, latitude, longitude, operation_mode
          FROM public.outlets
          WHERE owner_id = $1 AND is_active = true
          ORDER BY created_at ASC NULLS LAST, name ASC`,
@@ -325,6 +327,8 @@ export function registerCustomerOrderRoutes(app, { requireAuth }) {
           ...o,
           latitude: o.latitude != null ? Number(o.latitude) : null,
           longitude: o.longitude != null ? Number(o.longitude) : null,
+          operation_mode: o.operation_mode || 'standard',
+          business_type: brand.business_type || null,
         })),
       });
     } catch (err) {
