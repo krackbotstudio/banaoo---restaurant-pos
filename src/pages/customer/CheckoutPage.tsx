@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/cart-context";
 import { useCustomer } from "@/context/customer-context";
@@ -8,6 +8,11 @@ import {
   DeliveryLocationValue,
 } from "@/components/customer/DeliveryLocationPicker";
 import { reverseGeocode } from "@/lib/geocoding";
+import {
+  getCustomerOrderTypes,
+  getDefaultCustomerOrderType,
+  type CustomerOrderType,
+} from "@/lib/business-types";
 import { supabase } from "@/integrations/supabase/client";
 import { API_URL } from "@/lib/api-url";
 import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, Truck, Smartphone } from "lucide-react";
@@ -15,6 +20,8 @@ import { ArrowLeft, Loader2, UtensilsCrossed, ShoppingBag, Banknote, Truck, Smar
 interface Outlet {
   id: string;
   name: string;
+  business_type?: string | null;
+  operation_mode?: string | null;
 }
 
 interface PaymentSettings {
@@ -33,9 +40,18 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
   const defaultAddr = customer?.customer_addresses?.find((a) => a.is_default);
 
+  const allowedOrderTypes = useMemo(
+    () => getCustomerOrderTypes(outlet.business_type),
+    [outlet.business_type]
+  );
+  const defaultOrderType = useMemo(
+    () => getDefaultCustomerOrderType(outlet.business_type),
+    [outlet.business_type]
+  );
+
   const [name, setName] = useState(customer?.name ?? "");
   const [phone] = useState(customer?.phone ?? "");
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("dine_in");
+  const [orderType, setOrderType] = useState<CustomerOrderType>(defaultOrderType);
   const [tableId, setTableId] = useState<string | undefined>();
   const [tableNumber, setTableNumber] = useState("");
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>({
@@ -61,6 +77,14 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
   useEffect(() => {
     if (customer?.name && !name) setName(customer.name);
   }, [customer, name]);
+
+  useEffect(() => {
+    if (!allowedOrderTypes.includes(orderType)) {
+      setOrderType(defaultOrderType);
+      setTableId(undefined);
+      setTableNumber("");
+    }
+  }, [allowedOrderTypes, defaultOrderType, orderType]);
 
   useEffect(() => {
     if (!defaultAddr) return;
@@ -273,8 +297,16 @@ export default function CheckoutPage({ outlet, basePath }: { outlet: Outlet; bas
 
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
           <h3 className="font-semibold text-sm text-gray-900">Order Type</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {(["dine_in", "takeaway", "delivery"] as const).map((type) => {
+          <div
+            className={`grid gap-2 ${
+              allowedOrderTypes.length === 1
+                ? "grid-cols-1"
+                : allowedOrderTypes.length === 2
+                  ? "grid-cols-2"
+                  : "grid-cols-3"
+            }`}
+          >
+            {allowedOrderTypes.map((type) => {
               const icons = { dine_in: UtensilsCrossed, takeaway: ShoppingBag, delivery: Truck };
               const labels = { dine_in: "Dine In", takeaway: "Takeaway", delivery: "Delivery" };
               const Icon = icons[type];

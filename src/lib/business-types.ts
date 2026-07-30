@@ -6,9 +6,8 @@
 //     without enabling type-specific behavior yet
 //   - a `defaultOperationMode` that gets auto-applied to the first outlet
 //     created during onboarding (and to outlets created later via the API)
-//   - a `capabilities` map that downstream UI can branch on
-//     (currently informational — concrete gating per capability is added
-//     incrementally in follow-up PRs)
+//   - a `capabilities` map that downstream UI branches on
+//     (e.g. hasTables gates floor plan, dine-in POS, and customer checkout)
 
 import {
   UtensilsCrossed,
@@ -217,6 +216,33 @@ export function getBusinessType(id?: string | null): BusinessTypeDefinition | un
 /** Capabilities for the given business_type. Unknown / null types fall back to BASE_CAPS. */
 export function getBusinessCapabilities(id?: string | null): BusinessCapabilities {
   return getBusinessType(id)?.capabilities ?? BASE_CAPS;
+}
+
+/** Whether this business uses table / floor-plan workflows. */
+export function businessHasTables(id?: string | null): boolean {
+  return getBusinessCapabilities(id).hasTables;
+}
+
+export type CustomerOrderType = "dine_in" | "takeaway" | "delivery";
+
+/**
+ * Order types offered on the public customer checkout for this business type.
+ * Cloud kitchens / QSRs (no tables) never get dine-in.
+ */
+export function getCustomerOrderTypes(id?: string | null): CustomerOrderType[] {
+  const caps = getBusinessCapabilities(id);
+  const types: CustomerOrderType[] = [];
+  if (caps.hasTables) types.push("dine_in");
+  types.push("takeaway");
+  if (caps.hasDelivery) types.push("delivery");
+  return types.length > 0 ? types : ["takeaway"];
+}
+
+/** Default checkout order type for this business (delivery-first for cloud kitchens). */
+export function getDefaultCustomerOrderType(id?: string | null): CustomerOrderType {
+  const types = getCustomerOrderTypes(id);
+  if (id === "cloud_kitchen" && types.includes("delivery")) return "delivery";
+  return types[0];
 }
 
 /** Whether a business type is shown in the picker but not yet usable. */

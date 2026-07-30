@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Navigation, Receipt, Percent } from "lucide-react";
+import { Loader2, Store, MapPin, Phone, Clock, Edit, ArrowLeft, Trash2, LayoutGrid, Navigation, Receipt, Percent, Search, X } from "lucide-react";
 import { GST_CATEGORIES } from "@/lib/gst-categories";
 import { isSelfServiceMode, type OutletOperationMode } from "@/lib/outlet-operation";
 import { getBusinessCapabilities, getBusinessType } from "@/lib/business-types";
@@ -69,62 +69,172 @@ import {
 } from "@/components/ui/select";
 import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
 import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
+import { searchLocationCandidates, resolvePlaceDetails, type ForwardGeocodeResult } from "@/lib/geocoding";
 
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
+function OutletMapPicker({
+  lat,
+  lng,
+  onMove,
+  onAddressSelect,
+}: {
+  lat: number | null;
+  lng: number | null;
+  onMove: (lat: number, lng: number) => void;
+  onAddressSelect?: (address: string) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<ForwardGeocodeResult[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-// These must be module-level (not nested) so React doesn't recreate component types on each render
-function OutletMapClickHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
-  useMapEvents({ click(e) { onMove(e.latlng.lat, e.latlng.lng); } });
-  return null;
-}
-
-function OutletMapFlyTo({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => { map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 }); }, [lat, lng, map]);
-  return null;
-}
-
-// Fixes Leaflet rendering inside Dialog — map container has 0 size until Dialog is fully open
-function MapSizeInvalidator() {
-  const map = useMap();
   useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 150);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-}
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-function OutletMapPicker({ lat, lng, onMove }: { lat: number | null; lng: number | null; onMove: (lat: number, lng: number) => void }) {
+  const triggerSearch = async (query: string) => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    setSearching(true);
+    const hits = await searchLocationCandidates(query, lat, lng);
+    setResults(hits);
+    setShowDropdown(true);
+    setSearching(false);
+  };
+
+  const handleInputChange = (val: string) => {
+    setSearchQuery(val);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (val.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      void triggerSearch(val);
+    }, 350);
+  };
+
+  const handleSelectLocation = async (hit: ForwardGeocodeResult) => {
+    let targetLat = hit.lat;
+    let targetLng = hit.lng;
+    let targetAddr = hit.displayName;
+
+    if (hit.place_id && (targetLat === 0 || targetLng === 0)) {
+      setSearching(true);
+      const details = await resolvePlaceDetails(hit.place_id);
+      setSearching(false);
+      if (details) {
+        targetLat = details.lat;
+        targetLng = details.lng;
+        targetAddr = details.address || details.name || hit.displayName;
+      }
+    }
+
+    if (targetLat !== 0 || targetLng !== 0) {
+      onMove(targetLat, targetLng);
+      setShowDropdown(false);
+      setSearchQuery(hit.title || targetAddr.split(",")[0] || targetAddr);
+      if (onAddressSelect) {
+        onAddressSelect(targetAddr);
+      }
+    }
+  };
+
   return (
-    <div className="rounded-lg overflow-hidden border border-border" style={{ height: 200 }}>
-      <MapContainer
-        center={[lat ?? 20.5937, lng ?? 78.9629]}
-        zoom={lat ? 15 : 5}
-        style={{ height: "100%", width: "100%" }}
-        zoomControl={true}
-      >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://openstreetmap.org">OSM</a>' />
-        <MapSizeInvalidator />
-        <OutletMapClickHandler onMove={onMove} />
-        {lat !== null && lng !== null && (
-          <>
-            <Marker
-              position={[lat, lng]}
-              draggable
-              eventHandlers={{ dragend: (e) => { const m = e.target as L.Marker; onMove(m.getLatLng().lat, m.getLatLng().lng); } }}
-            />
-            <OutletMapFlyTo lat={lat} lng={lng} />
-          </>
+    <div className="space-y-2">
+      {/* Location Search Bar */}
+      <div ref={searchContainerRef} className="relative z-[1000]">
+        <div className="relative flex items-center">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search place, area, landmark, street, city..."
+            value={searchQuery}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (debounceTimer.current) clearTimeout(debounceTimer.current);
+                void triggerSearch(searchQuery);
+              }
+            }}
+            className="pl-9 pr-9 h-10 text-xs sm:text-sm bg-background border-border shadow-sm focus-visible:ring-1 focus-visible:ring-primary"
+          />
+          {searching ? (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
+          ) : searchQuery ? (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(""); setResults([]); setShowDropdown(false); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+
+        {/* Dropdown Suggestions */}
+        {showDropdown && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-xl max-h-56 overflow-y-auto divide-y divide-border/60 z-[1050]">
+            {results.length > 0 ? (
+              results.map((hit, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => handleSelectLocation(hit)}
+                  className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-accent/80 hover:text-accent-foreground flex items-start gap-2.5 transition-colors"
+                >
+                  <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground truncate">{hit.title || hit.displayName.split(",")[0]}</p>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{hit.subtitle || hit.displayName}</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                {searching ? "Searching places..." : "No matching locations found"}
+              </div>
+            )}
+          </div>
         )}
-      </MapContainer>
+      </div>
+
+      {/* Google Map Container */}
+      <div className="rounded-lg overflow-hidden border border-border relative z-0" style={{ height: 220 }}>
+        <GoogleMapView
+          center={{ lat: lat ?? 20.5937, lng: lng ?? 78.9629 }}
+          zoom={lat ? 15 : 5}
+          onClick={(newLat, newLng) => onMove(newLat, newLng)}
+          markers={
+            lat !== null && lng !== null
+              ? [
+                  {
+                    id: "outlet-pin",
+                    lat,
+                    lng,
+                    draggable: true,
+                    onDragEnd: (newLat, newLng) => onMove(newLat, newLng),
+                    title: "Outlet Location",
+                  },
+                ]
+              : []
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -345,7 +455,7 @@ export default function OutletDetail() {
                 Edit
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-display">Edit Outlet</DialogTitle>
                 <DialogDescription>Update outlet details</DialogDescription>
@@ -439,62 +549,58 @@ export default function OutletDetail() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Outlet Location (for GPS ordering)</Label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="text-xs text-primary font-medium flex items-center gap-1 disabled:opacity-50"
-                        onClick={() => {
-                          if (!navigator.geolocation) {
-                            toast({ variant: "destructive", title: "Not supported", description: "Your browser does not support geolocation." });
-                            return;
-                          }
-                          setGeoLocating(true);
-                          navigator.geolocation.getCurrentPosition(
-                            (pos) => {
-                              setEditLat(pos.coords.latitude);
-                              setEditLng(pos.coords.longitude);
-                              setShowLocationPicker(true);
-                              setGeoLocating(false);
-                            },
-                            (err) => {
-                              setGeoLocating(false);
-                              const msg =
-                                err.code === 1
-                                  ? "Location access denied. Allow location in your browser settings and try again."
-                                  : err.code === 2
-                                  ? "Location unavailable. Try pinning on the map instead."
-                                  : "Location request timed out. Try pinning on the map instead.";
-                              toast({ variant: "destructive", title: "GPS failed", description: msg });
-                            },
-                            { timeout: 10000, enableHighAccuracy: true }
-                          );
-                        }}
-                        disabled={geoLocating}
-                      >
-                        {geoLocating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Navigation className="h-3 w-3" />}
-                        {geoLocating ? "Locating…" : "Use GPS"}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs text-muted-foreground font-medium flex items-center gap-1"
-                        onClick={() => setShowLocationPicker(!showLocationPicker)}
-                      >
-                        <MapPin className="h-3 w-3" />
-                        {showLocationPicker ? "Hide map" : "Pin on map"}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-primary font-medium flex items-center gap-1 disabled:opacity-50"
+                      onClick={() => {
+                        if (!navigator.geolocation) {
+                          toast({ variant: "destructive", title: "Not supported", description: "Your browser does not support geolocation." });
+                          return;
+                        }
+                        setGeoLocating(true);
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            setEditLat(pos.coords.latitude);
+                            setEditLng(pos.coords.longitude);
+                            setGeoLocating(false);
+                          },
+                          (err) => {
+                            setGeoLocating(false);
+                            const msg =
+                              err.code === 1
+                                ? "Location access denied. Allow location in your browser settings and try again."
+                                : err.code === 2
+                                ? "Location unavailable. Try pinning on the map instead."
+                                : "Location request timed out. Try pinning on the map instead.";
+                            toast({ variant: "destructive", title: "GPS failed", description: msg });
+                          },
+                          { timeout: 10000, enableHighAccuracy: true }
+                        );
+                      }}
+                      disabled={geoLocating}
+                    >
+                      {geoLocating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Navigation className="h-3 w-3" />}
+                      {geoLocating ? "Locating…" : "Use GPS"}
+                    </button>
                   </div>
-                  {(editLat && editLng) && !showLocationPicker && (
-                    <p className="text-xs text-muted-foreground">
-                      Pinned: {editLat.toFixed(5)}, {editLng.toFixed(5)}{" "}
-                      <button type="button" className="text-destructive ml-1" onClick={() => { setEditLat(null); setEditLng(null); }}>Remove</button>
+                  
+                  <OutletMapPicker
+                    lat={editLat}
+                    lng={editLng}
+                    onMove={(lat, lng) => { setEditLat(lat); setEditLng(lng); }}
+                    onAddressSelect={(searchedAddr) => {
+                      if (!editAddress.trim()) {
+                        setEditAddress(searchedAddr);
+                      }
+                    }}
+                  />
+                  {(editLat && editLng) ? (
+                    <p className="text-xs text-muted-foreground flex items-center justify-between">
+                      <span>Pinned: {editLat.toFixed(5)}, {editLng.toFixed(5)}</span>
+                      <button type="button" className="text-destructive ml-1 text-xs" onClick={() => { setEditLat(null); setEditLng(null); }}>Remove pin</button>
                     </p>
-                  )}
-                  {showLocationPicker && (
-                    <OutletMapPicker lat={editLat} lng={editLng} onMove={(lat, lng) => { setEditLat(lat); setEditLng(lng); }} />
-                  )}
-                  {showLocationPicker && (
-                    <p className="text-xs text-muted-foreground">Tap on the map or drag the pin to set location</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Search place above or click on map to set location pin</p>
                   )}
                 </div>
                 {isCloudKitchen ? (

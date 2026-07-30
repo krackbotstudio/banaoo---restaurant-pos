@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOutlet } from "@/lib/outlet-context";
 import { restaurantDisplayName } from "@/lib/restaurant-display-name";
 import { useAuth } from "@/lib/auth";
+import { businessHasTables } from "@/lib/business-types";
 import { usePrintFleet } from "@/hooks/use-print-fleet";
 import { escPosOptionsFromPrinterConfig, usePrinterSettings } from "@/lib/use-printer-settings";
 import { AppLayout } from "@/components/AppLayout";
@@ -1268,6 +1269,7 @@ export default function Orders() {
               <OrdersVisualHub
                 outletId={currentOutlet.id}
                 orders={filteredOrders}
+                showTables={businessHasTables(profile?.business_type)}
                 onTableActivate={handleTableActivate}
                 onTakeawayActivate={(order) => {
                   setSpotContext({ spotType: "takeaway", order });

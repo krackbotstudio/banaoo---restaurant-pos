@@ -37,6 +37,8 @@ export default function RestaurantApp() {
           latitude: json.latitude,
           longitude: json.longitude,
           owner_id: json.owner_id,
+          operation_mode: json.operation_mode,
+          business_type: json.business_type,
         });
         if (json.branding) {
           setBranding({

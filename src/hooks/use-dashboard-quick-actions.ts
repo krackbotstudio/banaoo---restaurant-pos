@@ -12,6 +12,7 @@ import {
   resolveQuickActionIds,
   writeStaffQuickActionIds,
   getQuickActionDefinition,
+  withBusinessAwareQuickAction,
 } from "@/lib/dashboard-quick-actions";
 import { toast } from "sonner";
 
@@ -21,6 +22,7 @@ export function useDashboardQuickActions() {
   const { canAccess: canAccessFeature, loading: featureLoading } = useFeatureGating();
   const isOwner = !profile || profile.role === "owner";
   const isStaff = profile && profile.role !== "owner";
+  const businessType = profile?.business_type;
 
   const [savedIds, setSavedIds] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,8 +41,11 @@ export function useDashboardQuickActions() {
   );
 
   const accessibleCatalog = useMemo(
-    () => QUICK_ACTION_CATALOG.filter(canAccessAction),
-    [canAccessAction]
+    () =>
+      QUICK_ACTION_CATALOG.filter(canAccessAction).map((action) =>
+        withBusinessAwareQuickAction(action, businessType)
+      ),
+    [canAccessAction, businessType]
   );
 
   const fetchPrefs = useCallback(async () => {
@@ -79,8 +84,9 @@ export function useDashboardQuickActions() {
     () =>
       activeIds
         .map((id) => getQuickActionDefinition(id))
-        .filter((a): a is QuickActionDefinition => !!a),
-    [activeIds]
+        .filter((a): a is QuickActionDefinition => !!a)
+        .map((action) => withBusinessAwareQuickAction(action, businessType)),
+    [activeIds, businessType]
   );
 
   const saveActions = async (ids: QuickActionId[]) => {

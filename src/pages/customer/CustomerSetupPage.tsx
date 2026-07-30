@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { useCustomer, CustomerAddress } from "@/context/customer-context";
 import { MapPin, Navigation, Loader2, ArrowRight } from "lucide-react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
@@ -51,18 +52,8 @@ function MapSizeInvalidator() {
 
 // ──────────────────────────────────────────────────────────────────────────────
 
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { "Accept-Language": "en" } }
-    );
-    const data = await res.json();
-    return data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  } catch {
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-}
+import { searchLocationCandidates, resolvePlaceDetails, reverseGeocode, type ForwardGeocodeResult } from "@/lib/geocoding";
+import { Search } from "lucide-react";
 
 interface CustomerSetupPageProps {
   phone: string;
@@ -83,6 +74,72 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
   const [showMap, setShowMap] = useState(false);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<ForwardGeocodeResult[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const triggerSearch = async (q: string) => {
+    if (q.trim().length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    setSearching(true);
+    const hits = await searchLocationCandidates(q, lat, lng);
+    setSearchResults(hits);
+    setShowDropdown(true);
+    setSearching(false);
+  };
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (val.trim().length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      void triggerSearch(val);
+    }, 350);
+  };
+
+  const handleSelectSearchHit = async (hit: ForwardGeocodeResult) => {
+    let targetLat = hit.lat;
+    let targetLng = hit.lng;
+    let targetAddr = hit.displayName;
+
+    if (hit.place_id && (targetLat === 0 || targetLng === 0)) {
+      setSearching(true);
+      const details = await resolvePlaceDetails(hit.place_id);
+      setSearching(false);
+      if (details) {
+        targetLat = details.lat;
+        targetLng = details.lng;
+        targetAddr = details.address || details.name || hit.displayName;
+      }
+    }
+
+    if (targetLat !== 0 || targetLng !== 0) {
+      setShowDropdown(false);
+      setSearchQuery(hit.title || targetAddr.split(",")[0] || targetAddr);
+      handleMarkerMove(targetLat, targetLng);
+    }
+  };
+
   const handleMarkerMove = (newLat: number, newLng: number) => {
     setLat(newLat);
     setLng(newLng);
@@ -90,8 +147,8 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
     setGeocoding(true);
     geocodeTimer.current = setTimeout(async () => {
-      const addr = await reverseGeocode(newLat, newLng);
-      setAddressText(addr);
+      const result = await reverseGeocode(newLat, newLng);
+      setAddressText(result.addressText);
       setGeocoding(false);
     }, 600);
   };
@@ -111,8 +168,8 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
         setMapZoom(PINNED_ZOOM);
         setShowMap(true);
         setGeocoding(true);
-        const addr = await reverseGeocode(latitude, longitude);
-        setAddressText(addr);
+        const result = await reverseGeocode(latitude, longitude);
+        setAddressText(result.addressText);
         setGeocoding(false);
         setLocating(false);
       },
@@ -200,50 +257,67 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
               </button>
             </div>
 
-            {/* Map */}
-            {showMap && (
-              <div
-                className="rounded-2xl overflow-hidden border-2 border-gray-200"
-                style={{ height: 240 }}
-              >
-                <MapContainer
-                  center={[lat ?? DEFAULT_LAT, lng ?? DEFAULT_LNG]}
-                  zoom={lat ? PINNED_ZOOM : DEFAULT_ZOOM}
-                  style={{ height: "100%", width: "100%" }}
-                  zoomControl
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-                  />
-                  {/* Critical: fixes blank map when container becomes visible conditionally */}
-                  <MapSizeInvalidator />
-                  <MapClickHandler onMove={handleMarkerMove} />
-                  {lat !== null && lng !== null && (
-                    <>
-                      <Marker
-                        position={[lat, lng]}
-                        draggable
-                        eventHandlers={{
-                          dragend: (e) => {
-                            const m = e.target as L.Marker;
-                            const pos = m.getLatLng();
-                            handleMarkerMove(pos.lat, pos.lng);
-                          },
-                        }}
-                      />
-                      <FlyToLocation lat={lat} lng={lng} zoom={mapZoom} />
-                    </>
-                  )}
-                </MapContainer>
+            {/* Google Places Search & Map */}
+            <div ref={searchContainerRef} className="relative z-[1000]">
+              <div className="relative flex items-center">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search area, landmark, street, city..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                  className="w-full pl-9 pr-9 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                {searching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
               </div>
-            )}
 
-            {showMap && !lat && (
-              <p className="text-xs text-gray-400 text-center">
-                Tap anywhere on the map to drop your pin
-              </p>
-            )}
+              {showDropdown && searchResults.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-background border border-border rounded-xl shadow-lg max-h-52 overflow-y-auto z-[1001] py-1">
+                  {searchResults.map((hit, idx) => (
+                    <button
+                      key={hit.place_id || idx}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-muted/70 flex items-start gap-2 border-b border-border/40 last:border-b-0"
+                      onClick={() => void handleSelectSearchHit(hit)}
+                    >
+                      <MapPin className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground truncate">{hit.title || hit.displayName}</p>
+                        {hit.subtitle && <p className="text-[11px] text-muted-foreground truncate">{hit.subtitle}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="rounded-2xl overflow-hidden border-2 border-gray-200"
+              style={{ height: 240 }}
+            >
+              <GoogleMapView
+                center={{ lat: lat ?? DEFAULT_LAT, lng: lng ?? DEFAULT_LNG }}
+                zoom={lat ? mapZoom : DEFAULT_ZOOM}
+                onClick={(newLat, newLng) => handleMarkerMove(newLat, newLng)}
+                markers={
+                  lat !== null && lng !== null
+                    ? [
+                        {
+                          id: "customer-setup-pin",
+                          lat,
+                          lng,
+                          draggable: true,
+                          onDragEnd: (newLat, newLng) => handleMarkerMove(newLat, newLng),
+                          title: "Delivery Pin",
+                        },
+                      ]
+                    : []
+                }
+              />
+            </div>
 
             {/* Address text field */}
             <div className="relative">

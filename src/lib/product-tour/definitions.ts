@@ -88,14 +88,14 @@ export const TOUR_MODULES: Record<TourModuleId, TourModule> = {
         element: '[data-tour="orders-header"]',
         title: "Orders hub",
         description:
-          "All live and recent orders for your outlet. Switch between visual floor and list views.",
+          "All live and recent orders for your outlet. Switch between visual board and list views.",
         side: "bottom",
       },
       {
         element: '[data-tour="orders-view-toggle"]',
         title: "Visual vs list",
         description:
-          "Visual mode shows tables, takeaway bags, and online boxes. List mode is great for search and bulk review.",
+          "Visual mode shows takeaway bags, online boxes, and tables when your business uses dine-in. List mode is great for search and bulk review.",
         side: "bottom",
       },
       {
@@ -107,9 +107,9 @@ export const TOUR_MODULES: Record<TourModuleId, TourModule> = {
       },
       {
         element: '[data-tour="orders-visual-hub"]',
-        title: "Interactive floor",
+        title: "Interactive board",
         description:
-          "Tap a table or spot to view the active order, add items, print a bill, or start a new order — all inline.",
+          "Tap a spot to view the active order, add items, print a bill, or start a new order — all inline.",
         side: "top",
       },
     ],

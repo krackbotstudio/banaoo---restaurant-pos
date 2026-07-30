@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -150,84 +151,65 @@ export function DeliveryTrackingMap({
   return (
     <div className="space-y-2">
       <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: 230 }}>
-        <MapContainer
-          center={mapCenter}
+        <GoogleMapView
+          center={{ lat: mapCenter[0], lng: mapCenter[1] }}
           zoom={14}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl
-          scrollWheelZoom={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-          />
-          <MapSizeInvalidator />
-          <FitBounds points={mapPoints} />
-
-          {outletPoint && (
-            <Marker position={outletPoint} icon={restaurantIcon}>
-              <Popup>{outletName || "Restaurant"}</Popup>
-            </Marker>
-          )}
-
-          <Marker position={deliveryPoint} icon={isDelivered ? deliveredIcon : deliveryIcon}>
-            <Popup>{isDelivered ? "Delivered here" : "Delivery address"}</Popup>
-          </Marker>
-
-          {riderPoint && !isDelivered && (
-            <Marker position={riderPoint} icon={riderName ? pinIcon("#2563eb", `🏍 ${riderName}`) : riderIcon}>
-              <Popup>
-                <div className="text-xs">
-                  <p className="font-semibold text-primary">{riderName || "Rider"}</p>
-                  <p className="text-gray-500">
-                    {isEnRoute
-                      ? "Out for delivery"
-                      : isAssigned
-                      ? "Rider assigned — heading to restaurant"
-                      : "Current location"}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {lastScanCoords && !riderExplicitPoint && lastActivity && !isDelivered && (
-            <Marker position={lastScanCoords} icon={scanIcon}>
-              <Popup>
-                <span className="text-xs">
-                  {lastActivity.activity}
-                  {lastActivity.location ? ` — ${lastActivity.location}` : ""}
-                </span>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* Route line when Rider is assigned & heading to outlet */}
-          {isAssigned && riderPoint && outletPoint && (
-            <Polyline
-              positions={[riderPoint, outletPoint]}
-              pathOptions={{ color: "#2563eb", weight: 3, dashArray: "6 6" }}
-            />
-          )}
-
-          {/* Route line to Delivery point */}
-          {deliveryPoint && (
-            <Polyline
-              positions={
-                isEnRoute && riderPoint
-                  ? [riderPoint, deliveryPoint]
-                  : outletPoint
-                  ? [outletPoint, deliveryPoint]
-                  : []
-              }
-              pathOptions={{
-                color: isDelivered ? "#16a34a" : isEnRoute ? "#7c3aed" : "#94a3b8",
-                weight: 4,
-                dashArray: isEnRoute || isDelivered ? undefined : "8 8",
-              }}
-            />
-          )}
-        </MapContainer>
+          markers={[
+            ...(outletPoint
+              ? [
+                  {
+                    id: "outlet-point",
+                    lat: outletPoint[0],
+                    lng: outletPoint[1],
+                    title: outletName || "Restaurant",
+                    popupContent: <p className="font-semibold">{outletName || "Restaurant"}</p>,
+                  },
+                ]
+              : []),
+            ...(deliveryPoint
+              ? [
+                  {
+                    id: "delivery-point",
+                    lat: deliveryPoint[0],
+                    lng: deliveryPoint[1],
+                    title: isDelivered ? "Delivered" : "Delivery Address",
+                    popupContent: (
+                      <p className="font-semibold">{isDelivered ? "Delivered here" : "Delivery address"}</p>
+                    ),
+                  },
+                ]
+              : []),
+            ...(riderPoint && !isDelivered
+              ? [
+                  {
+                    id: "rider-point",
+                    lat: riderPoint[0],
+                    lng: riderPoint[1],
+                    title: riderName || "Rider",
+                    popupContent: (
+                      <div>
+                        <p className="font-semibold text-primary">{riderName || "Rider"}</p>
+                        <p className="text-gray-500">
+                          {isEnRoute
+                            ? "Out for delivery"
+                            : isAssigned
+                            ? "Heading to restaurant"
+                            : "Current location"}
+                        </p>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          polyline={
+            isEnRoute && riderPoint && deliveryPoint
+              ? [riderPoint, deliveryPoint]
+              : outletPoint && deliveryPoint
+              ? [outletPoint, deliveryPoint]
+              : []
+          }
+        />
       </div>
 
       {geocodingScan && (

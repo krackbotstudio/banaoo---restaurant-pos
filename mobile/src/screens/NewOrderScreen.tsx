@@ -27,12 +27,22 @@ export function NewOrderScreen() {
   const [categories, setCategories] = useState<MenuCategoryRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("dine_in");
+  const selfService = currentOutlet?.operation_mode === "self_service";
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(
+    selfService ? "takeaway" : "dine_in"
+  );
   const [tableNumber, setTableNumber] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
+
+  useEffect(() => {
+    if (selfService) {
+      setOrderType("takeaway");
+      setTableNumber("");
+    }
+  }, [selfService]);
 
   const loadData = async () => {
     if (!currentOutlet?.id) return;
@@ -146,19 +156,23 @@ export function NewOrderScreen() {
       </View>
 
       <View style={styles.typeRow}>
-        <Pressable
-          style={[styles.typeBtn, orderType === "dine_in" && styles.typeBtnActive]}
-          onPress={() => setOrderType("dine_in")}
-        >
-          <Text style={[styles.typeText, orderType === "dine_in" && styles.typeTextActive]}>Dine In</Text>
-        </Pressable>
+        {!selfService && (
+          <Pressable
+            style={[styles.typeBtn, orderType === "dine_in" && styles.typeBtnActive]}
+            onPress={() => setOrderType("dine_in")}
+          >
+            <Text style={[styles.typeText, orderType === "dine_in" && styles.typeTextActive]}>Dine In</Text>
+          </Pressable>
+        )}
         <Pressable
           style={[styles.typeBtn, orderType === "takeaway" && styles.typeBtnActive]}
           onPress={() => setOrderType("takeaway")}
         >
-          <Text style={[styles.typeText, orderType === "takeaway" && styles.typeTextActive]}>Takeaway</Text>
+          <Text style={[styles.typeText, orderType === "takeaway" && styles.typeTextActive]}>
+            {selfService ? "Cloud / Takeaway" : "Takeaway"}
+          </Text>
         </Pressable>
-        {orderType === "dine_in" && (
+        {!selfService && orderType === "dine_in" && (
           <TextInput
             style={styles.tableInput}
             placeholder="Table"
