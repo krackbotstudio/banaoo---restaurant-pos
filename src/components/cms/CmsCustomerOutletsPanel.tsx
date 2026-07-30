@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardGeocode, searchLocationCandidates, resolvePlaceDetails, type ForwardGeocodeResult } from "@/lib/geocoding";
 import {
   Loader2,
   LocateFixed,
@@ -39,7 +40,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrderingLinkRow } from "@/components/customer/OrderingLinkRow";
-import { LocationSearchInput } from "@/components/location/LocationSearchInput";
 
 export interface CmsOutletRow {
   id: string;
@@ -109,41 +109,174 @@ function PickupLocationMap({
   latitude,
   longitude,
   onMove,
+  onAddressSelect,
 }: {
   latitude: number | null;
   longitude: number | null;
   onMove: (lat: number, lng: number) => void;
+  onAddressSelect?: (address: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<ForwardGeocodeResult[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const triggerSearch = async (query: string) => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    setSearching(true);
+    const hits = await searchLocationCandidates(query, latitude, longitude);
+    setResults(hits);
+    setShowDropdown(true);
+    setSearching(false);
+  };
+
+  const handleInputChange = (val: string) => {
+    setSearchQuery(val);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (val.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      void triggerSearch(val);
+    }, 350);
+  };
+
+  const handleSelectLocation = async (hit: ForwardGeocodeResult) => {
+    let targetLat = hit.lat;
+    let targetLng = hit.lng;
+    let targetAddr = hit.displayName;
+
+    if (hit.place_id && (targetLat === 0 || targetLng === 0)) {
+      setSearching(true);
+      const details = await resolvePlaceDetails(hit.place_id);
+      setSearching(false);
+      if (details) {
+        targetLat = details.lat;
+        targetLng = details.lng;
+        targetAddr = details.address || details.name || hit.displayName;
+      }
+    }
+
+    if (targetLat !== 0 || targetLng !== 0) {
+      onMove(targetLat, targetLng);
+      setShowDropdown(false);
+      setSearchQuery(hit.title || targetAddr.split(",")[0] || targetAddr);
+      if (onAddressSelect) {
+        onAddressSelect(targetAddr);
+      }
+    }
+  };
+
   return (
-    <div className="h-56 overflow-hidden rounded-lg border">
-      <MapContainer
-        center={[latitude ?? 20.5937, longitude ?? 78.9629]}
-        zoom={latitude == null ? 5 : 16}
-        className="h-full w-full"
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-        />
-        <MapSizeInvalidator />
-        <MapClickHandler onMove={onMove} />
-        {latitude != null && longitude != null && (
-          <>
-            <Marker
-              position={[latitude, longitude]}
-              draggable
-              eventHandlers={{
-                dragend: (event) => {
-                  const marker = event.target as L.Marker;
-                  const position = marker.getLatLng();
-                  onMove(position.lat, position.lng);
-                },
-              }}
-            />
-            <MapPosition lat={latitude} lng={longitude} />
-          </>
+    <div className="space-y-2">
+      {/* Location Search Bar */}
+      <div ref={searchContainerRef} className="relative z-[1000]">
+        <div className="relative flex items-center">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search place, area, landmark, street, city..."
+            value={searchQuery}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (debounceTimer.current) clearTimeout(debounceTimer.current);
+                void triggerSearch(searchQuery);
+              }
+            }}
+            className="pl-9 pr-9 h-10 text-xs sm:text-sm bg-background border-border shadow-sm focus-visible:ring-1 focus-visible:ring-primary"
+          />
+          {searching ? (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
+          ) : searchQuery ? (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(""); setResults([]); setShowDropdown(false); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+
+        {/* Dropdown Suggestions */}
+        {showDropdown && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-xl max-h-56 overflow-y-auto divide-y divide-border/60 z-[1050]">
+            {results.length > 0 ? (
+              results.map((hit, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => handleSelectLocation(hit)}
+                  className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-accent/80 hover:text-accent-foreground flex items-start gap-2.5 transition-colors"
+                >
+                  <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground truncate">{hit.title || hit.displayName.split(",")[0]}</p>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{hit.subtitle || hit.displayName}</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                {searching ? "Searching places..." : "No matching locations found"}
+              </div>
+            )}
+          </div>
         )}
-      </MapContainer>
+      </div>
+
+      {/* Map Container */}
+      <div className="h-56 overflow-hidden rounded-lg border relative z-0">
+        <MapContainer
+          center={[latitude ?? 20.5937, longitude ?? 78.9629]}
+          zoom={latitude == null ? 5 : 16}
+          className="h-full w-full"
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+          />
+          <MapSizeInvalidator />
+          <MapClickHandler onMove={onMove} />
+          {latitude != null && longitude != null && (
+            <>
+              <Marker
+                position={[latitude, longitude]}
+                draggable
+                eventHandlers={{
+                  dragend: (event) => {
+                    const marker = event.target as L.Marker;
+                    const position = marker.getLatLng();
+                    onMove(position.lat, position.lng);
+                  },
+                }}
+              />
+              <MapPosition lat={latitude} lng={longitude} />
+            </>
+          )}
+        </MapContainer>
+      </div>
     </div>
   );
 }
@@ -503,18 +636,6 @@ export function CmsCustomerOutletsPanel({
                   </Button>
                 </div>
               </div>
-              <LocationSearchInput
-                placeholder="Search city, area, landmark, or full address…"
-                onSelect={(hit) => {
-                  setForm((current) => ({
-                    ...current,
-                    latitude: hit.lat,
-                    longitude: hit.lng,
-                    address: current.address.trim() ? current.address : hit.displayName,
-                  }));
-                  toast.success("Pickup pin placed", { description: hit.displayName });
-                }}
-              />
               <PickupLocationMap
                 latitude={form.latitude}
                 longitude={form.longitude}
