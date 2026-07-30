@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { useCustomer, CustomerAddress } from "@/context/customer-context";
 import { MapPin, Navigation, Loader2, ArrowRight } from "lucide-react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
@@ -297,35 +298,25 @@ export default function CustomerSetupPage({ phone, onDone }: CustomerSetupPagePr
               className="rounded-2xl overflow-hidden border-2 border-gray-200"
               style={{ height: 240 }}
             >
-              <MapContainer
-                center={[lat ?? DEFAULT_LAT, lng ?? DEFAULT_LNG]}
-                zoom={lat ? PINNED_ZOOM : DEFAULT_ZOOM}
-                style={{ height: "100%", width: "100%" }}
-                zoomControl
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-                />
-                <MapSizeInvalidator />
-                <MapClickHandler onMove={handleMarkerMove} />
-                {lat !== null && lng !== null && (
-                  <>
-                    <Marker
-                      position={[lat, lng]}
-                      draggable
-                      eventHandlers={{
-                        dragend: (e) => {
-                          const m = e.target as L.Marker;
-                          const pos = m.getLatLng();
-                          handleMarkerMove(pos.lat, pos.lng);
+              <GoogleMapView
+                center={{ lat: lat ?? DEFAULT_LAT, lng: lng ?? DEFAULT_LNG }}
+                zoom={lat ? mapZoom : DEFAULT_ZOOM}
+                onClick={(newLat, newLng) => handleMarkerMove(newLat, newLng)}
+                markers={
+                  lat !== null && lng !== null
+                    ? [
+                        {
+                          id: "customer-setup-pin",
+                          lat,
+                          lng,
+                          draggable: true,
+                          onDragEnd: (newLat, newLng) => handleMarkerMove(newLat, newLng),
+                          title: "Delivery Pin",
                         },
-                      }}
-                    />
-                    <FlyToLocation lat={lat} lng={lng} zoom={mapZoom} />
-                  </>
-                )}
-              </MapContainer>
+                      ]
+                    : []
+                }
+              />
             </div>
 
             {/* Address text field */}

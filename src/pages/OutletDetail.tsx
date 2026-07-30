@@ -69,39 +69,7 @@ import {
 } from "@/components/ui/select";
 import { OutletPaymentSettings } from "@/components/outlet/OutletPaymentSettings";
 import { CustomerOrderingLinkCard } from "@/components/customer/CustomerOrderingLinkCard";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
-
-// These must be module-level (not nested) so React doesn't recreate component types on each render
-function OutletMapClickHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
-  useMapEvents({ click(e) { onMove(e.latlng.lat, e.latlng.lng); } });
-  return null;
-}
-
-function OutletMapFlyTo({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => { map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 }); }, [lat, lng, map]);
-  return null;
-}
-
-// Fixes Leaflet rendering inside Dialog — map container has 0 size until Dialog is fully open
-function MapSizeInvalidator() {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 150);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-}
-
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { searchLocationCandidates, resolvePlaceDetails, type ForwardGeocodeResult } from "@/lib/geocoding";
 
 function OutletMapPicker({
@@ -245,28 +213,27 @@ function OutletMapPicker({
         )}
       </div>
 
-      {/* Leaflet Map Container */}
+      {/* Google Map Container */}
       <div className="rounded-lg overflow-hidden border border-border relative z-0" style={{ height: 220 }}>
-        <MapContainer
-          center={[lat ?? 20.5937, lng ?? 78.9629]}
+        <GoogleMapView
+          center={{ lat: lat ?? 20.5937, lng: lng ?? 78.9629 }}
           zoom={lat ? 15 : 5}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={true}
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://openstreetmap.org">OSM</a>' />
-          <MapSizeInvalidator />
-          <OutletMapClickHandler onMove={onMove} />
-          {lat !== null && lng !== null && (
-            <>
-              <Marker
-                position={[lat, lng]}
-                draggable
-                eventHandlers={{ dragend: (e) => { const m = e.target as L.Marker; onMove(m.getLatLng().lat, m.getLatLng().lng); } }}
-              />
-              <OutletMapFlyTo lat={lat} lng={lng} />
-            </>
-          )}
-        </MapContainer>
+          onClick={(newLat, newLng) => onMove(newLat, newLng)}
+          markers={
+            lat !== null && lng !== null
+              ? [
+                  {
+                    id: "outlet-pin",
+                    lat,
+                    lng,
+                    draggable: true,
+                    onDragEnd: (newLat, newLng) => onMove(newLat, newLng),
+                    title: "Outlet Location",
+                  },
+                ]
+              : []
+          }
+        />
       </div>
     </div>
   );

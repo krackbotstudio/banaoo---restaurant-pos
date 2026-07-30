@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { forwardGeocode, searchLocationCandidates, resolvePlaceDetails, type ForwardGeocodeResult } from "@/lib/geocoding";
 import {
   Loader2,
@@ -246,36 +247,27 @@ function PickupLocationMap({
         )}
       </div>
 
-      {/* Map Container */}
+      {/* Google Map Container */}
       <div className="h-56 overflow-hidden rounded-lg border relative z-0">
-        <MapContainer
-          center={[latitude ?? 20.5937, longitude ?? 78.9629]}
+        <GoogleMapView
+          center={{ lat: latitude ?? 20.5937, lng: longitude ?? 78.9629 }}
           zoom={latitude == null ? 5 : 16}
-          className="h-full w-full"
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-          />
-          <MapSizeInvalidator />
-          <MapClickHandler onMove={onMove} />
-          {latitude != null && longitude != null && (
-            <>
-              <Marker
-                position={[latitude, longitude]}
-                draggable
-                eventHandlers={{
-                  dragend: (event) => {
-                    const marker = event.target as L.Marker;
-                    const position = marker.getLatLng();
-                    onMove(position.lat, position.lng);
+          onClick={(lat, lng) => onMove(lat, lng)}
+          markers={
+            latitude != null && longitude != null
+              ? [
+                  {
+                    id: "cms-pickup-pin",
+                    lat: latitude,
+                    lng: longitude,
+                    draggable: true,
+                    onDragEnd: (lat, lng) => onMove(lat, lng),
+                    title: "Pickup Location",
                   },
-                }}
-              />
-              <MapPosition lat={latitude} lng={longitude} />
-            </>
-          )}
-        </MapContainer>
+                ]
+              : []
+          }
+        />
       </div>
     </div>
   );

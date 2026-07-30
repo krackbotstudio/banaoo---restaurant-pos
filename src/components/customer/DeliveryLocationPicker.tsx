@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -247,39 +248,30 @@ export function DeliveryLocationPicker({
         </p>
       )}
 
+      {/* Google Map Container */}
       <div
         className="rounded-xl overflow-hidden border-2 border-gray-200"
         style={{ height: 220 }}
       >
-        <MapContainer
-          center={[value.lat ?? DEFAULT_LAT, value.lng ?? DEFAULT_LNG]}
-          zoom={value.lat != null ? PINNED_ZOOM : DEFAULT_ZOOM}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-          />
-          <MapSizeInvalidator />
-          <MapClickHandler onMove={applyCoordinates} />
-          {value.lat != null && value.lng != null && (
-            <>
-              <Marker
-                position={[value.lat, value.lng]}
-                draggable
-                eventHandlers={{
-                  dragend: (e) => {
-                    const m = e.target as L.Marker;
-                    const pos = m.getLatLng();
-                    applyCoordinates(pos.lat, pos.lng);
+        <GoogleMapView
+          center={{ lat: value.lat ?? DEFAULT_LAT, lng: value.lng ?? DEFAULT_LNG }}
+          zoom={value.lat != null ? mapZoom : DEFAULT_ZOOM}
+          onClick={(newLat, newLng) => applyCoordinates(newLat, newLng)}
+          markers={
+            value.lat != null && value.lng != null
+              ? [
+                  {
+                    id: "delivery-location-pin",
+                    lat: value.lat,
+                    lng: value.lng,
+                    draggable: true,
+                    onDragEnd: (newLat, newLng) => applyCoordinates(newLat, newLng),
+                    title: "Delivery Location",
                   },
-                }}
-              />
-              <FlyToLocation lat={value.lat} lng={value.lng} zoom={mapZoom} />
-            </>
-          )}
-        </MapContainer>
+                ]
+              : []
+          }
+        />
       </div>
 
       {!value.lat && (

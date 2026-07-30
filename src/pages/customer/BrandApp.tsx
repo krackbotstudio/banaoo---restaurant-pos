@@ -4,6 +4,7 @@
  * Customer selects their nearest/preferred outlet → ordering flow.
  */
 import { useEffect, useState, useCallback } from "react";
+import { GoogleMapView } from "@/components/map/GoogleMapView";
 import { useParams } from "react-router-dom";
 import { CustomerProvider } from "@/context/customer-context";
 import { OutletOrderingFlow, OutletData } from "./OutletOrderingFlow";
@@ -157,35 +158,43 @@ function OutletSelectorPage({
         )}
       </div>
 
-      {/* Map (only if outlets have coordinates) */}
+      {/* Google Map (only if outlets have coordinates) */}
       {hasCoords && (
         <div className="h-48 border-b border-gray-200">
-          <MapContainer
-            center={mapCenter}
+          <GoogleMapView
+            center={{ lat: mapCenter[0], lng: mapCenter[1] }}
             zoom={12}
-            style={{ height: "100%", width: "100%" }}
-            zoomControl={false}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://openstreetmap.org">OSM</a>'
-            />
-            <FitBounds outlets={sortedOutlets} userLatLng={userLatLng} />
-            {userLatLng && <Marker position={userLatLng} icon={userIcon} />}
-            {sortedOutlets
-              .filter((o) => o.latitude && o.longitude)
-              .map((o) => (
-                <Marker key={o.id} position={[o.latitude!, o.longitude!]}>
-                  <Popup>
-                    <strong>{o.name}</strong>
-                    {o.address && <><br />{o.address}</>}
-                    {o.distance != null && (
-                      <><br /><span style={{ color: "#6B7280" }}>{formatDistance(o.distance)} away</span></>
-                    )}
-                  </Popup>
-                </Marker>
-              ))}
-          </MapContainer>
+            markers={[
+              ...(userLatLng
+                ? [
+                    {
+                      id: "user-location-pin",
+                      lat: userLatLng[0],
+                      lng: userLatLng[1],
+                      title: "Your Location",
+                      popupContent: <p className="font-semibold text-xs">Your Location</p>,
+                    },
+                  ]
+                : []),
+              ...sortedOutlets
+                .filter((o) => o.latitude && o.longitude)
+                .map((o) => ({
+                  id: `outlet-pin-${o.id}`,
+                  lat: o.latitude!,
+                  lng: o.longitude!,
+                  title: o.name,
+                  popupContent: (
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-bold text-gray-900">{o.name}</p>
+                      {o.address && <p className="text-gray-500">{o.address}</p>}
+                      {o.distance != null && (
+                        <p className="text-gray-400 font-medium">{formatDistance(o.distance)} away</p>
+                      )}
+                    </div>
+                  ),
+                })),
+            ]}
+          />
         </div>
       )}
 
