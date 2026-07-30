@@ -10,8 +10,10 @@ import {
   Plus,
   Power,
   QrCode,
+  Search,
   Store,
   Trash2,
+  X,
 } from "lucide-react";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -633,6 +635,12 @@ export function CmsCustomerOutletsPanel({
                 longitude={form.longitude}
                 onMove={(latitude, longitude) =>
                   setForm((current) => ({ ...current, latitude, longitude }))
+                }
+                onAddressSelect={(address) =>
+                  setForm((current) => ({
+                    ...current,
+                    address: current.address.trim() ? current.address : address,
+                  }))
                 }
               />
               {form.latitude != null && form.longitude != null ? (
