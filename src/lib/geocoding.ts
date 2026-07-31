@@ -106,9 +106,13 @@ export async function reverseGeocode(
             city,
             state,
           };
+        } else if (data.status !== "OK") {
+          console.warn("⚠️ [Google Geocoding Client Error]", data.status, data.error_message || "");
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error("❌ [Google Reverse Geocode Fetch Error]", err);
+    }
   }
 
   // 3. Nominatim Fallback

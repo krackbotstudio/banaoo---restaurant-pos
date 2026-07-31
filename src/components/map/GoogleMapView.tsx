@@ -69,10 +69,45 @@ export function GoogleMapView({
     [onClick]
   );
 
+  // Attach global auth failure handler for Google Maps authentication errors (e.g. ApiProjectMapError)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const prevHandler = (window as any).gm_authFailure;
+      (window as any).gm_authFailure = () => {
+        console.error(
+          "❌ [Google Maps Auth Error] Google Maps JavaScript API authentication failed! " +
+          "Common reasons: (1) Maps JavaScript API is NOT enabled in Google Cloud Console, " +
+          "(2) Billing is not linked, (3) Key referrer restrictions mismatch, or (4) Key is invalid. " +
+          "Key present: " + (GOOGLE_MAPS_API_KEY ? `Yes (${GOOGLE_MAPS_API_KEY.slice(0, 6)}...${GOOGLE_MAPS_API_KEY.slice(-4)})` : "No (EMPTY)")
+        );
+        if (typeof prevHandler === "function") prevHandler();
+      };
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      console.error(
+        "⚠️ [GoogleMapView] VITE_GOOGLE_MAPS_API_KEY is empty/missing! " +
+        "Ensure VITE_GOOGLE_MAPS_API_KEY is set in your build environment before running 'npm run build'."
+      );
+    } else {
+      console.log(
+        `🗺️ [GoogleMapView] Loaded with key: ${GOOGLE_MAPS_API_KEY.slice(0, 6)}...${GOOGLE_MAPS_API_KEY.slice(-4)}`
+      );
+    }
+  }, []);
+
   if (loadError) {
+    console.error("❌ [GoogleMapView] useJsApiLoader failed to load Google Maps script:", loadError);
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted/30 p-4 text-center text-xs text-destructive">
-        Failed to load Google Maps. Please check your network or API key configuration.
+      <div className="flex flex-col h-full w-full items-center justify-center bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center text-xs text-destructive gap-1">
+        <p className="font-semibold">Failed to load Google Maps</p>
+        <p className="text-[11px] opacity-80">
+          {!GOOGLE_MAPS_API_KEY
+            ? "VITE_GOOGLE_MAPS_API_KEY is missing in the production build."
+            : "Google Cloud rejected the key (ApiProjectMapError / network error). Check browser console logs for details."}
+        </p>
       </div>
     );
   }
