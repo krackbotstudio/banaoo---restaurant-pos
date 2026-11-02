@@ -4,16 +4,13 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install production deps only
-COPY server/package.json server/package-lock.json ./
+COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Application source
-COPY server/ .
+# Application source (includes server/downloads if present)
+COPY . .
 
-# Android APK for website download (build after mobile/build-apk.cmd)
-COPY public/downloads/banaoo-latest.apk ./downloads/banaoo-latest.apk
-
-RUN mkdir -p uploads
+RUN mkdir -p uploads downloads
 
 EXPOSE 5000
 
