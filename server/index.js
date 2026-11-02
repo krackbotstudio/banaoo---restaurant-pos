@@ -123,6 +123,14 @@ function useSecureSessionCookies() {
 
 const secureSessionCookies = useSecureSessionCookies();
 
+function getSameSiteSetting() {
+  if (process.env.COOKIE_SAMESITE) return process.env.COOKIE_SAMESITE;
+  // If running behind HTTPS (production on Render/Vercel with separate backend/frontend subdomains),
+  // cross-origin fetch requests require sameSite: 'none' and secure: true.
+  if (secureSessionCookies) return 'none';
+  return 'lax';
+}
+
 app.use(session({
   store: new pgStore({ pool: pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env',
@@ -131,9 +139,7 @@ app.use(session({
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     secure: secureSessionCookies,
-    // 'lax' works for same-site requests (nginx proxies /auth to backend on same domain).
-    // 'none' is only needed for cross-site (different domains) and breaks same-site cookies.
-    sameSite: 'lax'
+    sameSite: getSameSiteSetting()
   }
 }));
 
