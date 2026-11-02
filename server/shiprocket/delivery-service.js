@@ -547,8 +547,7 @@ export async function triggerRiderAssignedNotification(
 
     if (customerPhone) {
       console.log(
-        `[SMS Notification] To: ${customerPhone} | Message: Rider ${
-          rider.rider_name || ''
+        `[SMS Notification] To: ${customerPhone} | Message: Rider ${rider.rider_name || ''
         } (${rider.rider_phone || ''}) is assigned to your order #${orderNumber}. Track live: ${trackingUrl}`
       );
     }
