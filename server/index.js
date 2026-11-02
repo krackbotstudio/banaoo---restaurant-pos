@@ -90,7 +90,11 @@ app.use(cors({
     ];
     const allowedOrigins = [...new Set([...envOrigins, ...localDevOrigins])];
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      (origin && /^https:\/\/.*\.onrender\.com$/.test(origin)) ||
+      (origin && /^https:\/\/.*\.vercel\.app$/.test(origin))
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -110,7 +114,8 @@ app.use(cookieParser());
 function useSecureSessionCookies() {
   if (process.env.COOKIE_SECURE === 'true') return true;
   if (process.env.COOKIE_SECURE === 'false') return false;
-  if (process.env.NODE_ENV !== 'production') return false;
+  // Automatically enable secure cookies on cloud platforms (Render, production)
+  if (process.env.RENDER || process.env.NODE_ENV === 'production') return true;
   const frontend = String(process.env.FRONTEND_URL || '');
   if (frontend.split(',').some((origin) => origin.trim().startsWith('http://'))) {
     console.warn(
@@ -118,7 +123,7 @@ function useSecureSessionCookies() {
     );
     return false;
   }
-  return true;
+  return false;
 }
 
 const secureSessionCookies = useSecureSessionCookies();
@@ -136,10 +141,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env',
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     secure: secureSessionCookies,
-    sameSite: getSameSiteSetting()
+    sameSite: getSameSiteSetting(),
+    partitioned: secureSessionCookies ? true : undefined
   }
 }));
 
@@ -651,7 +658,15 @@ app.get('/auth/google/callback', (req, res, next) => {
         res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_error=1`);
         return;
       }
-      finishGoogleRedirect(req, res);
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Google callback session save error:', saveErr.message);
+          const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
+          res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_error=1`);
+          return;
+        }
+        finishGoogleRedirect(req, res);
+      });
     });
   })(req, res, next);
 });
