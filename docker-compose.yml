@@ -26,8 +26,8 @@ services:
   # ── Express / Passport auth server ─────────────────────────────────────────
   backend:
     build:
-      context: .
-      dockerfile: server/Dockerfile
+      context: server
+      dockerfile: Dockerfile
     environment:
       NODE_ENV: production
       PORT: 5000
