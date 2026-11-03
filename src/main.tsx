@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import "./lib/api-fetch";
 import App from "./App.tsx";
 import "./index.css";
 

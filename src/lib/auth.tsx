@@ -126,14 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfile = async () => {
-    if (!user) return;
     setProfileLoading(true);
     try {
-      await syncSupabaseSession();
       const res = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setProfile(data.profile);
+        if (data?.user) setUser(data.user);
+        if (data?.profile) setProfile(data.profile);
+        await syncSupabaseSession();
       }
     } catch (err) {
       console.error("Error refreshing profile:", err);
@@ -153,6 +153,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
 
+      if (data.token) {
+        localStorage.setItem("banaoo_auth_token", data.token);
+      }
       setUser(data.user);
       await syncSupabaseSession();
       const meRes = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
@@ -189,6 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Signup failed");
 
+      if (data.token) {
+        localStorage.setItem("banaoo_auth_token", data.token);
+      }
       setUser(data.user);
       await syncSupabaseSession();
       const meRes = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
@@ -209,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem("banaoo_auth_token");
     try {
       await fetch(`${API_URL}/auth/logout`, {
         method: "POST",

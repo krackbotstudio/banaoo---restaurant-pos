@@ -60,6 +60,17 @@ function mintSupabaseAccessToken(userId) {
   );
 }
 
+/** Signs a long-lived JWT token used as a fallback when browsers block cross-site cookies. */
+function generateAuthToken(user) {
+  if (!user || !user.id) return null;
+  const secret = process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env';
+  return jwt.sign(
+    { id: user.id, isStaff: Boolean(user.isStaff) },
+    secret,
+    { expiresIn: '30d' }
+  );
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -152,6 +163,50 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Token-based fallback authentication (Bearer token or Authorization header):
+// Guarantees authentication succeeds even when browsers (Chrome, Safari, iOS)
+// block cross-site third-party session cookies across Render subdomains.
+app.use(async (req, res, next) => {
+  if (req.user) return next();
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : (req.query?.auth_token || req.headers['x-auth-token']);
+
+  if (!token) return next();
+
+  try {
+    const secret = process.env.SESSION_SECRET || 'dev-only-change-session-secret-in-env';
+    const decoded = jwt.verify(token, secret);
+    if (!decoded || !decoded.id) return next();
+
+    const { rows } = await pool.query(`
+      SELECT u.*, p.is_admin, p.account_status, p.role as profile_role, p.full_name
+      FROM public.users u
+      LEFT JOIN public.profiles p ON u.id = p.user_id
+      WHERE u.id = $1
+    `, [decoded.id]);
+
+    let user = rows[0];
+    if (!user) {
+      const { rows: staffRows } = await pool.query('SELECT * FROM public.staff_members WHERE id = $1', [decoded.id]);
+      user = staffRows[0];
+      if (user) {
+        user.email = user.system_email;
+        user.isStaff = true;
+      }
+    }
+
+    if (user) {
+      req.user = user;
+    }
+  } catch (err) {
+    // expired or invalid token, pass to next
+  }
+  next();
+});
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -511,7 +566,8 @@ app.post('/auth/register', async (req, res) => {
           return res.status(500).json({ error: 'Failed to save session' });
         }
         console.log('Registration login and session saved successfully.');
-        res.json({ user });
+        const token = generateAuthToken(user);
+        res.json({ user, token });
       });
     });
   } catch (err) {
@@ -540,7 +596,8 @@ app.post('/auth/login', (req, res, next) => {
         console.log('Session ID:', req.sessionID);
         console.log('Session saved. Passport user:', req.user ? req.user.id : 'NONE');
         console.log('========================');
-        res.json({ user });
+        const token = generateAuthToken(user);
+        res.json({ user, token });
       });
     });
   })(req, res, next);
@@ -608,7 +665,7 @@ app.get('/auth/google', (req, res, next) => {
   });
   authenticator(req, res, next);
 });
-function finishGoogleRedirect(req, res) {
+function finishGoogleRedirect(req, res, user) {
   console.log('Google OAuth successful, redirecting...');
   const fallback = process.env.FRONTEND_URL || 'http://localhost:8080';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
@@ -616,12 +673,15 @@ function finishGoogleRedirect(req, res) {
     typeof req.session?.oauth_redirect_uri === 'string' ? req.session.oauth_redirect_uri : '';
   if (req.session?.oauth_redirect_uri) delete req.session.oauth_redirect_uri;
 
+  const token = user ? generateAuthToken(user) : '';
+  const tokenParam = token ? `token=${encodeURIComponent(token)}&` : '';
+
   if (state) {
     try {
       const redirectUri = Buffer.from(state, 'base64url').toString('utf8');
       if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectUri)) {
         const separator = redirectUri.includes('?') ? '&' : '?';
-        res.redirect(`${redirectUri}${separator}auth=success`);
+        res.redirect(`${redirectUri}${separator}${tokenParam}auth=success`);
         return;
       }
     } catch (error) {
@@ -631,11 +691,12 @@ function finishGoogleRedirect(req, res) {
 
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectFromSession)) {
     const separator = redirectFromSession.includes('?') ? '&' : '?';
-    res.redirect(`${redirectFromSession}${separator}auth=success`);
+    res.redirect(`${redirectFromSession}${separator}${tokenParam}auth=success`);
     return;
   }
 
-  res.redirect(fallback);
+  const separator = fallback.includes('?') ? '&' : '?';
+  res.redirect(`${fallback}${separator}${tokenParam}auth=success`);
 }
 
 app.get('/auth/google/callback', (req, res, next) => {
@@ -665,7 +726,7 @@ app.get('/auth/google/callback', (req, res, next) => {
           res.redirect(`${fallback.replace(/\/+$/, '')}/auth?mode=login&google_error=1`);
           return;
         }
-        finishGoogleRedirect(req, res);
+        finishGoogleRedirect(req, res, user);
       });
     });
   })(req, res, next);

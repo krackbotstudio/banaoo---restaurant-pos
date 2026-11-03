@@ -16,9 +16,18 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AuthCallback() {
-  const { user, profile, loading: authLoading, profileLoading } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const redirected = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      localStorage.setItem("banaoo_auth_token", token);
+      void refreshProfile();
+    }
+  }, [refreshProfile]);
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
