@@ -51,6 +51,9 @@ services:
     volumes:
       # Persist uploaded files across container restarts / re-deploys
       - uploads_data:/app/uploads
+    networks:
+      - default
+      - dokploy-network
     restart: unless-stopped
 
 volumes:
