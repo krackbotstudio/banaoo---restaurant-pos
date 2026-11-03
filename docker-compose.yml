@@ -20,7 +20,7 @@ services:
     expose:
       - "80"
     networks:
-      - default
+      - app-network
       - dokploy-network
     depends_on:
       - backend
@@ -52,13 +52,19 @@ services:
       # Persist uploaded files across container restarts / re-deploys
       - uploads_data:/app/uploads
     networks:
-      - default
-      - dokploy-network
+      app-network:
+        aliases:
+          - backend
+      dokploy-network:
+        aliases:
+          - backend
     restart: unless-stopped
 
 volumes:
   uploads_data:
 
 networks:
+  app-network:
+    driver: bridge
   dokploy-network:
     external: true
