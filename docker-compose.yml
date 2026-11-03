@@ -19,6 +19,9 @@ services:
     # and routes traffic to this container on port 80 internally.
     expose:
       - "80"
+    networks:
+      - default
+      - dokploy-network
     depends_on:
       - backend
     restart: unless-stopped
@@ -52,3 +55,7 @@ services:
 
 volumes:
   uploads_data:
+
+networks:
+  dokploy-network:
+    external: true
