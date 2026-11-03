@@ -2704,8 +2704,7 @@ app.use((err, req, res, next) => {
 try {
   validateRazorpayEnvironment();
 } catch (err) {
-  console.error('[razorpay] Startup validation failed:', err.message);
-  process.exit(1);
+  console.warn('[razorpay] Startup validation warning (non-fatal):', err.message);
 }
 
 Promise.all([ensureMobileAppLeadsTable(), ensureNotificationsInfra()])
