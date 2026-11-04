@@ -2623,7 +2623,9 @@ registerRazorpayRoutes(app, { requireAuth });
 registerGooglePayRoutes(app, { requireAuth });
 registerPlacesRoutes(app);
 void warmInventorySchema();
-startShiprocketJobs();
+if (process.env.ENABLE_SHIPROCKET_JOBS === 'true') {
+  startShiprocketJobs();
+}
 console.log('[api] Staff routes: GET|POST /api/staff-members, PATCH|DELETE /api/staff-members/:id');
 console.log('[api] Inventory routes: /api/outlets/:outletId/inventory, /api/inventory/:itemId');
 console.log('[api] Dashboard routes: GET /api/dashboard/banners, GET|PUT /api/dashboard/quick-actions');

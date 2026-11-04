@@ -95,6 +95,7 @@ export async function refreshExpiringTokens() {
 let intervalHandle = null;
 
 export function startShiprocketJobs() {
+  if (process.env.ENABLE_SHIPROCKET_JOBS !== 'true') return;
   if (intervalHandle) return;
   const tick = async () => {
     try {
