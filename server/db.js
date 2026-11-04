@@ -27,6 +27,7 @@ function getSslConfig() {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: getSslConfig(),
+  connectionTimeoutMillis: 10000,
 });
 
 pool.on('error', (err) => {

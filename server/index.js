@@ -2707,12 +2707,10 @@ try {
   console.warn('[razorpay] Startup validation warning (non-fatal):', err.message);
 }
 
-Promise.all([ensureMobileAppLeadsTable(), ensureNotificationsInfra()])
-  .catch((err) => {
-    console.error('bootstrap on startup:', err);
-  })
-  .finally(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+Promise.all([ensureMobileAppLeadsTable(), ensureNotificationsInfra()]).catch((err) => {
+  console.error('bootstrap on startup:', err);
+});
